@@ -1,0 +1,11 @@
+<svg width="54" height="54" viewBox="0 0 54 54" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="orbitUpdateGradient" x1="2" y1="2" x2="52" y2="52" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C857D6"/>
+      <stop offset="1" stop-color="#7C5CFC"/>
+    </linearGradient>
+  </defs>
+  <rect width="54" height="54" rx="10" fill="url(#orbitUpdateGradient)"/>
+  <path d="M37.4 19.7V14.9M37.4 14.9H32.6M37.4 14.9L33.7 18.6C29.9 14.8 23.8 14.8 20 18.6C18.2 20.4 17.2 22.8 17.2 25.3" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M16.6 34.3V39.1M16.6 39.1H21.4M16.6 39.1L20.3 35.4C24.1 39.2 30.2 39.2 34 35.4C35.8 33.6 36.8 31.2 36.8 28.7" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

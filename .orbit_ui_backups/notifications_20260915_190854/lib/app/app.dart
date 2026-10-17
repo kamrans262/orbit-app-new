@@ -1,0 +1,69 @@
+import 'package:flutter/material.dart';
+
+import '../features/welcome/presentation/screens/share_moments_screen.dart';
+import '../features/welcome/presentation/screens/welcome2_screen.dart';
+import '../features/welcome/presentation/screens/welcome_screen.dart';
+import '../features/welcome/presentation/screens/your_circle_screen.dart';
+import 'routing/app_routes.dart';
+import 'theme/app_theme.dart';
+
+class OrbitApp extends StatelessWidget {
+  const OrbitApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Orbit',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.light,
+      initialRoute: AppRoutes.welcome,
+      onGenerateRoute: (settings) {
+        switch (settings.name) {
+          case AppRoutes.welcome:
+            return MaterialPageRoute<void>(
+              settings: settings,
+              builder: (context) => WelcomeScreen(
+                onGetStarted: () {
+                  Navigator.of(context).pushNamed(AppRoutes.welcome2);
+                },
+                onLogIn: () {},
+              ),
+            );
+          case AppRoutes.welcome2:
+            return MaterialPageRoute<void>(
+              settings: settings,
+              builder: (context) => Welcome2Screen(
+                onNext: () {
+                  Navigator.of(context).pushNamed(AppRoutes.shareMoments);
+                },
+              ),
+            );
+          case AppRoutes.shareMoments:
+            return MaterialPageRoute<void>(
+              settings: settings,
+              builder: (context) => ShareMomentsScreen(
+                onNext: () {
+                  Navigator.of(context).pushNamed(AppRoutes.yourCircle);
+                },
+              ),
+            );
+          case AppRoutes.yourCircle:
+            return MaterialPageRoute<void>(
+              settings: settings,
+              builder: (context) => YourCircleScreen(onNext: () {}),
+            );
+          default:
+            return MaterialPageRoute<void>(
+              settings: settings,
+              builder: (context) => WelcomeScreen(
+                onGetStarted: () {
+                  Navigator.of(context).pushNamed(AppRoutes.welcome2);
+                },
+                onLogIn: () {},
+              ),
+            );
+        }
+      },
+    );
+  }
+}
