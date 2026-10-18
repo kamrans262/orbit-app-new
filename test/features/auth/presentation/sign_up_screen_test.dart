@@ -50,6 +50,12 @@ void main() {
       tester,
     ) async {
       await setPhoneSize(tester, size);
+      final previousErrorHandler = FlutterError.onError;
+      FlutterError.onError = (details) {
+        debugPrint('FULL_FLEX_DETAILS: ${details.toString()}');
+        previousErrorHandler?.call(details);
+      };
+      addTearDown(() => FlutterError.onError = previousErrorHandler);
       await tester.pumpWidget(buildScreen());
       await tester.pumpAndSettle();
 
