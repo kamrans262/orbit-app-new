@@ -32,6 +32,7 @@ class LoginScreen extends StatefulWidget {
     required this.onAppleLogin,
     required this.onGoogleLogin,
     required this.onSignUp,
+    this.onCodeSignIn,
     super.key,
   });
 
@@ -40,6 +41,7 @@ class LoginScreen extends StatefulWidget {
   final VoidCallback onAppleLogin;
   final VoidCallback onGoogleLogin;
   final VoidCallback onSignUp;
+  final VoidCallback? onCodeSignIn;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -112,6 +114,13 @@ class _LoginScreenState extends State<LoginScreen> {
               key: LoginKeys.loginButton,
               child: AppPrimaryButton(label: 'Log in', onPressed: _submit),
             ),
+            if (widget.onCodeSignIn != null) ...<Widget>[
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: widget.onCodeSignIn,
+                child: const Text('Sign in with email or SMS code'),
+              ),
+            ],
             const SizedBox(height: 20),
             const AuthDivider(),
             const SizedBox(height: 16),

@@ -30,6 +30,7 @@ class SignUpScreen extends StatefulWidget {
     required this.onAppleSignUp,
     required this.onGoogleSignUp,
     required this.onLogIn,
+    this.onCodeSignUp,
     super.key,
   });
 
@@ -38,6 +39,7 @@ class SignUpScreen extends StatefulWidget {
   final VoidCallback onAppleSignUp;
   final VoidCallback onGoogleSignUp;
   final VoidCallback onLogIn;
+  final VoidCallback? onCodeSignUp;
 
   @override
   State<SignUpScreen> createState() => _SignUpScreenState();
@@ -122,6 +124,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
               key: SignUpKeys.signUpButton,
               child: AppPrimaryButton(label: 'Sign Up', onPressed: _submit),
             ),
+            if (widget.onCodeSignUp != null) ...<Widget>[
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: widget.onCodeSignUp,
+                child: const Text('Create account with an email or SMS code'),
+              ),
+            ],
             const SizedBox(height: 20),
             const AuthDivider(),
             const SizedBox(height: 16),

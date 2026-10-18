@@ -5,6 +5,8 @@ import '../features/home/presentation/screens/home_screen.dart';
 import '../core/widgets/app_keyboard_dismiss.dart';
 
 import '../features/auth/presentation/screens/login_screen.dart';
+import '../features/auth/presentation/screens/orbit_otp_sign_in_screen.dart';
+import '../features/auth/data/orbit_identity_client.dart';
 import '../features/auth/presentation/screens/device_registration_screen.dart';
 import '../features/auth/presentation/screens/reset_password_screen.dart';
 import '../features/auth/presentation/screens/verify_otp_screen.dart';
@@ -53,18 +55,40 @@ class OrbitApp extends StatelessWidget {
                 },
               ),
             );
+          case AppRoutes.otpSignIn:
+            return MaterialPageRoute<void>(
+              settings: settings,
+              builder: (context) => OrbitOtpSignInScreen(
+                onVerified: () => Navigator.of(context).pushReplacementNamed(
+                  AppRoutes.deviceRegistration,
+                ),
+              ),
+            );
           case AppRoutes.login:
             return MaterialPageRoute<void>(
               settings: settings,
               builder: (context) => LoginScreen(
                 onLogIn: (emailOrPhone, password) {
-                  Navigator.of(context).pushReplacementNamed(AppRoutes.home);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text('Password sign-in is awaiting client approval. Use email or SMS verification.'),
+                  ));
+                },
+                onCodeSignIn: () {
+                  Navigator.of(context).pushNamed(AppRoutes.otpSignIn);
                 },
                 onForgotPassword: () {
                   Navigator.of(context).pushNamed(AppRoutes.resetPassword);
                 },
-                onAppleLogin: () {},
-                onGoogleLogin: () {},
+                onAppleLogin: () {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text('Apple sign-in will be enabled after provider verification is configured.'),
+                  ));
+                },
+                onGoogleLogin: () {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text('Google sign-in will be enabled after provider verification is configured.'),
+                  ));
+                },
                 onSignUp: () {
                   Navigator.of(context).pushNamed(AppRoutes.signUp);
                 },
@@ -76,10 +100,9 @@ class OrbitApp extends StatelessWidget {
               builder: (context) => DeviceRegistrationScreen(
                 onBack: () => Navigator.of(context).maybePop(),
                 onContinue: () {
-                  // UI-only sequence. Backend/device key provisioning is NOT
-                  // simulated or falsely marked as completed here.
-                  Navigator.of(context).pushNamed(AppRoutes.notifications);
+                  Navigator.of(context).pushReplacementNamed(AppRoutes.notifications);
                 },
+                onRegisterDevice: OrbitIdentityClient.instance.registerDevice,
               ),
             );
           case AppRoutes.signUp:
@@ -87,10 +110,23 @@ class OrbitApp extends StatelessWidget {
               settings: settings,
               builder: (context) => SignUpScreen(
                 onSignUp: (_, _, _) {
-                  Navigator.of(context).pushNamed(AppRoutes.deviceRegistration);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text('Use verified email or SMS sign-up. Password registration is awaiting client confirmation.'),
+                  ));
                 },
-                onAppleSignUp: () {},
-                onGoogleSignUp: () {},
+                onCodeSignUp: () {
+                  Navigator.of(context).pushNamed(AppRoutes.otpSignIn);
+                },
+                onAppleSignUp: () {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text('Apple sign-up is awaiting provider configuration.'),
+                  ));
+                },
+                onGoogleSignUp: () {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text('Google sign-up is awaiting provider configuration.'),
+                  ));
+                },
                 onLogIn: () {
                   Navigator.of(context).pop();
                 },

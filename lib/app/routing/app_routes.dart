@@ -2,6 +2,7 @@
   static const String home = '/home';
   static const String welcome = '/';
   static const String login = '/login';
+  static const String otpSignIn = '/otp-sign-in';
   static const String resetPassword = '/reset-password';
   static const String verifyOtp = '/verify-otp';
   static const String signUp = '/sign-up';
