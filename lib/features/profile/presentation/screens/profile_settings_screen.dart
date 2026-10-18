@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../auth/data/orbit_identity_client.dart';
 
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
@@ -246,7 +247,25 @@ class SettingsScreen extends StatelessWidget {
     }
     if (label == 'Devices') {
       Navigator.of(context).push<void>(
-        AppFadeSlidePageRoute<void>(builder: (_) => const DevicesScreen()),
+        AppFadeSlidePageRoute<void>(
+          builder: (_) => DevicesScreen(
+            onLoadDevices: () async {
+              final records = await OrbitIdentityClient.instance.devices();
+              return records.map((entry) => OrbitRegisteredDevice(
+                id: entry['id'] as String,
+                name: (entry['name'] as String?) ?? 'Device',
+                platform: (entry['platform'] as String?) ?? 'unknown',
+                lastSeenLabel: (entry['last_seen_at'] as String?) ?? 'Not seen yet',
+                isCurrent: entry['is_current'] == true,
+                isTrusted: entry['trust_state'] == 'trusted',
+                isApprovalPending: entry['trust_state'] == 'pending',
+              )).toList();
+            },
+            onRenameDevice: OrbitIdentityClient.instance.renameDevice,
+            onRevokeDevice: OrbitIdentityClient.instance.revokeDevice,
+            onApproveDevice: OrbitIdentityClient.instance.approveDevice,
+          ),
+        ),
       );
       return;
     }

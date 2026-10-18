@@ -173,6 +173,11 @@ class OrbitIdentityClient {
         .map((item) => Map<String, dynamic>.from(item as Map)).toList();
   }
 
+  Future<void> renameDevice(String id, String name) async {
+    await _send('PATCH', '/me/devices/$id',
+        protected: true, body: <String, Object?>{'name': name});
+  }
+
   Future<void> revokeDevice(String id) async =>
       _send('DELETE', '/me/devices/$id', protected: true);
 
