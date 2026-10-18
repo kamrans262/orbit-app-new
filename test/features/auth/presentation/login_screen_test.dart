@@ -127,6 +127,11 @@ void main() {
       if (diagnostics != null) {
         // Temporary diagnostic to isolate the small-screen RenderFlex.
         debugPrint('AUTH_DIAGNOSTIC: ${diagnostics.toString()}');
+        if (diagnostics is FlutterError) {
+          for (final detail in diagnostics.diagnostics) {
+            debugPrint('AUTH_DETAIL: ${detail.toStringDeep(minLevel: DiagnosticLevel.info)}');
+          }
+        }
       }
       expect(diagnostics, isNull);
     });
