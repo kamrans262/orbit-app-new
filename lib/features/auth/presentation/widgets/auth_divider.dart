@@ -12,7 +12,7 @@ class AuthDivider extends StatelessWidget {
       builder: (context, constraints) {
         // Poppins text can slightly exceed 320px devices with fixed 12px gaps.
         // Only compact screens reduce the gaps; normal-width layout is identical.
-        final gap = constraints.maxWidth < 245 ? 8.0 : 12.0;
+        final gap = constraints.maxWidth < 245 ? 4.0 : 12.0;
         return Row(
           children: <Widget>[
         const Expanded(
