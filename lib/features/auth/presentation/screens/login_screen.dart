@@ -118,7 +118,7 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 8),
               TextButton(
                 onPressed: widget.onCodeSignIn,
-                child: const Text('Sign in with email or SMS code'),
+                child: const Text('Continue with a code'),
               ),
             ],
             const SizedBox(height: 20),

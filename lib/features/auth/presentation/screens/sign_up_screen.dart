@@ -128,7 +128,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
               const SizedBox(height: 8),
               TextButton(
                 onPressed: widget.onCodeSignUp,
-                child: const Text('Create account with an email or SMS code'),
+                child: const Text('Sign up with a code'),
               ),
             ],
             const SizedBox(height: 20),

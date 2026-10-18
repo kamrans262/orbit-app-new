@@ -23,7 +23,7 @@ void main() {
     expect(find.textContaining('Password sign-in is awaiting client approval'),
         findsOneWidget);
 
-    final otpButton = find.text('Sign in with email or SMS code');
+    final otpButton = find.text('Continue with a code');
     await tester.ensureVisible(otpButton);
     await tester.tap(otpButton);
     await tester.pumpAndSettle();
