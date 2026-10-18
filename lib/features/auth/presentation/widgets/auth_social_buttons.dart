@@ -20,7 +20,7 @@ class AuthSocialButtons extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final stackVertically = constraints.maxWidth < 260;
+        final stackVertically = constraints.maxWidth < 300;
         final apple = AppSocialButton(
           key: appleKey,
           label: 'Apple',
