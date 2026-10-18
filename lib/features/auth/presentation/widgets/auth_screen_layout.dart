@@ -23,6 +23,9 @@ class AuthScreenLayout extends StatelessWidget {
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
+            final horizontalInset = MediaQuery.sizeOf(context).width <= 340
+                ? 16.0
+                : horizontalMargin;
             final minimumCenteredHeight = math.max(
               0.0,
               constraints.maxHeight - (verticalMargin * 2) - keyboardInset,
@@ -31,9 +34,9 @@ class AuthScreenLayout extends StatelessWidget {
             return SingleChildScrollView(
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               padding: EdgeInsets.fromLTRB(
-                horizontalMargin,
+                horizontalInset,
                 verticalMargin,
-                horizontalMargin,
+                horizontalInset,
                 verticalMargin + keyboardInset,
               ),
               child: ConstrainedBox(
