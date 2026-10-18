@@ -118,28 +118,12 @@ void main() {
       tester,
     ) async {
       await setPhoneSize(tester, size);
-      final previousErrorHandler = FlutterError.onError;
-      FlutterError.onError = (details) {
-        debugPrint('FULL_FLEX_DETAILS: ${details.toString()}');
-        previousErrorHandler?.call(details);
-      };
-      addTearDown(() => FlutterError.onError = previousErrorHandler);
       await tester.pumpWidget(buildScreen());
       await tester.pumpAndSettle();
 
       expect(find.byKey(LoginKeys.card), findsOneWidget);
       expect(find.byKey(LoginKeys.loginButton), findsOneWidget);
-      final diagnostics = tester.takeException();
-      if (diagnostics != null) {
-        // Temporary diagnostic to isolate the small-screen RenderFlex.
-        debugPrint('AUTH_DIAGNOSTIC: ${diagnostics.toString()}');
-        if (diagnostics is FlutterError) {
-          for (final detail in diagnostics.diagnostics) {
-            debugPrint('AUTH_DETAIL: ${detail.toStringDeep(minLevel: DiagnosticLevel.info)}');
-          }
-        }
-      }
-      expect(diagnostics, isNull);
+      expect(tester.takeException(), isNull);
     });
   }
 }

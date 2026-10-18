@@ -8,13 +8,18 @@ class AuthDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Row(
-      children: <Widget>[
-        Expanded(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Poppins text can slightly exceed 320px devices with fixed 12px gaps.
+        // Only compact screens reduce the gaps; normal-width layout is identical.
+        final gap = constraints.maxWidth < 245 ? 8.0 : 12.0;
+        return Row(
+          children: <Widget>[
+        const Expanded(
           child: Divider(height: 1, thickness: 1, color: Color(0xFFD8D8D8)),
         ),
-        SizedBox(width: 12),
-        Text(
+        SizedBox(width: gap),
+        const Text(
           'or continue with',
           style: TextStyle(
             fontFamily: AppTypography.fontFamily,
@@ -29,11 +34,13 @@ class AuthDivider extends StatelessWidget {
             color: AppColors.textMuted,
           ),
         ),
-        SizedBox(width: 12),
+        SizedBox(width: gap),
         Expanded(
           child: Divider(height: 1, thickness: 1, color: Color(0xFFD8D8D8)),
         ),
-      ],
+          ],
+        );
+      },
     );
   }
 }
