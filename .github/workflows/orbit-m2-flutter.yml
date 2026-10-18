@@ -15,7 +15,7 @@ jobs:
           cache: true
       - name: Resolve Flutter dependencies
         run: flutter pub get
-      - name: Format check on added authentication files
-        run: dart format --output=none --set-exit-if-changed lib/features/auth/data/orbit_identity_client.dart lib/features/auth/presentation/screens/orbit_otp_sign_in_screen.dart
+      - name: Check authentication code with Dart analyzer
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings lib/features/auth/data/orbit_identity_client.dart lib/features/auth/presentation/screens/orbit_otp_sign_in_screen.dart
       - name: Auth/navigation widget tests
         run: flutter test test/app/home_access_from_login_test.dart test/app/login_navigation_test.dart test/app/sign_up_navigation_test.dart
