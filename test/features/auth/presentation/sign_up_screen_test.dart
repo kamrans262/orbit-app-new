@@ -55,7 +55,12 @@ void main() {
 
       expect(find.byType(SingleChildScrollView), findsOneWidget);
       expect(find.byKey(SignUpKeys.card), findsOneWidget);
-      expect(tester.takeException(), isNull);
+      final diagnostics = tester.takeException();
+      if (diagnostics != null) {
+        // Temporary diagnostic to isolate the small-screen RenderFlex.
+        debugPrint('AUTH_DIAGNOSTIC: ${diagnostics.toString()}');
+      }
+      expect(diagnostics, isNull);
     });
   }
 

@@ -123,7 +123,12 @@ void main() {
 
       expect(find.byKey(LoginKeys.card), findsOneWidget);
       expect(find.byKey(LoginKeys.loginButton), findsOneWidget);
-      expect(tester.takeException(), isNull);
+      final diagnostics = tester.takeException();
+      if (diagnostics != null) {
+        // Temporary diagnostic to isolate the small-screen RenderFlex.
+        debugPrint('AUTH_DIAGNOSTIC: ${diagnostics.toString()}');
+      }
+      expect(diagnostics, isNull);
     });
   }
 }
