@@ -28,6 +28,7 @@ class VerifyOtpScreen extends StatefulWidget {
     this.isRequesting = false,
     this.isVerifying = false,
     this.errorMessage,
+    this.completeActionLabel = 'Verify Code',
     this.onResendCode,
     this.onChangeDestination,
     super.key,
@@ -40,6 +41,7 @@ class VerifyOtpScreen extends StatefulWidget {
   final bool isRequesting;
   final bool isVerifying;
   final String? errorMessage;
+  final String completeActionLabel;
   final VoidCallback? onResendCode;
   final VoidCallback? onChangeDestination;
 
@@ -139,7 +141,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                     : widget.isVerifying
                         ? 'Verifying…'
                         : _isComplete
-                            ? 'Verify Code'
+                            ? widget.completeActionLabel
                             : _countdownLabel,
                 enabled: _isComplete && widget.codeDispatched &&
                     !widget.isRequesting && !widget.isVerifying,

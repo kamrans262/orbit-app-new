@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/widgets/app_primary_button.dart';
+import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_text_field.dart';
 import '../widgets/auth_card.dart';
 import '../widgets/auth_header.dart';
@@ -17,9 +18,16 @@ abstract final class ResetPasswordKeys {
 }
 
 class ResetPasswordScreen extends StatefulWidget {
-  const ResetPasswordScreen({required this.onSendResetLink, super.key});
+  const ResetPasswordScreen({
+    required this.onSendResetLink,
+    this.errorMessage,
+    this.isSending = false,
+    super.key,
+  });
 
   final ValueChanged<String> onSendResetLink;
+  final String? errorMessage;
+  final bool isSending;
 
   @override
   State<ResetPasswordScreen> createState() => _ResetPasswordScreenState();
@@ -62,11 +70,16 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
               keyboardType: TextInputType.emailAddress,
               textInputAction: TextInputAction.done,
             ),
+            if (widget.errorMessage != null) ...<Widget>[
+              const SizedBox(height: 12),
+              Text(widget.errorMessage!, style: AppTypography.body.copyWith(color: Colors.red)),
+            ],
             const SizedBox(height: 25),
             SizedBox(
               key: ResetPasswordKeys.sendResetLinkButton,
               child: AppPrimaryButton(
-                label: 'Send Reset Code',
+                label: widget.isSending ? 'Sending…' : 'Send Reset Code',
+                enabled: !widget.isSending,
                 onPressed: _submit,
               ),
             ),

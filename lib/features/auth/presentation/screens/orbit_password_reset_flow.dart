@@ -14,14 +14,21 @@ import 'verify_otp_screen.dart';
 
 /// Reset requires a recovery-only OTP and a new password. It never signs in.
 class OrbitPasswordResetFlow extends StatefulWidget {
-  const OrbitPasswordResetFlow({required this.onCompleted, super.key});
+  const OrbitPasswordResetFlow({
+    required this.onCompleted,
+    this.identityClient,
+    super.key,
+  });
   final VoidCallback onCompleted;
+  final OrbitIdentityClient? identityClient;
 
   @override
   State<OrbitPasswordResetFlow> createState() => _OrbitPasswordResetFlowState();
 }
 
 class _OrbitPasswordResetFlowState extends State<OrbitPasswordResetFlow> {
+  late final OrbitIdentityClient _client =
+      widget.identityClient ?? OrbitIdentityClient.instance;
   final _password = TextEditingController();
   String? _recipient;
   String _code = '';
@@ -42,7 +49,7 @@ class _OrbitPasswordResetFlowState extends State<OrbitPasswordResetFlow> {
     if (error != null) { setState(() => _error = error); return; }
     setState(() { _busy = true; _error = null; });
     try {
-      await OrbitIdentityClient.instance.requestPasswordResetCode(destination.trim());
+      await _client.requestPasswordResetCode(destination.trim());
       if (mounted) setState(() {
         _recipient = destination.trim();
         _step = 1;
@@ -63,11 +70,11 @@ class _OrbitPasswordResetFlowState extends State<OrbitPasswordResetFlow> {
     if (error != null) { setState(() => _error = error); return; }
     setState(() { _busy = true; _error = null; });
     try {
-      await OrbitIdentityClient.instance.confirmPasswordReset(
+      await _client.confirmPasswordReset(
           _recipient!, _code, _password.text);
       // Reset revokes all previously issued mobile sessions, including this
       // device; never navigate into protected Home after a password reset.
-      await OrbitIdentityClient.instance.clearSession();
+      await _client.clearSession();
       if (mounted) widget.onCompleted();
     } on OrbitIdentityException catch (e) {
       if (mounted) setState(() => _error = e.message);
@@ -81,14 +88,10 @@ class _OrbitPasswordResetFlowState extends State<OrbitPasswordResetFlow> {
   @override
   Widget build(BuildContext context) {
     if (_step == 0) {
-      return Stack(
-        children: <Widget>[
-          ResetPasswordScreen(onSendResetLink: _send),
-          if (_error != null) Positioned(
-            left: 16, right: 16, bottom: 16,
-            child: Text(_error!, textAlign: TextAlign.center,
-              style: AppTypography.body.copyWith(color: Colors.red))),
-        ],
+      return ResetPasswordScreen(
+        onSendResetLink: _send,
+        errorMessage: _error,
+        isSending: _busy,
       );
     }
     if (_step == 1) {
@@ -101,6 +104,7 @@ class _OrbitPasswordResetFlowState extends State<OrbitPasswordResetFlow> {
           _error = null;
         }),
         initialCountdownSeconds: 60,
+        completeActionLabel: 'Continue',
         onResendCode: () { _send(_recipient!); },
         onChangeDestination: () => setState(() { _step = 0; _error = null; }),
         errorMessage: _error,
