@@ -274,6 +274,14 @@ class OrbitIdentityClient {
     return record['trust_state'] == 'trusted';
   }
 
+  /// Pending devices may check their own status without access to account data.
+  Future<bool> checkDeviceApproval() async {
+    final response = await _send('GET', '/devices/registration-status',
+        protected: true);
+    final data = Map<String, dynamic>.from(response['data'] as Map);
+    return data['key_registered'] == true && data['trust_state'] == 'trusted';
+  }
+
   Future<Map<String, dynamic>> currentUser() =>
       _send('GET', '/me', protected: true);
 
