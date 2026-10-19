@@ -282,6 +282,49 @@ class OrbitIdentityClient {
     return data['key_registered'] == true && data['trust_state'] == 'trusted';
   }
 
+  Future<Map<String, dynamic>> profile() async {
+    final result = await _send('GET', '/me/profile', protected: true);
+    return Map<String, dynamic>.from(result['data'] as Map);
+  }
+
+  Future<Map<String, dynamic>> saveProfile(
+    String name,
+    String username, {
+    String? bio,
+  }) async {
+    final result = await _send('PATCH', '/me/profile', protected: true,
+        body: <String, Object?>{
+          'display_name': name.trim(),
+          'username': username.trim(),
+          if (bio != null) 'bio': bio.trim(),
+        });
+    return Map<String, dynamic>.from(result['data'] as Map);
+  }
+
+  Future<Map<String, dynamic>> notificationPreferences() async {
+    final result = await _send('GET', '/me/preferences/notifications', protected: true);
+    return Map<String, dynamic>.from(result['data'] as Map);
+  }
+
+  Future<Map<String, dynamic>> saveNotificationPreferences(
+      Map<String, Object?> values) async {
+    final result = await _send('PATCH', '/me/preferences/notifications',
+        protected: true, body: values);
+    return Map<String, dynamic>.from(result['data'] as Map);
+  }
+
+  Future<Map<String, dynamic>> privacyPreferences() async {
+    final result = await _send('GET', '/me/preferences/privacy', protected: true);
+    return Map<String, dynamic>.from(result['data'] as Map);
+  }
+
+  Future<Map<String, dynamic>> savePrivacyPreferences(
+      Map<String, Object?> values) async {
+    final result = await _send('PATCH', '/me/preferences/privacy',
+        protected: true, body: values);
+    return Map<String, dynamic>.from(result['data'] as Map);
+  }
+
   Future<Map<String, dynamic>> currentUser() =>
       _send('GET', '/me', protected: true);
 
