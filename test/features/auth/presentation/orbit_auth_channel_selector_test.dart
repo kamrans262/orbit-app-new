@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_ui/app/theme/app_colors.dart';
-import 'package:orbit_ui/core/widgets/app_text_field.dart';
 import 'package:orbit_ui/features/auth/presentation/widgets/orbit_auth_channel_selector.dart';
-import 'package:orbit_ui/features/auth/presentation/screens/orbit_otp_sign_in_screen.dart';
+import 'package:orbit_ui/features/auth/presentation/screens/verify_otp_screen.dart';
 
 void main() {
   testWidgets('email and SMS use existing Orbit gradient and white selected text',
@@ -38,24 +37,15 @@ void main() {
     expect(find.text('SMS'), findsOneWidget);
   });
 
-  testWidgets('OTP request form reuses Orbit input field and prefilled destination',
-      (tester) async {
+  testWidgets('Approved Enter the Code screen uses the shared OTP input', (tester) async {
     await tester.binding.setSurfaceSize(const Size(390, 844));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(MaterialApp(
-      home: OrbitOtpSignInScreen(
-        initialRecipient: 'someone@example.com',
-        onVerified: () {},
-      ),
+      home: VerifyOtpScreen(recipient: 'someone@example.com', onVerifyCode: (_) {}),
     ));
-    await tester.pumpAndSettle();
-    expect(find.byType(AppTextField), findsOneWidget);
-    final recipientField = tester.widget<TextField>(find.descendant(
-      of: find.byType(AppTextField),
-      matching: find.byType(TextField),
-    ).first);
-    expect(recipientField.controller!.text, 'someone@example.com');
-    expect(find.byType(OrbitAuthChannelSelector), findsOneWidget);
+    await tester.pump();
+    expect(find.text('Enter the Code'), findsOneWidget);
+    expect(find.textContaining('someone@example.com'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

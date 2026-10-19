@@ -3,7 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_ui/app/app.dart';
 import 'package:orbit_ui/app/routing/app_routes.dart';
 import 'package:orbit_ui/features/auth/presentation/screens/login_screen.dart';
-import 'package:orbit_ui/features/auth/presentation/screens/orbit_otp_sign_in_screen.dart';
+import 'package:orbit_ui/features/auth/presentation/screens/orbit_otp_verification_controller.dart';
+import 'package:orbit_ui/features/auth/presentation/screens/verify_otp_screen.dart';
 import 'package:orbit_ui/features/home/presentation/screens/home_screen.dart';
 
 void main() {
@@ -23,10 +24,8 @@ void main() {
     expect(find.textContaining('Enter your email or phone and password.'),
         findsOneWidget);
 
-    final otpButton = find.text('Continue with a code');
-    await tester.ensureVisible(otpButton);
-    await tester.tap(otpButton);
-    await tester.pumpAndSettle();
-    expect(find.byType(OrbitOtpSignInScreen), findsOneWidget);
+    expect(find.text('Continue with a code'), findsNothing);
+    expect(find.byType(OrbitOtpVerificationController), findsNothing);
+    expect(find.byType(VerifyOtpScreen), findsNothing);
   });
 }

@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/widgets/app_otp_input.dart';
 import '../../../../core/widgets/app_primary_button.dart';
+import '../../../../app/theme/app_colors.dart';
+import '../../../../app/theme/app_typography.dart';
 import '../widgets/auth_card.dart';
 import '../widgets/auth_header.dart';
 import '../widgets/auth_otp_layout_metrics.dart';
@@ -22,12 +24,24 @@ class VerifyOtpScreen extends StatefulWidget {
     required this.recipient,
     required this.onVerifyCode,
     this.initialCountdownSeconds = 23,
+    this.codeDispatched = true,
+    this.isRequesting = false,
+    this.isVerifying = false,
+    this.errorMessage,
+    this.onResendCode,
+    this.onChangeDestination,
     super.key,
   });
 
   final String recipient;
   final ValueChanged<String> onVerifyCode;
   final int initialCountdownSeconds;
+  final bool codeDispatched;
+  final bool isRequesting;
+  final bool isVerifying;
+  final String? errorMessage;
+  final VoidCallback? onResendCode;
+  final VoidCallback? onChangeDestination;
 
   @override
   State<VerifyOtpScreen> createState() => _VerifyOtpScreenState();
@@ -87,7 +101,8 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
   }
 
   void _submit() {
-    if (_isComplete) {
+    if (_isComplete && widget.codeDispatched && !widget.isVerifying &&
+        !widget.isRequesting) {
       widget.onVerifyCode(_code);
     }
   }
@@ -103,7 +118,9 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
           children: <Widget>[
             AuthHeader(
               heading: 'Enter the Code',
-              subtitle: 'We sent a 6-digit code to\n${widget.recipient}',
+              subtitle: widget.codeDispatched
+                  ? 'We sent a 6-digit code to\n${widget.recipient}'
+                  : 'Verification code for\n${widget.recipient}',
               headingKey: VerifyOtpKeys.heading,
               subtitleKey: VerifyOtpKeys.subtitle,
             ),
@@ -111,16 +128,61 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
             AppOtpInput(
               key: VerifyOtpKeys.otpInput,
               onChanged: _handleCodeChanged,
+              enabled: widget.codeDispatched && !widget.isVerifying && !widget.isRequesting,
             ),
             const SizedBox(height: AuthOtpLayoutMetrics.otpToActionGap),
             SizedBox(
               key: VerifyOtpKeys.actionButton,
               child: AppPrimaryButton(
-                label: _isComplete ? 'Verify Code' : _countdownLabel,
-                enabled: _isComplete,
+                label: widget.isRequesting
+                    ? 'Sending Code…'
+                    : widget.isVerifying
+                        ? 'Verifying…'
+                        : _isComplete
+                            ? 'Verify Code'
+                            : _countdownLabel,
+                enabled: _isComplete && widget.codeDispatched &&
+                    !widget.isRequesting && !widget.isVerifying,
                 onPressed: _submit,
               ),
             ),
+            if (widget.errorMessage != null) ...<Widget>[
+              const SizedBox(height: 12),
+              Text(
+                widget.errorMessage!,
+                textAlign: TextAlign.center,
+                style: AppTypography.body.copyWith(color: Colors.red),
+              ),
+            ],
+            if (widget.onResendCode != null &&
+                (!widget.codeDispatched || _secondsRemaining == 0)) ...<Widget>[
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: widget.isRequesting || widget.isVerifying
+                    ? null
+                    : widget.onResendCode,
+                child: Text(
+                  widget.codeDispatched ? 'Resend Code' : 'Try Again',
+                  style: AppTypography.body.copyWith(
+                    color: AppColors.primaryEnd, fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+            if (widget.onChangeDestination != null) ...<Widget>[
+              const SizedBox(height: 4),
+              TextButton(
+                onPressed: widget.isVerifying || widget.isRequesting
+                    ? null
+                    : widget.onChangeDestination,
+                child: Text(
+                  'Change destination',
+                  style: AppTypography.body.copyWith(
+                    color: AppColors.primaryEnd, fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),

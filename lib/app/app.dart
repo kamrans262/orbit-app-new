@@ -5,7 +5,7 @@ import '../features/home/presentation/screens/home_screen.dart';
 import '../core/widgets/app_keyboard_dismiss.dart';
 
 import '../features/auth/presentation/screens/login_screen.dart';
-import '../features/auth/presentation/screens/orbit_otp_sign_in_screen.dart';
+import '../features/auth/presentation/screens/orbit_otp_verification_controller.dart';
 import '../features/auth/presentation/screens/orbit_profile_basics_screen.dart';
 import '../features/auth/data/orbit_identity_client.dart';
 import '../features/auth/presentation/widgets/orbit_session_welcome_gate.dart';
@@ -55,20 +55,15 @@ class OrbitApp extends StatelessWidget {
                 ),
               ),
             );
-          case AppRoutes.otpSignIn:
-            final initialOtp = settings.arguments;
-            final recipient = initialOtp is OrbitOtpEntryArguments
-                ? initialOtp.recipient
-                : null;
-            final password = initialOtp is OrbitOtpEntryArguments
-                ? initialOtp.password
-                : null;
-            return MaterialPageRoute<void>(
-              settings: settings,
-              builder: (context) => OrbitOtpSignInScreen(
-                initialRecipient: recipient,
-                initialPassword: password,
-                sendImmediately: recipient != null,
+          case AppRoutes.verifyOtp:
+            final otpArgument = settings.arguments;
+            if (otpArgument is OrbitOtpEntryArguments &&
+                otpArgument.recipient != null) {
+              return MaterialPageRoute<void>(
+                settings: settings,
+                builder: (context) => OrbitOtpVerificationController(
+                  recipient: otpArgument.recipient!,
+                  password: otpArgument.password,
                 onVerified: () async {
                   final state = await OrbitIdentityClient.instance.restoreSession();
                   if (!context.mounted) return;
@@ -80,6 +75,18 @@ class OrbitApp extends StatelessWidget {
                         : AppRoutes.deviceRegistration,
                   );
                 },
+              ),
+              );
+            }
+            final otpRecipient =
+                otpArgument is String && otpArgument.trim().isNotEmpty
+                    ? otpArgument
+                    : '+123 45886 576';
+            return MaterialPageRoute<void>(
+              settings: settings,
+              builder: (context) => VerifyOtpScreen(
+                recipient: otpRecipient,
+                onVerifyCode: (_) {},
               ),
             );
           case AppRoutes.login:
@@ -94,16 +101,12 @@ class OrbitApp extends StatelessWidget {
                     return;
                   }
                   Navigator.of(context).pushNamed(
-                    AppRoutes.otpSignIn,
+                    AppRoutes.verifyOtp,
                     arguments: OrbitOtpEntryArguments(
                       recipient: emailOrPhone.trim(),
                       password: password,
                     ),
                   );
-                },
-                onCodeSignIn: () {
-                  OrbitIdentityClient.instance.abandonStandardSignup();
-                  Navigator.of(context).pushNamed(AppRoutes.otpSignIn);
                 },
                 onForgotPassword: () {
                   Navigator.of(context).pushNamed(AppRoutes.resetPassword);
@@ -175,13 +178,9 @@ class OrbitApp extends StatelessWidget {
                   }
                   OrbitIdentityClient.instance.beginStandardSignup(fullName, password);
                   Navigator.of(context).pushNamed(
-                    AppRoutes.otpSignIn,
+                    AppRoutes.verifyOtp,
                     arguments: OrbitOtpEntryArguments(recipient: destination),
                   );
-                },
-                onCodeSignUp: () {
-                  OrbitIdentityClient.instance.abandonStandardSignup();
-                  Navigator.of(context).pushNamed(AppRoutes.otpSignIn);
                 },
                 onAppleSignUp: () {
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -196,19 +195,6 @@ class OrbitApp extends StatelessWidget {
                 onLogIn: () {
                   Navigator.of(context).pop();
                 },
-              ),
-            );
-          case AppRoutes.verifyOtp:
-            final otpArgument = settings.arguments;
-            final otpRecipient =
-                otpArgument is String && otpArgument.trim().isNotEmpty
-                ? otpArgument
-                : '+123 45886 576';
-            return MaterialPageRoute<void>(
-              settings: settings,
-              builder: (context) => VerifyOtpScreen(
-                recipient: otpRecipient,
-                onVerifyCode: (_) {},
               ),
             );
           case AppRoutes.resetPassword:
