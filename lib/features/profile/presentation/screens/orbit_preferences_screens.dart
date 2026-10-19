@@ -20,9 +20,6 @@ class _OrbitNotificationPreferencesScreenState
   late final OrbitProfileSettingsRepository _repo =
       widget.repository ?? OrbitProfileSettingsRepository();
   late Future<NotificationSettings> _future = _repo.loadNotifications();
-  Future<void> _writes = Future<void>.value();
-  int _revision = 0;
-  NotificationSettings? _current;
 
   void _retry() {
     setState(() {
@@ -30,46 +27,20 @@ class _OrbitNotificationPreferencesScreenState
     });
   }
 
-  void _update(NotificationSettings next) {
-    final revision = ++_revision;
-    _writes = _writes.then((_) async {
-      try {
-        final saved = await _repo.saveNotifications(next);
-        if (mounted && revision == _revision) setState(() => _current = saved);
-      } catch (_) {
-        if (!mounted || revision != _revision) return;
-        try {
-          final actual = await _repo.loadNotifications();
-          if (mounted && revision == _revision) setState(() => _current = actual);
-        } catch (_) {
-          _retry();
-        }
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Could not save notification preferences. Please retry.'),
-          ));
-        }
-      }
-    });
-  }
-
   @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<NotificationSettings>(
-      future: _future,
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return _LoadingSettings(error: snapshot.hasError, onRetry: _retry);
-        }
-        final current = _current ?? snapshot.data!;
-        return NotificationScreen(
-          initialSettings: current,
-          onSettingsChanged: _update,
-          onBack: () => Navigator.of(context).pop(),
-        );
-      },
-    );
-  }
+  Widget build(BuildContext context) => FutureBuilder<NotificationSettings>(
+    future: _future,
+    builder: (context, snapshot) {
+      if (!snapshot.hasData) {
+        return _LoadingSettings(error: snapshot.hasError, onRetry: _retry);
+      }
+      return NotificationScreen(
+        initialSettings: snapshot.data!,
+        onSaveSettings: _repo.saveNotifications,
+        onBack: () => Navigator.of(context).pop(),
+      );
+    },
+  );
 }
 
 class OrbitPrivacyPreferencesScreen extends StatefulWidget {
@@ -86,9 +57,6 @@ class _OrbitPrivacyPreferencesScreenState
   late final OrbitProfileSettingsRepository _repo =
       widget.repository ?? OrbitProfileSettingsRepository();
   late Future<PrivacySettings> _future = _repo.loadPrivacy();
-  Future<void> _writes = Future<void>.value();
-  int _revision = 0;
-  PrivacySettings? _current;
 
   void _retry() {
     setState(() {
@@ -96,47 +64,21 @@ class _OrbitPrivacyPreferencesScreenState
     });
   }
 
-  void _update(PrivacySettings next) {
-    final revision = ++_revision;
-    _writes = _writes.then((_) async {
-      try {
-        final saved = await _repo.savePrivacy(next);
-        if (mounted && revision == _revision) setState(() => _current = saved);
-      } catch (_) {
-        if (!mounted || revision != _revision) return;
-        try {
-          final actual = await _repo.loadPrivacy();
-          if (mounted && revision == _revision) setState(() => _current = actual);
-        } catch (_) {
-          _retry();
-        }
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Could not save privacy preferences. Please retry.'),
-          ));
-        }
-      }
-    });
-  }
-
   @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<PrivacySettings>(
-      future: _future,
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return _LoadingSettings(error: snapshot.hasError, onRetry: _retry);
-        }
-        final current = _current ?? snapshot.data!;
-        return PrivacySettingScreen(
-          initialSettings: current,
-          locationActivityOptions: const ['Active', 'While moving', 'Off'],
-          onSaveSettings: _repo.savePrivacy,
-          onBack: () => Navigator.of(context).pop(),
-        );
-      },
-    );
-  }
+  Widget build(BuildContext context) => FutureBuilder<PrivacySettings>(
+    future: _future,
+    builder: (context, snapshot) {
+      if (!snapshot.hasData) {
+        return _LoadingSettings(error: snapshot.hasError, onRetry: _retry);
+      }
+      return PrivacySettingScreen(
+        initialSettings: snapshot.data!,
+        locationActivityOptions: const ['Active', 'While moving', 'Off'],
+        onSaveSettings: _repo.savePrivacy,
+        onBack: () => Navigator.of(context).pop(),
+      );
+    },
+  );
 }
 
 class _LoadingSettings extends StatelessWidget {
