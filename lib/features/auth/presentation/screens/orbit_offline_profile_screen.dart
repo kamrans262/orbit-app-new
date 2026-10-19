@@ -78,11 +78,9 @@ class _OrbitOfflineProfileScreenState extends State<OrbitOfflineProfileScreen> {
               ],
             ));
           }
-          return Padding(
+          return ListView(
             padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
+            children: <Widget>[
                 const Text('OFFLINE • READ ONLY',
                     style: TextStyle(color: Color(0xFF7C3AED),
                         fontSize: 12, fontWeight: FontWeight.w700)),
@@ -101,7 +99,7 @@ class _OrbitOfflineProfileScreenState extends State<OrbitOfflineProfileScreen> {
                 const Text('This is your last saved profile. We cannot verify '
                     'account or device changes while offline. Privacy changes, '
                     'messages, location and other account actions are unavailable.'),
-                const Spacer(),
+                const SizedBox(height: 32),
                 SizedBox(width: double.infinity,
                   child: FilledButton(
                     onPressed: _working ? null : _reconnect,
@@ -112,8 +110,7 @@ class _OrbitOfflineProfileScreenState extends State<OrbitOfflineProfileScreen> {
                     onPressed: _working ? null : _signOut,
                     child: const Text('Sign out and clear offline data'),
                   )),
-              ],
-            ),
+            ],
           );
         },
       ),
