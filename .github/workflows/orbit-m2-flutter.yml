@@ -4,6 +4,10 @@ on:
     branches: [feature/m2-auth-identity]
   pull_request:
     branches: [main]
+concurrency:
+  group: orbit-m2-flutter-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   flutter-check:
     runs-on: ubuntu-latest
