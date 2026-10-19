@@ -1,4 +1,6 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:orbit_ui/features/profile/presentation/screens/profile_screen.dart';
 import 'package:orbit_ui/features/profile/data/orbit_profile_settings_repository.dart';
 import 'package:orbit_ui/features/profile/domain/models/privacy_settings.dart';
 import 'package:orbit_ui/features/profile/domain/models/notification_settings.dart';
@@ -20,6 +22,28 @@ void main() {
     expect(profile.momentCount, 0);
     expect(profile.moments, isEmpty);
     expect(profile.imagePath, isNull);
+  });
+
+  testWidgets('Live profile does not display sample places or fake nearby friends',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final profile = repo.fromProfile(<String, dynamic>{
+      'id': 'a2682c76-ab1d-47b2-a304-3d445111fed3',
+      'display_name': 'Real User', 'bio': '',
+    });
+    await tester.pumpWidget(MaterialApp(home: ProfileScreen(
+      isLiveAccount: true,
+      profile: profile,
+      onTabSelected: (_) {},
+      onAddPressed: () {},
+      onRetry: () {},
+    )));
+    await tester.pumpAndSettle();
+    expect(find.text('Your activity will appear here'), findsOneWidget);
+    expect(find.text('Santa Monica'), findsNothing);
+    expect(find.text('2 friends nearby'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   test('Notification values round trip through backend JSON contract', () {
