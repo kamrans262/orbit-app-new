@@ -157,7 +157,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                         _screenPadding,
                       ),
                       itemCount: rows.length,
-                      separatorBuilder: (_, __) =>
+                      separatorBuilder: (_, _) =>
                           const SizedBox(height: _rowGap),
                       itemBuilder: (context, index) {
                         final row = rows[index];
