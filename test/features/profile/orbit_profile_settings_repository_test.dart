@@ -135,7 +135,8 @@ void main() {
       },
     )));
     final row = find.byKey(PrivacySettingKeys.ghostModeRow);
-    await tester.ensureVisible(row);
+    await tester.scrollUntilVisible(row, 220,
+        scrollable: find.byType(Scrollable).first);
     await tester.tap(row);
     await tester.pump();
     expect(requested, 1);
@@ -157,7 +158,8 @@ void main() {
       onSaveSettings: (_) async => throw StateError('network down'),
     )));
     final row = find.byKey(PrivacySettingKeys.ghostModeRow);
-    await tester.ensureVisible(row);
+    await tester.scrollUntilVisible(row, 220,
+        scrollable: find.byType(Scrollable).first);
     await tester.tap(row);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 20));
