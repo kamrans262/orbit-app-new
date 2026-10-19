@@ -13,15 +13,21 @@ abstract final class CreateCircleKeys {
   static const colorLabel = Key('create_circle_color_label');
   static const iconLabel = Key('create_circle_icon_label');
   static const nextButton = Key('create_circle_next_button');
+  static const skipButton = Key('create_circle_skip_button');
 
   static Key color(int index) => Key('create_circle_color_$index');
   static Key icon(int index) => Key('create_circle_icon_$index');
 }
 
 class CreateCircleScreen extends StatefulWidget {
-  const CreateCircleScreen({required this.onNext, super.key});
+  const CreateCircleScreen({
+    required this.onNext,
+    this.onSkip,
+    super.key,
+  });
 
   final VoidCallback onNext;
+  final VoidCallback? onSkip;
 
   @override
   State<CreateCircleScreen> createState() => _CreateCircleScreenState();
@@ -164,9 +170,14 @@ class _CreateCircleScreenState extends State<CreateCircleScreen> {
                     child: Center(
                       child: WelcomeActionPanel(
                         primaryKey: CreateCircleKeys.nextButton,
-                        primaryLabel: 'Next',
+                        primaryLabel: 'Create Circle',
                         onPrimaryPressed: widget.onNext,
-                        reserveSecondarySlot: true,
+                        secondaryKey: widget.onSkip == null
+                            ? null
+                            : CreateCircleKeys.skipButton,
+                        secondaryLabel: widget.onSkip == null ? null : 'Skip',
+                        onSecondaryPressed: widget.onSkip,
+                        reserveSecondarySlot: widget.onSkip == null,
                       ),
                     ),
                   ),

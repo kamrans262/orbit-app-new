@@ -5,6 +5,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_circular_icon_button.dart';
 import '../../../../core/widgets/app_primary_button.dart';
 import '../widgets/auth_card.dart';
+import '../../data/orbit_identity_client.dart';
 
 abstract final class DeviceRegistrationKeys {
   static const heading = Key('device_registration_heading');
@@ -26,6 +27,7 @@ class DeviceRegistrationScreen extends StatefulWidget {
     required this.onBack,
     required this.onContinue,
     this.onRegisterDevice,
+    this.onCheckApproval,
     this.deviceName = 'This device',
     super.key,
   });
@@ -33,6 +35,7 @@ class DeviceRegistrationScreen extends StatefulWidget {
   final VoidCallback onBack;
   final VoidCallback onContinue;
   final Future<bool> Function()? onRegisterDevice;
+  final Future<bool> Function()? onCheckApproval;
   final String deviceName;
 
   @override
@@ -42,6 +45,7 @@ class DeviceRegistrationScreen extends StatefulWidget {
 
 class _DeviceRegistrationScreenState extends State<DeviceRegistrationScreen> {
   bool _registering = false;
+  bool _waitingForApproval = false;
   String? _error;
 
   Future<void> _handleAction() async {
@@ -61,20 +65,34 @@ class _DeviceRegistrationScreenState extends State<DeviceRegistrationScreen> {
     });
 
     try {
-      final registered = await register();
-      if (!mounted) return;
-      if (registered) {
-        widget.onContinue();
+      if (_waitingForApproval && widget.onCheckApproval != null) {
+        final approved = await widget.onCheckApproval!();
+        if (!mounted) return;
+        if (approved) {
+          widget.onContinue();
+        } else {
+          setState(() => _error =
+              'Waiting for approval. Open Settings → Devices on your trusted phone and approve this device.');
+        }
       } else {
-        setState(
-          () => _error = 'Device registration was not completed. Try again.',
-        );
+        final registered = await register();
+        if (!mounted) return;
+        if (registered) {
+          widget.onContinue();
+        } else {
+          setState(() => _error = 'Device registration was not completed. Try again.');
+        }
       }
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
-        setState(
-          () => _error = 'Could not register this device. Check your connection and try again.',
-        );
+        setState(() {
+          if (error is OrbitIdentityException && error.statusCode == 403) {
+            _waitingForApproval = true;
+            _error = 'Waiting for approval. Open Settings → Devices on your trusted phone and approve this device.';
+          } else {
+            _error = error.toString().replaceFirst('OrbitIdentityException: ', '');
+          }
+        });
       }
     } finally {
       if (mounted) setState(() => _registering = false);
@@ -180,9 +198,11 @@ class _DeviceRegistrationScreenState extends State<DeviceRegistrationScreen> {
                         key: DeviceRegistrationKeys.action,
                         child: AppPrimaryButton(
                           label: _registering
-                              ? 'Registering…'
+                              ? 'Checking…'
                               : preview
                               ? 'Continue'
+                              : _waitingForApproval
+                              ? 'Check Approval'
                               : 'Register Device',
                           enabled: !_registering,
                           onPressed: () {

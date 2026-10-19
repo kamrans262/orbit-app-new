@@ -3,29 +3,29 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_ui/app/app.dart';
 import 'package:orbit_ui/app/routing/app_routes.dart';
 import 'package:orbit_ui/features/auth/presentation/screens/login_screen.dart';
+import 'package:orbit_ui/features/auth/presentation/screens/orbit_otp_verification_controller.dart';
+import 'package:orbit_ui/features/auth/presentation/screens/verify_otp_screen.dart';
 import 'package:orbit_ui/features/home/presentation/screens/home_screen.dart';
 
 void main() {
-  testWidgets('Login primary action opens Home for current UI-only flow', (
-    tester,
-  ) async {
+  testWidgets('Login no longer bypasses authentication to Home', (tester) async {
     await tester.binding.setSurfaceSize(const Size(390, 844));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-
     await tester.pumpWidget(const OrbitApp());
     final navigator = tester.state<NavigatorState>(find.byType(Navigator));
     navigator.pushNamed(AppRoutes.login);
     await tester.pumpAndSettle();
 
-    expect(find.byType(LoginScreen), findsOneWidget);
-    final loginButton = find.byKey(LoginKeys.loginButton);
-    await tester.ensureVisible(loginButton);
-    expect(loginButton.hitTestable(), findsOneWidget);
-    await tester.tap(loginButton);
+    final login = find.byKey(LoginKeys.loginButton);
+    await tester.ensureVisible(login);
+    await tester.tap(login);
     await tester.pumpAndSettle();
+    expect(find.byType(HomeScreen), findsNothing);
+    expect(find.textContaining('Enter a valid email or international phone number'),
+        findsOneWidget);
 
-    expect(find.byType(HomeScreen), findsOneWidget);
-    expect(find.text('Quick Actions'), findsOneWidget);
-    expect(tester.takeException(), isNull);
+    expect(find.text('Continue with a code'), findsNothing);
+    expect(find.byType(OrbitOtpVerificationController), findsNothing);
+    expect(find.byType(VerifyOtpScreen), findsNothing);
   });
 }

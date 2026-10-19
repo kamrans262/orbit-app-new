@@ -35,7 +35,7 @@ void main() {
     },
   );
 
-  testWidgets('Reset Password sends the entered recipient to OTP route', (
+  testWidgets('Reset Password does not bypass server verification', (
     tester,
   ) async {
     await setPhoneSize(tester);
@@ -47,20 +47,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(ResetPasswordScreen), findsOneWidget);
-    final field = find.byType(TextField).first;
-    await tester.enterText(field, 'person@example.com');
-
-    final button = find.byKey(ResetPasswordKeys.sendResetLinkButton);
-    await tester.ensureVisible(button);
-    expect(button.hitTestable(), findsOneWidget);
-    await tester.tap(button);
-    await tester.pumpAndSettle();
-
-    expect(find.byType(VerifyOtpScreen), findsOneWidget);
-    expect(
-      find.text('We sent a 6-digit code to\nperson@example.com'),
-      findsOneWidget,
-    );
+    // Recovery now waits for a real API response before opening OTP;
+    // no fake OTP route or made-up recipient is used.
+    expect(find.byType(VerifyOtpScreen), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

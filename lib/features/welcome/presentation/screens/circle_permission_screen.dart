@@ -10,6 +10,7 @@ abstract final class CirclePermissionKeys {
   static const backButton = Key('circle_permission_back_button');
   static const title = Key('circle_permission_title');
   static const createCircleButton = Key('circle_permission_create_button');
+  static const skipButton = Key('circle_permission_skip_button');
 
   static Key row(int index) => Key('circle_permission_row_$index');
   static Key iconCircle(int index) => Key('circle_permission_icon_$index');
@@ -22,11 +23,13 @@ class CirclePermissionScreen extends StatefulWidget {
   const CirclePermissionScreen({
     required this.onBack,
     required this.onCreateCircle,
+    this.onSkip,
     super.key,
   });
 
   final VoidCallback onBack;
   final VoidCallback onCreateCircle;
+  final VoidCallback? onSkip;
 
   @override
   State<CirclePermissionScreen> createState() => _CirclePermissionScreenState();
@@ -153,7 +156,12 @@ class _CirclePermissionScreenState extends State<CirclePermissionScreen> {
                       primaryKey: CirclePermissionKeys.createCircleButton,
                       primaryLabel: 'Create Circle',
                       onPrimaryPressed: widget.onCreateCircle,
-                      reserveSecondarySlot: true,
+                      secondaryKey: widget.onSkip == null
+                          ? null
+                          : CirclePermissionKeys.skipButton,
+                      secondaryLabel: widget.onSkip == null ? null : 'Skip',
+                      onSecondaryPressed: widget.onSkip,
+                      reserveSecondarySlot: widget.onSkip == null,
                     ),
                   ),
                 ),

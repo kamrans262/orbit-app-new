@@ -27,6 +27,7 @@ abstract final class SignUpKeys {
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({
     required this.onSignUp,
+    this.preflight,
     required this.onAppleSignUp,
     required this.onGoogleSignUp,
     required this.onLogIn,
@@ -35,6 +36,8 @@ class SignUpScreen extends StatefulWidget {
 
   final void Function(String fullName, String emailOrPhone, String password)
   onSignUp;
+  // Validate the new identity and request its OTP before leaving Sign Up.
+  final Future<String?> Function(String fullName, String emailOrPhone, String password)? preflight;
   final VoidCallback onAppleSignUp;
   final VoidCallback onGoogleSignUp;
   final VoidCallback onLogIn;
@@ -49,6 +52,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final TextEditingController _passwordController = TextEditingController();
 
   bool _obscurePassword = true;
+  bool _submitting = false;
 
   @override
   void dispose() {
@@ -58,12 +62,31 @@ class _SignUpScreenState extends State<SignUpScreen> {
     super.dispose();
   }
 
-  void _submit() {
-    widget.onSignUp(
-      _fullNameController.text,
-      _emailController.text,
-      _passwordController.text,
-    );
+  Future<void> _submit() async {
+    if (_submitting) return;
+    final name = _fullNameController.text;
+    final destination = _emailController.text;
+    final password = _passwordController.text;
+    if (widget.preflight == null) {
+      widget.onSignUp(name, destination, password);
+      return;
+    }
+    setState(() => _submitting = true);
+    String? error;
+    try {
+      error = await widget.preflight!(name, destination, password);
+    } catch (_) {
+      error = 'Unable to connect to Orbit. Please try again.';
+    }
+    if (!mounted) return;
+    setState(() => _submitting = false);
+    if (error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error)),
+      );
+      return;
+    }
+    widget.onSignUp(name, destination, password);
   }
 
   @override
@@ -120,7 +143,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
             const SizedBox(height: 16),
             SizedBox(
               key: SignUpKeys.signUpButton,
-              child: AppPrimaryButton(label: 'Sign Up', onPressed: _submit),
+              child: AppPrimaryButton(label: 'Sign Up', onPressed: _submit, enabled: !_submitting),
             ),
             const SizedBox(height: 20),
             const AuthDivider(),

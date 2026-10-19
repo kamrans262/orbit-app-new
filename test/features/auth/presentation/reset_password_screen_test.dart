@@ -42,7 +42,7 @@ void main() {
       expect(find.text('Reset Your Password'), findsOneWidget);
       expect(find.text('Enter Your Phone or Email'), findsOneWidget);
       expect(find.text('Enter Email / Phone'), findsOneWidget);
-      expect(find.text('Send Reset Link'), findsOneWidget);
+      expect(find.text('Send Reset Code'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -66,7 +66,7 @@ void main() {
     );
   }
 
-  testWidgets('Send Reset Link forwards the current field value', (
+  testWidgets('Send Reset Code forwards the current field value', (
     tester,
   ) async {
     await setPhoneSize(tester, const Size(390, 844));
