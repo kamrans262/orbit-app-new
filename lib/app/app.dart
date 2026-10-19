@@ -12,6 +12,7 @@ import '../features/auth/presentation/widgets/orbit_session_welcome_gate.dart';
 import '../features/auth/presentation/screens/device_registration_screen.dart';
 import '../features/auth/presentation/screens/orbit_password_reset_flow.dart';
 import '../features/auth/presentation/screens/orbit_account_deletion_status_screen.dart';
+import '../features/auth/presentation/screens/orbit_offline_profile_screen.dart';
 import '../features/auth/domain/orbit_auth_validation.dart';
 import '../features/auth/presentation/screens/verify_otp_screen.dart';
 import '../features/auth/presentation/screens/sign_up_screen.dart';
@@ -99,6 +100,11 @@ class OrbitApp extends StatelessWidget {
                 recipient: otpRecipient,
                 onVerifyCode: (_) {},
               ),
+            );
+          case AppRoutes.offlineProfile:
+            return MaterialPageRoute<void>(
+              settings: settings,
+              builder: (_) => const OrbitOfflineProfileScreen(),
             );
           case AppRoutes.deletionStatus:
             return MaterialPageRoute<void>(
