@@ -1,9 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_ui/features/profile/presentation/screens/profile_screen.dart';
+import 'package:orbit_ui/features/profile/presentation/screens/orbit_my_profile_screen.dart';
+import 'package:orbit_ui/features/profile/presentation/screens/edit_profile_screen.dart';
 import 'package:orbit_ui/features/profile/data/orbit_profile_settings_repository.dart';
 import 'package:orbit_ui/features/profile/domain/models/privacy_settings.dart';
 import 'package:orbit_ui/features/profile/domain/models/notification_settings.dart';
+
+class _FakeProfileRepository extends OrbitProfileSettingsRepository {
+  Map<String, dynamic> record = <String, dynamic>{
+    'id': '2d184c7a-4f2a-40f6-8c48-a1fab1213456',
+    'display_name': 'Real User',
+    'username': 'real.user',
+    'bio': '',
+  };
+
+  @override
+  Future<Map<String, dynamic>> loadProfile() async => Map<String, dynamic>.from(record);
+
+  @override
+  Future<void> saveProfile(String name, String username, {String? bio}) async {
+    record = <String, dynamic>{...record, 'display_name': name, 'username': username};
+  }
+}
 
 void main() {
   final repo = OrbitProfileSettingsRepository();
@@ -43,6 +62,36 @@ void main() {
     expect(find.text('Your activity will appear here'), findsOneWidget);
     expect(find.text('Santa Monica'), findsNothing);
     expect(find.text('2 friends nearby'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Editing real profile updates account display and retains navigation',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final fake = _FakeProfileRepository();
+    await tester.pumpWidget(MaterialApp(home: OrbitMyProfileScreen(
+      repository: fake,
+      onTabSelected: (_) {},
+      onAddPressed: () {},
+    )));
+    await tester.pumpAndSettle();
+    expect(find.text('Real User'), findsWidgets);
+    await tester.tap(find.byKey(ProfileKeys.settingsButton));
+    await tester.pumpAndSettle();
+    final edit = find.text('Edit Profile');
+    await tester.ensureVisible(edit);
+    await tester.tap(edit);
+    await tester.pumpAndSettle();
+    expect(find.byKey(EditProfileKeys.fullNameField), findsOneWidget);
+    await tester.enterText(find.byType(TextField).at(0), 'Updated Person');
+    await tester.enterText(find.byType(TextField).at(1), 'updated.person');
+    await tester.ensureVisible(find.byKey(EditProfileKeys.saveButton));
+    await tester.tap(find.byKey(EditProfileKeys.saveButton));
+    await tester.pumpAndSettle();
+    expect(fake.record['display_name'], 'Updated Person');
+    expect(fake.record['username'], 'updated.person');
+    expect(find.text('Updated Person'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 
