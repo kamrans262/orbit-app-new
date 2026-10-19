@@ -274,10 +274,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     if (trimmed.length < 2) {
       return 'Use at least 2 characters';
     }
-    if (trimmed.length > 80) {
-      return 'Keep the name under 80 characters';
+    if (trimmed.length > 120) {
+      return 'Keep the name under 120 characters';
     }
-    if (!RegExp(r"^[A-Za-zÃ€-Ã–Ã˜-Ã¶Ã¸-Ã¿Ä€-Å¾' .-]+$").hasMatch(trimmed)) {
+    if (!RegExp(r"^[A-Za-zÀ-ÖØ-öø-ÿĀ-ž' .-]+$").hasMatch(trimmed)) {
       return 'Use letters, spaces, apostrophes, dots, or hyphens';
     }
     return null;
@@ -295,8 +295,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     if (trimmed.length < 3) {
       return 'Use at least 3 characters';
     }
-    if (trimmed.length > 30) {
-      return 'Keep the username under 30 characters';
+    if (trimmed.length > 32) {
+      return 'Keep the username under 32 characters';
     }
     if (!RegExp(r'^[A-Za-z0-9._]+$').hasMatch(trimmed)) {
       return 'Use only letters, numbers, dots, or underscores';
