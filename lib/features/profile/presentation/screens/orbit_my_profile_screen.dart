@@ -47,14 +47,22 @@ class _OrbitMyProfileScreenState extends State<OrbitMyProfileScreen> {
           profile: profile,
           initialFullName: profile.name,
           initialUsername: username,
+          initialBio: profile.bio,
           onBack: () => Navigator.of(editContext).pop(),
+          onPickPhoto: (_) async {
+            ScaffoldMessenger.of(editContext).showSnackBar(const SnackBar(
+              content: Text('Photo uploads need the encrypted Media module and are not available yet.'),
+            ));
+            return null;
+          },
           onSave: (request) async {
             if (request.profileImageReference != null) {
               throw const EditProfileSaveException(
                 message: 'Profile photo uploads are not enabled yet.');
             }
             try {
-              await _repo.saveProfile(request.fullName, request.username);
+              await _repo.saveProfile(request.fullName, request.username,
+                  bio: request.bio);
             } on OrbitIdentityException catch (error) {
               throw EditProfileSaveException(
                 message: error.message,
