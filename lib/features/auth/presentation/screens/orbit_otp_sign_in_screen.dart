@@ -17,12 +17,14 @@ class OrbitOtpSignInScreen extends StatefulWidget {
     required this.onVerified,
     this.initialRecipient,
     this.initialChannel,
+    this.initialPassword,
     this.sendImmediately = false,
     super.key,
   });
   final VoidCallback onVerified;
   final String? initialRecipient;
   final String? initialChannel;
+  final String? initialPassword;
   final bool sendImmediately;
 
   @override
@@ -32,6 +34,7 @@ class OrbitOtpSignInScreen extends StatefulWidget {
 class _OrbitOtpSignInScreenState extends State<OrbitOtpSignInScreen> {
   final _recipient = TextEditingController();
   String _code = '';
+  String? _password;
   String _channel = 'email';
   bool _requested = false;
   bool _working = false;
@@ -42,6 +45,7 @@ class _OrbitOtpSignInScreenState extends State<OrbitOtpSignInScreen> {
     super.initState();
     final initial = widget.initialRecipient?.trim() ?? '';
     _recipient.text = initial;
+    _password = widget.initialPassword;
     _channel = widget.initialChannel ?? (initial.startsWith('+') ? 'sms' : 'email');
     if (widget.sendImmediately && initial.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -61,7 +65,13 @@ class _OrbitOtpSignInScreenState extends State<OrbitOtpSignInScreen> {
     setState(() { _working = true; _error = null; });
     try {
       if (!_requested) {
-        await OrbitIdentityClient.instance.requestCode(_channel, _recipient.text);
+        if (_password != null) {
+          await OrbitIdentityClient.instance.requestPasswordCode(
+              _recipient.text, _password!);
+        } else {
+          await OrbitIdentityClient.instance.requestCode(_channel, _recipient.text);
+        }
+        _password = null;
         if (mounted) setState(() => _requested = true);
       } else {
         await OrbitIdentityClient.instance.verifyCode(
@@ -117,7 +127,7 @@ class _OrbitOtpSignInScreenState extends State<OrbitOtpSignInScreen> {
                 enabled: !_working,
                 autofocus: true,
                 initialCode: _code,
-                onChanged: (value) => _code = value,
+                onChanged: (value) => setState(() => _code = value),
               ),
               const SizedBox(height: 8),
               TextButton(

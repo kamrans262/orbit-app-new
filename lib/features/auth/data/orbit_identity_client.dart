@@ -34,6 +34,38 @@ class OrbitIdentityClient {
   String? _access;
   Future<void>? _pendingRefresh;
 
+  // Ephemeral sign-up draft. Never stored on disk, sent to analytics or logs.
+  String? _pendingSignupName;
+  String? _pendingSignupPassword;
+  String? get pendingSignupName => _pendingSignupName;
+
+  void beginStandardSignup(String name, String password) {
+    _pendingSignupName = name.trim();
+    _pendingSignupPassword = password;
+  }
+
+  void abandonStandardSignup() {
+    _pendingSignupName = null;
+    _pendingSignupPassword = null;
+  }
+
+  Future<void> completePendingPasswordEnrollment() async {
+    final value = _pendingSignupPassword;
+    if (value == null) return;
+    // Only a fresh OTP session on a trusted registered device can enroll it.
+    await _send('POST', '/me/password', protected: true,
+        body: <String, Object?>{'password': value});
+    _pendingSignupPassword = null;
+  }
+
+  Future<void> requestPasswordCode(String recipient, String password) async {
+    await _send('POST', '/auth/password/otp/request',
+        body: <String, Object?>{
+          'recipient': recipient.trim(),
+          'password': password,
+        });
+  }
+
   Future<String> get installationId async {
     final old = await _storage.read(key: _idKey);
     if (old != null && old.isNotEmpty) return old;
@@ -187,6 +219,7 @@ class OrbitIdentityClient {
   }
 
   Future<void> clearSession() async {
+    abandonStandardSignup();
     _access = null;
     await _storage.delete(key: _refreshKey);
   }

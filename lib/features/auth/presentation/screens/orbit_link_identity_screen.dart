@@ -100,7 +100,7 @@ class _OrbitLinkIdentityScreenState extends State<OrbitLinkIdentityScreen> {
                 initialCode: _code,
                 enabled: !_working,
                 autofocus: true,
-                onChanged: (value) => _code = value,
+                onChanged: (value) => setState(() => _code = value),
               ),
               TextButton(
                 onPressed: _working ? null : () => setState(() {

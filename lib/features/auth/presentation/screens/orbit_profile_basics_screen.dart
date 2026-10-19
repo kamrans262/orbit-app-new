@@ -11,7 +11,11 @@ import '../widgets/auth_screen_layout.dart';
 
 /// Saves the documented minimal account profile before consent onboarding.
 class OrbitProfileBasicsScreen extends StatefulWidget {
-  const OrbitProfileBasicsScreen({required this.onCompleted, super.key});
+  const OrbitProfileBasicsScreen({
+    required this.onCompleted,
+    this.initialName,
+    super.key,
+  });
   final VoidCallback onCompleted;
   final String? initialName;
 
@@ -48,6 +52,7 @@ class _OrbitProfileBasicsScreenState extends State<OrbitProfileBasicsScreen> {
     }
     setState(() { _busy = true; _error = null; });
     try {
+      await OrbitIdentityClient.instance.completePendingPasswordEnrollment();
       await OrbitIdentityClient.instance.updateProfileBasics(name, username);
       if (mounted) widget.onCompleted();
     } on OrbitIdentityException catch (e) {
