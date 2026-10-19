@@ -50,7 +50,11 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.byType(AppTextField), findsOneWidget);
-    expect(find.text('someone@example.com'), findsOneWidget);
+    final recipientField = tester.widget<TextField>(find.descendant(
+      of: find.byType(AppTextField),
+      matching: find.byType(TextField),
+    ).first);
+    expect(recipientField.controller!.text, 'someone@example.com');
     expect(find.byType(OrbitAuthChannelSelector), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
