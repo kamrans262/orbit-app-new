@@ -339,6 +339,19 @@ class OrbitIdentityClient {
     try {
       final result = await _send('GET', '/me/profile', protected: true);
       final data = Map<String, dynamic>.from(result['data'] as Map);
+      final owner = await _storage.read(key: _userIdKey);
+      if (owner != null && owner == data['id']) {
+        // OS-backed secure storage, no credentials or sensitive preferences.
+        await _storage.write(
+          key: _profileCacheKey,
+          value: OrbitOfflineProfileSnapshot.encode(data, DateTime.now()),
+        );
+      }
+      return data;
+    } on OrbitIdentityException catch (error) {
+      // Device approval, deletion, suspension, logout or server rejection
+      // cannot fall back to an offline "authorized" session.
+      if (error.statusCode != null && error.statusCode! < 500) rethrow;
       final cached = await cachedProfileForOffline();
       if (cached == null) rethrow;
       return cached;
