@@ -4,6 +4,7 @@ import 'package:orbit_ui/app/routing/app_routes.dart';
 import 'package:orbit_ui/features/auth/data/orbit_identity_client.dart';
 import 'package:orbit_ui/features/auth/data/orbit_offline_profile_snapshot.dart';
 import 'package:orbit_ui/features/auth/presentation/screens/orbit_offline_profile_screen.dart';
+import 'package:orbit_ui/features/auth/presentation/widgets/orbit_session_welcome_gate.dart';
 
 class _OfflineFakeClient extends OrbitIdentityClient {
   Map<String, dynamic>? cached;
@@ -92,6 +93,33 @@ void main() {
     await tester.tap(find.text('Reconnect'));
     await tester.pumpAndSettle();
     expect(find.text('Verified Home'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Protected Home cannot render while identity verification is offline',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final fake = _OfflineFakeClient()
+      ..next = OrbitRestoreState.offlineProfile
+      ..cached = <String,dynamic>{
+        'id':owner, 'display_name':'Real Member',
+        'username':'real.member', 'bio':'', '_offline_cached':true,
+      };
+    await tester.pumpWidget(MaterialApp(
+      initialRoute: AppRoutes.home,
+      routes: <String,WidgetBuilder>{
+        AppRoutes.home: (_) => OrbitProtectedHome(
+          identity: fake, home: const Scaffold(body: Text('Private Home')),
+        ),
+        AppRoutes.offlineProfile: (_) =>
+            OrbitOfflineProfileScreen(identity: fake),
+        AppRoutes.welcome: (_) => const Scaffold(body:Text('Welcome')),
+      },
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Private Home'), findsNothing);
+    expect(find.text('OFFLINE • READ ONLY'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
