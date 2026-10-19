@@ -105,7 +105,7 @@ Future<void> showDeleteAccountPopup(
     context,
     type: OrbitPopupType.deleteAccount,
     title: 'Delete Account',
-    description: 'This action cannot be undone. All your data will be permanently deleted.',
+    description: 'This submits a deletion request. Your account will be restricted and you can cancel within 30 days after signing in again. Data is not erased immediately.',
     assetPath: 'assets/popup/delete.svg',
     motion: OrbitPopupIllustrationMotion.scaleIn,
     illustrationSvgSize: 82,
