@@ -72,11 +72,12 @@ void main() {
       'bio':'Private bio','_offline_cached':true,
     };
     await tester.pumpWidget(MaterialApp(
+      initialRoute: AppRoutes.offlineProfile,
       routes:<String,WidgetBuilder>{
+        AppRoutes.offlineProfile: (_) => OrbitOfflineProfileScreen(identity:fake),
         AppRoutes.home: (_) => const Scaffold(body:Text('Verified Home')),
         AppRoutes.welcome: (_) => const Scaffold(body:Text('Welcome')),
       },
-      home: OrbitOfflineProfileScreen(identity:fake),
     ));
     await tester.pumpAndSettle();
     expect(find.text('OFFLINE • READ ONLY'), findsOneWidget);
@@ -102,10 +103,11 @@ void main() {
       'bio':'','_offline_cached':true,
     };
     await tester.pumpWidget(MaterialApp(
+      initialRoute: AppRoutes.offlineProfile,
       routes:<String,WidgetBuilder>{
+        AppRoutes.offlineProfile: (_) => OrbitOfflineProfileScreen(identity:fake),
         AppRoutes.welcome: (_) => const Scaffold(body:Text('Welcome')),
       },
-      home: OrbitOfflineProfileScreen(identity:fake),
     ));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Sign out and clear offline data'));
