@@ -257,17 +257,16 @@ class _PrivacySettingScreenState extends State<PrivacySettingScreen> {
     );
   }
 
-  void _selectLiveLocation() {
-    _update(
+  Future<void> _selectLiveLocation() async {
+    await _update(
       _settings.copyWith(ghostModeEnabled: false, locationSharingEnabled: true),
     );
-    if (!mounted) return;
-    unawaited(
-      showStayConnectedPopup(
-        context,
-        onAllow: _openBatteryEducation,
-        onNotNow: () {},
-      ),
+    if (!mounted || _settings.ghostModeEnabled ||
+        !_settings.locationSharingEnabled) return;
+    await showStayConnectedPopup(
+      context,
+      onAllow: _openBatteryEducation,
+      onNotNow: () {},
     );
   }
 
