@@ -24,7 +24,11 @@ class _OrbitNotificationPreferencesScreenState
   int _revision = 0;
   NotificationSettings? _current;
 
-  void _retry() => setState(() => _future = _repo.loadNotifications());
+  void _retry() {
+    setState(() {
+      _future = _repo.loadNotifications();
+    });
+  }
 
   void _update(NotificationSettings next) {
     final revision = ++_revision;
@@ -86,7 +90,11 @@ class _OrbitPrivacyPreferencesScreenState
   int _revision = 0;
   PrivacySettings? _current;
 
-  void _retry() => setState(() => _future = _repo.loadPrivacy());
+  void _retry() {
+    setState(() {
+      _future = _repo.loadPrivacy();
+    });
+  }
 
   void _update(PrivacySettings next) {
     final revision = ++_revision;
