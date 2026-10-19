@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_primary_button.dart';
+import '../../../../core/widgets/app_text_field.dart';
+import '../../../../core/widgets/app_otp_input.dart';
+import '../widgets/orbit_auth_channel_selector.dart';
 import '../../data/orbit_identity_client.dart';
 import '../widgets/auth_card.dart';
 import '../widgets/auth_header.dart';
@@ -10,8 +13,17 @@ import '../widgets/auth_screen_layout.dart';
 
 /// Backend-connected email/SMS OTP entry, separate from the older UI mockup.
 class OrbitOtpSignInScreen extends StatefulWidget {
-  const OrbitOtpSignInScreen({required this.onVerified, super.key});
+  const OrbitOtpSignInScreen({
+    required this.onVerified,
+    this.initialRecipient,
+    this.initialChannel,
+    this.sendImmediately = false,
+    super.key,
+  });
   final VoidCallback onVerified;
+  final String? initialRecipient;
+  final String? initialChannel;
+  final bool sendImmediately;
 
   @override
   State<OrbitOtpSignInScreen> createState() => _OrbitOtpSignInScreenState();
@@ -19,16 +31,28 @@ class OrbitOtpSignInScreen extends StatefulWidget {
 
 class _OrbitOtpSignInScreenState extends State<OrbitOtpSignInScreen> {
   final _recipient = TextEditingController();
-  final _code = TextEditingController();
+  String _code = '';
   String _channel = 'email';
   bool _requested = false;
   bool _working = false;
   String? _error;
 
   @override
+  void initState() {
+    super.initState();
+    final initial = widget.initialRecipient?.trim() ?? '';
+    _recipient.text = initial;
+    _channel = widget.initialChannel ?? (initial.startsWith('+') ? 'sms' : 'email');
+    if (widget.sendImmediately && initial.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _submit();
+      });
+    }
+  }
+
+  @override
   void dispose() {
     _recipient.dispose();
-    _code.dispose();
     super.dispose();
   }
 
@@ -41,7 +65,7 @@ class _OrbitOtpSignInScreenState extends State<OrbitOtpSignInScreen> {
         if (mounted) setState(() => _requested = true);
       } else {
         await OrbitIdentityClient.instance.verifyCode(
-          _channel, _recipient.text, _code.text,
+          _channel, _recipient.text, _code,
         );
         if (mounted) widget.onVerified();
       }
@@ -70,44 +94,44 @@ class _OrbitOtpSignInScreenState extends State<OrbitOtpSignInScreen> {
             ),
             const SizedBox(height: 22),
             if (!_requested) ...<Widget>[
-              SegmentedButton<String>(
-                segments: const <ButtonSegment<String>>[
-                  ButtonSegment(value: 'email', label: Text('Email')),
-                  ButtonSegment(value: 'sms', label: Text('SMS')),
-                ],
-                selected: <String>{_channel},
-                onSelectionChanged: (next) => setState(() => _channel = next.first),
+              OrbitAuthChannelSelector(
+                channel: _channel,
+                enabled: !_working,
+                onChanged: (next) => setState(() => _channel = next),
               ),
               const SizedBox(height: 16),
-              TextField(
+              AppTextField(
+                label: _channel == 'email' ? 'Email' : 'Phone (with country code)',
                 controller: _recipient,
+                enabled: !_working,
+                hintText: _channel == 'email'
+                    ? 'example@email.com'
+                    : '+923001234567',
                 keyboardType: _channel == 'email'
                     ? TextInputType.emailAddress : TextInputType.phone,
-                decoration: InputDecoration(
-                  labelText: _channel == 'email' ? 'Email' : 'Phone (with country code)',
-                  hintText: _channel == 'email'
-                      ? 'you@example.com' : '+923001234567',
-                  border: const OutlineInputBorder(),
-                ),
+                textInputAction: TextInputAction.done,
               ),
             ] else ...<Widget>[
-              TextField(
-                controller: _code,
+              AppOtpInput(
+                key: const Key('orbit_auth_otp_input'),
+                enabled: !_working,
                 autofocus: true,
-                maxLength: 6,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Verification code',
-                  border: OutlineInputBorder(),
-                  counterText: '',
-                ),
+                initialCode: _code,
+                onChanged: (value) => _code = value,
               ),
+              const SizedBox(height: 8),
               TextButton(
                 onPressed: _working ? null : () => setState(() {
                   _requested = false;
-                  _code.clear();
+                  _code = '';
                 }),
-                child: const Text('Change destination'),
+                child: Text(
+                  'Change destination',
+                  style: AppTypography.body.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primaryEnd,
+                  ),
+                ),
               ),
             ],
             if (_error != null) ...<Widget>[
@@ -117,8 +141,8 @@ class _OrbitOtpSignInScreenState extends State<OrbitOtpSignInScreen> {
             const SizedBox(height: 20),
             AppPrimaryButton(
               label: _working ? 'Please wait…' :
-                  (_requested ? 'Verify code' : 'Send code'),
-              enabled: !_working,
+                  (_requested ? 'Verify Code' : 'Send Code'),
+              enabled: !_working && (!_requested || _code.length == 6),
               onPressed: _submit,
             ),
             const SizedBox(height: 12),

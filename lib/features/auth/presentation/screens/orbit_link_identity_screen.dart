@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_primary_button.dart';
+import '../../../../core/widgets/app_text_field.dart';
+import '../../../../core/widgets/app_otp_input.dart';
+import '../widgets/orbit_auth_channel_selector.dart';
 import '../../data/orbit_identity_client.dart';
 import '../widgets/auth_card.dart';
 import '../widgets/auth_header.dart';
@@ -19,7 +22,7 @@ class OrbitLinkIdentityScreen extends StatefulWidget {
 
 class _OrbitLinkIdentityScreenState extends State<OrbitLinkIdentityScreen> {
   final _recipient = TextEditingController();
-  final _code = TextEditingController();
+  String _code = '';
   String _channel = 'email';
   bool _sent = false;
   bool _working = false;
@@ -29,7 +32,6 @@ class _OrbitLinkIdentityScreenState extends State<OrbitLinkIdentityScreen> {
   @override
   void dispose() {
     _recipient.dispose();
-    _code.dispose();
     super.dispose();
   }
 
@@ -42,7 +44,7 @@ class _OrbitLinkIdentityScreenState extends State<OrbitLinkIdentityScreen> {
         await identity.requestCode(_channel, _recipient.text);
         if (mounted) setState(() => _sent = true);
       } else {
-        await identity.linkIdentity(_channel, _recipient.text, _code.text);
+        await identity.linkIdentity(_channel, _recipient.text, _code);
         if (mounted) setState(() => _done = true);
       }
     } on OrbitIdentityException catch (e) {
@@ -74,40 +76,44 @@ class _OrbitLinkIdentityScreenState extends State<OrbitLinkIdentityScreen> {
             ),
             const SizedBox(height: 20),
             if (!_sent && !_done) ...[
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: 'email', label: Text('Email')),
-                  ButtonSegment(value: 'sms', label: Text('SMS')),
-                ],
-                selected: {_channel},
-                onSelectionChanged: (value) => setState(() => _channel = value.first),
+              OrbitAuthChannelSelector(
+                channel: _channel,
+                enabled: !_working,
+                onChanged: (value) => setState(() => _channel = value),
               ),
               const SizedBox(height: 16),
-              TextField(
+              AppTextField(
+                label: _channel == 'sms' ? 'Phone (with country code)' : 'Email',
                 controller: _recipient,
+                enabled: !_working,
+                hintText: _channel == 'sms' ? '+923001234567' : 'example@email.com',
                 keyboardType: _channel == 'sms'
                     ? TextInputType.phone : TextInputType.emailAddress,
-                decoration: InputDecoration(
-                  labelText: _channel == 'sms' ? 'Phone (with country code)' : 'Email',
-                ),
               ),
             ],
             if (_sent && !_done) ...[
               Text('Verification code sent to ${_recipient.text.trim()}',
                   style: AppTypography.body),
               const SizedBox(height: 12),
-              TextField(
-                controller: _code,
-                keyboardType: TextInputType.number,
-                maxLength: 6,
-                decoration: const InputDecoration(labelText: 'Six-digit code'),
+              AppOtpInput(
+                key: const Key('orbit_link_otp_input'),
+                initialCode: _code,
+                enabled: !_working,
+                autofocus: true,
+                onChanged: (value) => _code = value,
               ),
               TextButton(
                 onPressed: _working ? null : () => setState(() {
                   _sent = false;
-                  _code.clear();
+                  _code = '';
                 }),
-                child: const Text('Change contact'),
+                child: Text(
+                  'Change contact',
+                  style: AppTypography.body.copyWith(
+                    color: AppColors.primaryEnd,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ],
             if (_error != null) ...[

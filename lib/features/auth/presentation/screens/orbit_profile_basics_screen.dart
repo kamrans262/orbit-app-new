@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_primary_button.dart';
+import '../../../../core/widgets/app_text_field.dart';
 import '../../data/orbit_identity_client.dart';
 import '../widgets/auth_card.dart';
 import '../widgets/auth_header.dart';
@@ -12,6 +13,7 @@ import '../widgets/auth_screen_layout.dart';
 class OrbitProfileBasicsScreen extends StatefulWidget {
   const OrbitProfileBasicsScreen({required this.onCompleted, super.key});
   final VoidCallback onCompleted;
+  final String? initialName;
 
   @override
   State<OrbitProfileBasicsScreen> createState() => _OrbitProfileBasicsScreenState();
@@ -22,6 +24,12 @@ class _OrbitProfileBasicsScreenState extends State<OrbitProfileBasicsScreen> {
   final _username = TextEditingController();
   bool _busy = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _name.text = widget.initialName ?? '';
+  }
 
   @override
   void dispose() {
@@ -64,17 +72,18 @@ class _OrbitProfileBasicsScreenState extends State<OrbitProfileBasicsScreen> {
               subtitle: 'Set the name friends will recognize.',
             ),
             const SizedBox(height: 20),
-            TextField(
+            AppTextField(
               controller: _name,
-              textCapitalization: TextCapitalization.words,
-              maxLength: 120,
-              decoration: const InputDecoration(labelText: 'Full name'),
+              label: 'Full Name',
+              hintText: 'Emma Johnson',
+              textInputAction: TextInputAction.next,
             ),
             const SizedBox(height: 10),
-            TextField(
+            AppTextField(
               controller: _username,
-              maxLength: 32,
-              decoration: const InputDecoration(labelText: 'Username'),
+              label: 'Username',
+              hintText: 'Your username',
+              textInputAction: TextInputAction.done,
             ),
             if (_error != null) ...[
               const SizedBox(height: 10),
