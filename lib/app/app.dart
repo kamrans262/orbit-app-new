@@ -159,6 +159,7 @@ class OrbitApp extends StatelessWidget {
                   );
                 },
                 onRegisterDevice: OrbitIdentityClient.instance.registerDevice,
+                onCheckApproval: OrbitIdentityClient.instance.checkDeviceApproval,
               ),
             );
           case AppRoutes.profileBasics:
