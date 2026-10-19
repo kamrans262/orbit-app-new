@@ -68,6 +68,12 @@ class OrbitApp extends StatelessWidget {
                 onVerified: () async {
                   final state = await OrbitIdentityClient.instance.restoreSession();
                   if (!context.mounted) return;
+                  if (state == OrbitRestoreState.signedOut) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text('Unable to confirm this session. Please try logging in again.'),
+                    ));
+                    return;
+                  }
                   final signupPending =
                       OrbitIdentityClient.instance.pendingSignupName != null;
                   Navigator.of(context).pushNamedAndRemoveUntil(
