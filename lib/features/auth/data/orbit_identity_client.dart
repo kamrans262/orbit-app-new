@@ -28,6 +28,9 @@ class OrbitIdentityClient {
   static const _idKey = 'orbit.identity.installation.v1';
   static const _publicKey = 'orbit.identity.public_key.v1';
   static const _privateKey = 'orbit.identity.private_key.v1';
+  static const _userIdKey = 'orbit.identity.user_id.v1';
+  static const _profileCacheKey = 'orbit.profile.encrypted_cache.v1';
+  static const _profileCacheTtl = Duration(hours: 1);
 
   final http.Client _http;
   final FlutterSecureStorage _storage;
@@ -160,6 +163,13 @@ class OrbitIdentityClient {
     if (access is! String || refreshToken is! String) {
       throw OrbitIdentityException('Invalid session response.');
     }
+    final user = tokens['user'];
+    if (user is Map && user['id'] is String) {
+      final nextUser = user['id'] as String;
+      final lastUser = await _storage.read(key: _userIdKey);
+      if (lastUser != nextUser) await _storage.delete(key: _profileCacheKey);
+      await _storage.write(key: _userIdKey, value: nextUser);
+    }
     await _storage.write(key: _refreshKey, value: refreshToken);
     _access = access;
   }
@@ -255,6 +265,8 @@ class OrbitIdentityClient {
     abandonStandardSignup();
     _access = null;
     await _storage.delete(key: _refreshKey);
+    await _storage.delete(key: _userIdKey);
+    await _storage.delete(key: _profileCacheKey);
   }
 
   Future<void> signOut() async {
@@ -295,9 +307,42 @@ class OrbitIdentityClient {
     return data['key_registered'] == true && data['trust_state'] == 'trusted';
   }
 
+  /// Profile-only encrypted cache, owned by the most recently verified user.
+  /// Offline reads are clearly flagged; privacy and consent are never cached as
+  /// authorization, and all writes must still reach the server.
   Future<Map<String, dynamic>> profile() async {
-    final result = await _send('GET', '/me/profile', protected: true);
-    return Map<String, dynamic>.from(result['data'] as Map);
+    try {
+      final result = await _send('GET', '/me/profile', protected: true);
+      final data = Map<String, dynamic>.from(result['data'] as Map);
+      final owner = await _storage.read(key: _userIdKey);
+      if (owner != null && owner == data['id']) {
+        await _storage.write(key: _profileCacheKey, value: jsonEncode({
+          'user_id': owner,
+          'cached_at_ms': DateTime.now().toUtc().millisecondsSinceEpoch,
+          'data': data,
+        }));
+      }
+      return data;
+    } on OrbitIdentityException catch (error) {
+      // No cached fallback for revocation, missing trust or rejected sessions.
+      if (error.statusCode != null || _access == null) rethrow;
+      final owner = await _storage.read(key: _userIdKey);
+      final raw = await _storage.read(key: _profileCacheKey);
+      if (owner == null || raw == null) rethrow;
+      try {
+        final record = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+        final cachedAt = DateTime.fromMillisecondsSinceEpoch(
+          record['cached_at_ms'] as int, isUtc: true);
+        if (record['user_id'] != owner ||
+            DateTime.now().toUtc().difference(cachedAt).isNegative ||
+            DateTime.now().toUtc().difference(cachedAt) > _profileCacheTtl) rethrow;
+        final data = Map<String, dynamic>.from(record['data'] as Map);
+        if (data['id'] != owner) rethrow;
+        return <String, dynamic>{...data, '_offline_cached': true};
+      } catch (_) {
+        rethrow;
+      }
+    }
   }
 
   Future<Map<String, dynamic>> saveProfile(
@@ -311,6 +356,7 @@ class OrbitIdentityClient {
           'username': username.trim(),
           if (bio != null) 'bio': bio.trim(),
         });
+    await _storage.delete(key: _profileCacheKey);
     return Map<String, dynamic>.from(result['data'] as Map);
   }
 
