@@ -22,10 +22,9 @@ class _OrbitSessionWelcomeGateState extends State<OrbitSessionWelcomeGate> {
       future: _check,
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
-          return const Scaffold(
-            backgroundColor: AppColors.background,
-            body: Center(child: CircularProgressIndicator()),
-          );
+          // Welcome remains accessible while the OS secure storage responds.
+          // The protected Home route still performs an independent auth check.
+          return widget.welcome;
         }
         final state = snapshot.data!;
         if (state != OrbitRestoreState.signedOut) {
