@@ -335,9 +335,13 @@ class OrbitIdentityClient {
           record['cached_at_ms'] as int, isUtc: true);
         if (record['user_id'] != owner ||
             DateTime.now().toUtc().difference(cachedAt).isNegative ||
-            DateTime.now().toUtc().difference(cachedAt) > _profileCacheTtl) rethrow;
+            DateTime.now().toUtc().difference(cachedAt) > _profileCacheTtl) {
+          rethrow;
+        }
         final data = Map<String, dynamic>.from(record['data'] as Map);
-        if (data['id'] != owner) rethrow;
+        if (data['id'] != owner) {
+          rethrow;
+        }
         return <String, dynamic>{...data, '_offline_cached': true};
       } catch (_) {
         rethrow;
