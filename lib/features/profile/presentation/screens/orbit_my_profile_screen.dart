@@ -6,9 +6,7 @@ import '../../data/orbit_profile_settings_repository.dart';
 import '../../domain/models/edit_profile_models.dart';
 import '../../domain/models/profile_models.dart';
 import 'edit_profile_screen.dart';
-import 'notification_screen.dart';
 import 'orbit_preferences_screens.dart';
-import 'privacy_setting_screen.dart';
 import 'profile_screen.dart';
 import 'profile_settings_screen.dart';
 
@@ -95,6 +93,7 @@ class _OrbitMyProfileScreenState extends State<OrbitMyProfileScreen> {
         final data = snapshot.data!;
         final profile = _repo.fromProfile(data);
         return ProfileScreen(
+          isLiveAccount: true,
           profile: profile,
           onTabSelected: widget.onTabSelected,
           onAddPressed: widget.onAddPressed,
