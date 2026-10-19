@@ -2,11 +2,13 @@ class UpdateProfileRequest {
   const UpdateProfileRequest({
     required this.fullName,
     required this.username,
+    this.bio,
     this.profileImageReference,
   });
 
   final String fullName;
   final String username;
+  final String? bio;
 
   /// Local path, upload token, or other backend-facing image reference.
   ///
