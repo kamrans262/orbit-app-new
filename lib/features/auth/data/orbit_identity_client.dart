@@ -6,6 +6,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 
+enum OrbitRestoreState { signedOut, authenticated, deviceRegistration }
+
 class OrbitIdentityException implements Exception {
   OrbitIdentityException(this.message, [this.statusCode]);
   final String message;
@@ -134,6 +136,56 @@ class OrbitIdentityClient {
     }
   }
 
+  /// Validate the server session, including trust and registration state, at boot.
+  /// An expired or revoked token cannot take the user to the authenticated home.
+  Future<OrbitRestoreState> restoreSession() async {
+    try {
+      final token = await _storage.read(key: _refreshKey);
+      if (token == null || token.isEmpty) return OrbitRestoreState.signedOut;
+      await refresh();
+      await currentUser();
+      return OrbitRestoreState.authenticated;
+    } on OrbitIdentityException catch (error) {
+      if (error.statusCode == 403) {
+        return OrbitRestoreState.deviceRegistration;
+      }
+      if (error.statusCode == 401) {
+        await clearSession();
+      }
+      return OrbitRestoreState.signedOut;
+    } catch (_) {
+      // Avoid navigating into a demo Home when a session cannot be verified.
+      return OrbitRestoreState.signedOut;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> sessions() async {
+    final response = await _send('GET', '/me/sessions', protected: true);
+    return (response['data'] as List<dynamic>)
+        .map((item) => Map<String, dynamic>.from(item as Map)).toList();
+  }
+
+  Future<void> revokeSession(String id) async {
+    await _send('DELETE', '/me/sessions/$id', protected: true);
+  }
+
+  Future<void> signOutAll() async {
+    try {
+      await _send('POST', '/auth/logout-all', body: <String, Object?>{},
+          protected: true);
+    } finally {
+      await clearSession();
+    }
+  }
+
+  /// Submit a server-side privacy erasure request. The backend acknowledges a
+  /// request, not final deletion, so the user-facing copy must reflect that.
+  Future<void> requestDeletion() async {
+    await _send('POST', '/me/deletion-request',
+        body: <String, Object?>{'confirm': true}, protected: true);
+    await clearSession();
+  }
+
   Future<void> clearSession() async {
     _access = null;
     await _storage.delete(key: _refreshKey);
@@ -159,9 +211,14 @@ class OrbitIdentityClient {
       publicKey = base64Encode(public.bytes);
       await _storage.write(key: _publicKey, value: publicKey);
     }
-    await _send('POST', '/devices/register', protected: true,
+    final response = await _send('POST', '/devices/register', protected: true,
         body: <String, Object?>{'public_key': publicKey});
-    return true;
+    final record = Map<String, dynamic>.from(response['data'] as Map);
+    if (record['trust_state'] == 'pending') {
+      throw OrbitIdentityException(
+        'Device registered. Waiting for approval from another trusted device.', 403);
+    }
+    return record['trust_state'] == 'trusted';
   }
 
   Future<Map<String, dynamic>> currentUser() =>

@@ -7,6 +7,7 @@ import '../core/widgets/app_keyboard_dismiss.dart';
 import '../features/auth/presentation/screens/login_screen.dart';
 import '../features/auth/presentation/screens/orbit_otp_sign_in_screen.dart';
 import '../features/auth/data/orbit_identity_client.dart';
+import '../features/auth/presentation/widgets/orbit_session_welcome_gate.dart';
 import '../features/auth/presentation/screens/device_registration_screen.dart';
 import '../features/auth/presentation/screens/reset_password_screen.dart';
 import '../features/auth/presentation/screens/verify_otp_screen.dart';
@@ -46,13 +47,11 @@ class OrbitApp extends StatelessWidget {
           case AppRoutes.welcome:
             return MaterialPageRoute<void>(
               settings: settings,
-              builder: (context) => WelcomeScreen(
-                onGetStarted: () {
-                  Navigator.of(context).pushNamed(AppRoutes.welcome2);
-                },
-                onLogIn: () {
-                  Navigator.of(context).pushNamed(AppRoutes.login);
-                },
+              builder: (context) => OrbitSessionWelcomeGate(
+                welcome: WelcomeScreen(
+                  onGetStarted: () => Navigator.of(context).pushNamed(AppRoutes.welcome2),
+                  onLogIn: () => Navigator.of(context).pushNamed(AppRoutes.login),
+                ),
               ),
             );
           case AppRoutes.otpSignIn:
@@ -249,9 +248,11 @@ class OrbitApp extends StatelessWidget {
           case AppRoutes.home:
             return MaterialPageRoute<void>(
               settings: settings,
-              builder: (context) => HomeScreen.demo(
-                onTabSelected: (index) {},
-                onAddPressed: () {},
+              builder: (context) => OrbitProtectedHome(
+                home: HomeScreen.demo(
+                  onTabSelected: (index) {},
+                  onAddPressed: () {},
+                ),
               ),
             );
           default:

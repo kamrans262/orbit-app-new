@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../auth/data/orbit_identity_client.dart';
+import '../../../auth/presentation/screens/orbit_sessions_screen.dart';
+import '../../../../app/routing/app_routes.dart';
 
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
@@ -210,6 +212,11 @@ class SettingsScreen extends StatelessWidget {
                               label: 'Devices',
                               override: onDevicesPressed,
                             ),
+                            onSessionsPressed: () => _handleDestination(
+                              context,
+                              label: 'Sessions',
+                              override: null,
+                            ),
                             onMoreMenuPressed: () => _handleDestination(
                               context,
                               label: 'Orbit Menu',
@@ -243,6 +250,12 @@ class SettingsScreen extends StatelessWidget {
       Navigator.of(context).push<void>(
         AppFadeSlidePageRoute<void>(builder: (_) => const SubscriptionScreen()),
       );
+      return;
+    }
+    if (label == 'Sessions') {
+      Navigator.of(context).push<void>(AppFadeSlidePageRoute<void>(
+        builder: (_) => const OrbitSessionsScreen(),
+      ));
       return;
     }
     if (label == 'Devices') {
@@ -333,7 +346,10 @@ class SettingsScreen extends StatelessWidget {
 
     if (label == 'Orbit Menu') {
       Navigator.of(context).push<void>(
-        AppFadeSlidePageRoute<void>(builder: (_) => const MoreMenuScreen()),
+        AppFadeSlidePageRoute<void>(builder: (_) => MoreMenuScreen(
+          onLogoutConfirmed: () => unawaited(_signOut(context)),
+          onDeleteAccountConfirmed: () => unawaited(_requestDeletion(context)),
+        )),
       );
       return;
     }
@@ -343,6 +359,31 @@ class SettingsScreen extends StatelessWidget {
         builder: (_) => _FutureSettingsDestination(title: label),
       ),
     );
+  }
+
+  Future<void> _signOut(BuildContext context) async {
+    try {
+      await OrbitIdentityClient.instance.signOut();
+    } catch (_) {
+      // Local refresh token is cleared by the signOut finally block.
+    }
+    if (!context.mounted) return;
+    Navigator.of(context, rootNavigator: true)
+        .pushNamedAndRemoveUntil(AppRoutes.welcome, (_) => false);
+  }
+
+  Future<void> _requestDeletion(BuildContext context) async {
+    try {
+      await OrbitIdentityClient.instance.requestDeletion();
+      if (!context.mounted) return;
+      Navigator.of(context, rootNavigator: true)
+          .pushNamedAndRemoveUntil(AppRoutes.welcome, (_) => false);
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Could not submit your deletion request. Please retry.'),
+      ));
+    }
   }
 
   void _handleTabSelection(BuildContext context, int index) {
@@ -376,6 +417,7 @@ class _SettingsCard extends StatelessWidget {
     required this.onMoreMenuPressed,
     required this.onDevicesPressed,
     required this.onSubscriptionPressed,
+    required this.onSessionsPressed,
   });
 
   final VoidCallback onEditProfilePressed;
@@ -388,6 +430,7 @@ class _SettingsCard extends StatelessWidget {
   final VoidCallback onMoreMenuPressed;
   final VoidCallback onDevicesPressed;
   final VoidCallback onSubscriptionPressed;
+  final VoidCallback onSessionsPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -446,6 +489,12 @@ class _SettingsCard extends StatelessWidget {
         icon: Icons.devices_other_rounded,
         label: 'Devices',
         onTap: onDevicesPressed,
+      ),
+      _SettingsEntry(
+        id: 'sessions',
+        icon: Icons.security_rounded,
+        label: 'Sessions',
+        onTap: onSessionsPressed,
       ),
       _SettingsEntry(
         id: 'more_menu',

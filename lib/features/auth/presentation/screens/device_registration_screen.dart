@@ -70,11 +70,9 @@ class _DeviceRegistrationScreenState extends State<DeviceRegistrationScreen> {
           () => _error = 'Device registration was not completed. Try again.',
         );
       }
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
-        setState(
-          () => _error = 'Could not register this device. Check your connection and try again.',
-        );
+        setState(() => _error = error.toString().replaceFirst('OrbitIdentityException: ', ''));
       }
     } finally {
       if (mounted) setState(() => _registering = false);
