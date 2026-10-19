@@ -1,4 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/features/profile/presentation/screens/privacy_setting_screen.dart';
+import 'package:orbit_ui/features/profile/presentation/screens/notification_screen.dart';
+import 'package:orbit_ui/features/profile/presentation/screens/orbit_preferences_screens.dart';
+import 'package:orbit_ui/features/circles/presentation/widgets/circle_setting_toggle.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_ui/features/profile/presentation/screens/profile_screen.dart';
 import 'package:orbit_ui/features/profile/presentation/screens/orbit_my_profile_screen.dart';
@@ -20,7 +26,8 @@ class _FakeProfileRepository extends OrbitProfileSettingsRepository {
 
   @override
   Future<void> saveProfile(String name, String username, {String? bio}) async {
-    record = <String, dynamic>{...record, 'display_name': name, 'username': username};
+    record = <String, dynamic>{...record, 'display_name': name,
+      'username': username, if (bio != null) 'bio': bio};
   }
 }
 
@@ -86,13 +93,72 @@ void main() {
     expect(find.byKey(EditProfileKeys.fullNameField), findsOneWidget);
     await tester.enterText(find.byType(TextField).at(0), 'Updated Person');
     await tester.enterText(find.byType(TextField).at(1), 'updated.person');
+    await tester.enterText(find.byType(TextField).at(2), 'Community builder');
     await tester.ensureVisible(find.byKey(EditProfileKeys.saveButton));
     await tester.tap(find.byKey(EditProfileKeys.saveButton));
     await tester.pumpAndSettle();
     expect(fake.record['display_name'], 'Updated Person');
     expect(fake.record['username'], 'updated.person');
+    expect(fake.record['bio'], 'Community builder');
     expect(find.text('Updated Person'), findsWidgets);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Privacy settings change only after server acknowledgement',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final pending = Completer<PrivacySettings>();
+    var requested = 0;
+    await tester.pumpWidget(MaterialApp(home: PrivacySettingScreen(
+      initialSettings: PrivacySettings.safeDefaults,
+      onSaveSettings: (next) {
+        requested++;
+        return pending.future;
+      },
+    )));
+    final row = find.byKey(PrivacySettingKeys.ghostModeRow);
+    await tester.ensureVisible(row);
+    await tester.tap(row);
+    await tester.pump();
+    expect(requested, 1);
+    expect(tester.widget<CircleSettingToggle>(
+      find.byKey(PrivacySettingKeys.ghostModeToggle)).value, true);
+    pending.complete(PrivacySettings.safeDefaults.copyWith(ghostModeEnabled: false));
+    await tester.pump();
+    expect(tester.widget<CircleSettingToggle>(
+      find.byKey(PrivacySettingKeys.ghostModeToggle)).value, false);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Failed privacy writes preserve confirmed safe settings',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(MaterialApp(home: PrivacySettingScreen(
+      initialSettings: PrivacySettings.safeDefaults,
+      onSaveSettings: (_) async => throw StateError('network down'),
+    )));
+    final row = find.byKey(PrivacySettingKeys.ghostModeRow);
+    await tester.ensureVisible(row);
+    await tester.tap(row);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 20));
+    expect(tester.widget<CircleSettingToggle>(
+      find.byKey(PrivacySettingKeys.ghostModeToggle)).value, true);
+    expect(find.textContaining('previous settings remain active'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('SOS safety alerts are visually separate from social alerts',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(MaterialApp(home: NotificationScreen(
+      initialSettings: NotificationSettings.demo,
+    )));
+    expect(find.text('SOS & Safety alerts'), findsOneWidget);
+    expect(find.textContaining('Safety alerts are managed separately'), findsOneWidget);
   });
 
   test('Notification values round trip through backend JSON contract', () {
