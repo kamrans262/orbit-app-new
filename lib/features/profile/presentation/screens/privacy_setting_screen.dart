@@ -262,7 +262,9 @@ class _PrivacySettingScreenState extends State<PrivacySettingScreen> {
       _settings.copyWith(ghostModeEnabled: false, locationSharingEnabled: true),
     );
     if (!mounted || _settings.ghostModeEnabled ||
-        !_settings.locationSharingEnabled) return;
+        !_settings.locationSharingEnabled) {
+      return;
+    }
     await showStayConnectedPopup(
       context,
       onAllow: _openBatteryEducation,
