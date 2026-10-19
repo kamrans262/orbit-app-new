@@ -6,7 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 
-enum OrbitRestoreState { signedOut, authenticated, deviceRegistration }
+enum OrbitRestoreState { signedOut, authenticated, deviceRegistration, deletionPending }
 
 class OrbitIdentityException implements Exception {
   OrbitIdentityException(this.message, [this.statusCode]);
@@ -201,6 +201,9 @@ class OrbitIdentityClient {
       if (error.statusCode == 403) {
         return OrbitRestoreState.deviceRegistration;
       }
+      if (error.statusCode == 409 && error.message.contains('pending deletion')) {
+        return OrbitRestoreState.deletionPending;
+      }
       if (error.statusCode == 401) {
         await clearSession();
       }
@@ -236,6 +239,16 @@ class OrbitIdentityClient {
     await _send('POST', '/me/deletion-request',
         body: <String, Object?>{'confirm': true}, protected: true);
     await clearSession();
+  }
+
+  Future<Map<String, dynamic>> deletionStatus() async {
+    final result = await _send('GET', '/me/deletion-status', protected: true);
+    return Map<String, dynamic>.from(result['data'] as Map);
+  }
+
+  Future<void> cancelDeletion() async {
+    await _send('POST', '/me/deletion-cancel', protected: true,
+        body: <String, Object?>{'confirm': true});
   }
 
   Future<void> clearSession() async {
