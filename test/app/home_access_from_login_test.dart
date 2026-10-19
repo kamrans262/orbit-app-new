@@ -21,7 +21,7 @@ void main() {
     await tester.tap(login);
     await tester.pumpAndSettle();
     expect(find.byType(HomeScreen), findsNothing);
-    expect(find.textContaining('Enter your email or phone and password.'),
+    expect(find.textContaining('Enter a valid email or international phone number'),
         findsOneWidget);
 
     expect(find.text('Continue with a code'), findsNothing);

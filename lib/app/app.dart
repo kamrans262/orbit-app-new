@@ -10,7 +10,8 @@ import '../features/auth/presentation/screens/orbit_profile_basics_screen.dart';
 import '../features/auth/data/orbit_identity_client.dart';
 import '../features/auth/presentation/widgets/orbit_session_welcome_gate.dart';
 import '../features/auth/presentation/screens/device_registration_screen.dart';
-import '../features/auth/presentation/screens/reset_password_screen.dart';
+import '../features/auth/presentation/screens/orbit_password_reset_flow.dart';
+import '../features/auth/domain/orbit_auth_validation.dart';
 import '../features/auth/presentation/screens/verify_otp_screen.dart';
 import '../features/auth/presentation/screens/sign_up_screen.dart';
 import '../features/welcome/presentation/screens/circle_permission_screen.dart';
@@ -95,12 +96,14 @@ class OrbitApp extends StatelessWidget {
               settings: settings,
               builder: (context) => LoginScreen(
                 onLogIn: (emailOrPhone, password) {
-                  if (emailOrPhone.trim().isEmpty || password.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content: Text('Enter your email or phone and password.'),
+                  final error = OrbitAuthValidation.login(emailOrPhone, password);
+                  if (error != null) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text(error),
                     ));
                     return;
                   }
+                  OrbitIdentityClient.instance.abandonStandardSignup();
                   Navigator.of(context).pushNamed(
                     AppRoutes.verifyOtp,
                     arguments: OrbitOtpEntryArguments(
@@ -161,14 +164,11 @@ class OrbitApp extends StatelessWidget {
               builder: (context) => SignUpScreen(
                 onSignUp: (fullName, emailOrPhone, password) {
                   final destination = emailOrPhone.trim();
-                  final isEmail = destination.contains('@');
-                  final validRecipient = isEmail
-                      ? RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(destination)
-                      : RegExp(r'^\+[1-9]\d{7,14}$').hasMatch(destination);
-                  if (fullName.trim().length < 2 ||
-                      !validRecipient || password.length < 10) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content: Text('Enter your full name, valid email/phone and a password of at least 10 characters.'),
+                  final error = OrbitAuthValidation.signup(
+                      fullName, destination, password);
+                  if (error != null) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text(error),
                     ));
                     return;
                   }
@@ -189,6 +189,7 @@ class OrbitApp extends StatelessWidget {
                   ));
                 },
                 onLogIn: () {
+                  OrbitIdentityClient.instance.abandonStandardSignup();
                   Navigator.of(context).pop();
                 },
               ),
@@ -196,14 +197,11 @@ class OrbitApp extends StatelessWidget {
           case AppRoutes.resetPassword:
             return MaterialPageRoute<void>(
               settings: settings,
-              builder: (context) => ResetPasswordScreen(
-                onSendResetLink: (recipient) {
-                  Navigator.of(context).pushNamed(
-                    AppRoutes.verifyOtp,
-                    arguments: recipient.trim().isEmpty
-                        ? '+123 45886 576'
-                        : recipient,
-                  );
+              builder: (context) => OrbitPasswordResetFlow(
+                onCompleted: () {
+                  OrbitIdentityClient.instance.abandonStandardSignup();
+                  Navigator.of(context).pushNamedAndRemoveUntil(
+                    AppRoutes.login, (_) => false);
                 },
               ),
             );

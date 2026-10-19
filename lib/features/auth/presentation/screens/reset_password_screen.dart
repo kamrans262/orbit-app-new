@@ -66,7 +66,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
             SizedBox(
               key: ResetPasswordKeys.sendResetLinkButton,
               child: AppPrimaryButton(
-                label: 'Send Reset Link',
+                label: 'Send Reset Code',
                 onPressed: _submit,
               ),
             ),

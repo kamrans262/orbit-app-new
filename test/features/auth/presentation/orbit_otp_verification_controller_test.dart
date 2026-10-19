@@ -45,6 +45,7 @@ void main() {
       expect(request.url.path, '/api/v1/auth/otp/request');
       expect(request.method, 'POST');
       expect(request.body, contains('member@example.test'));
+      expect(request.body, contains('"purpose":"signup"'));
       return http.Response('{"message":"Verification sent."}', 202);
     }));
     await tester.pumpWidget(MaterialApp(home: OrbitOtpVerificationController(

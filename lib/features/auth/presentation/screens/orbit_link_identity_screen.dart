@@ -41,7 +41,7 @@ class _OrbitLinkIdentityScreenState extends State<OrbitLinkIdentityScreen> {
     try {
       final identity = OrbitIdentityClient.instance;
       if (!_sent) {
-        await identity.requestCode(_channel, _recipient.text);
+        await identity.requestCode(_channel, _recipient.text, purpose: 'link');
         if (mounted) setState(() => _sent = true);
       } else {
         await identity.linkIdentity(_channel, _recipient.text, _code);

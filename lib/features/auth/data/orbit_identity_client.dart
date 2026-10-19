@@ -123,15 +123,30 @@ class OrbitIdentityClient {
     return json;
   }
 
-  Future<void> requestCode(String channel, String recipient) async {
+  Future<void> requestCode(String channel, String recipient,
+      {String purpose = 'signup'}) async {
     await _send('POST', '/auth/otp/request', body: <String, Object?>{
-      'channel': channel, 'recipient': recipient.trim(),
+      'channel': channel, 'recipient': recipient.trim(), 'purpose': purpose,
     });
   }
 
-  Future<void> verifyCode(String channel, String recipient, String code) async {
+  Future<void> requestPasswordResetCode(String recipient) async {
+    await _send('POST', '/auth/password/reset/request',
+        body: <String, Object?>{'recipient': recipient.trim()});
+  }
+
+  Future<void> confirmPasswordReset(String recipient, String code, String password) async {
+    await _send('POST', '/auth/password/reset/confirm',
+        body: <String, Object?>{
+          'recipient': recipient.trim(), 'code': code.trim(), 'password': password,
+        });
+  }
+
+  Future<void> verifyCode(String channel, String recipient, String code,
+      {String purpose = 'signup'}) async {
     final result = await _send('POST', '/auth/otp/verify', body: <String, Object?>{
       'channel': channel, 'recipient': recipient.trim(), 'code': code.trim(),
+      'purpose': purpose,
       'device_public_id': await installationId,
       'platform': Platform.isIOS ? 'ios' : 'android',
       'device_name': Platform.isIOS ? 'My iPhone' : 'My Android',

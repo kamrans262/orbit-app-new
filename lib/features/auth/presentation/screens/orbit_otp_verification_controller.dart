@@ -58,7 +58,8 @@ class _OrbitOtpVerificationControllerState
       if (widget.password != null) {
         await _identity.requestPasswordCode(widget.recipient, widget.password!);
       } else {
-        await _identity.requestCode(_channel, widget.recipient);
+        await _identity.requestCode(_channel, widget.recipient,
+            purpose: 'signup');
       }
       if (!mounted) return;
       setState(() {
@@ -84,7 +85,8 @@ class _OrbitOtpVerificationControllerState
       _error = null;
     });
     try {
-      await _identity.verifyCode(_channel, widget.recipient, code);
+      await _identity.verifyCode(_channel, widget.recipient, code,
+          purpose: widget.password == null ? 'signup' : 'login');
       if (!mounted) return;
       _verified = true;
       widget.onVerified();
