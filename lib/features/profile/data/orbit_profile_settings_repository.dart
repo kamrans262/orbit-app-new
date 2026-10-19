@@ -70,6 +70,12 @@ class OrbitProfileSettingsRepository {
         locationActivity: data['location_activity'] as String? ?? 'Off',
         locationSharingEnabled: data['location_sharing_enabled'] == true,
         ghostModeEnabled: data['ghost_mode_enabled'] != false,
+        presenceVisibility: data['presence_visibility'] as String? ?? 'Nobody',
+        activityVisibility: data['activity_visibility'] as String? ?? 'Nobody',
+        pingEligibility: data['ping_eligibility'] as String? ?? 'Nobody',
+        messageEligibility: data['message_eligibility'] as String? ?? 'Nobody',
+        momentDefaultAudience: data['moment_default_audience'] as String? ?? 'Nobody',
+        readReceiptsEnabled: data['read_receipts_enabled'] == true,
       );
 
   static Map<String, Object?> privacyToJson(PrivacySettings s) =>
@@ -78,5 +84,11 @@ class OrbitProfileSettingsRepository {
         'location_activity': s.locationActivity,
         'location_sharing_enabled': s.locationSharingEnabled,
         'ghost_mode_enabled': s.ghostModeEnabled,
+        'presence_visibility': s.presenceVisibility,
+        'activity_visibility': s.activityVisibility,
+        'ping_eligibility': s.pingEligibility,
+        'message_eligibility': s.messageEligibility,
+        'moment_default_audience': s.momentDefaultAudience,
+        'read_receipts_enabled': s.readReceiptsEnabled,
       };
 }
