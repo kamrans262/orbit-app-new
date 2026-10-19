@@ -53,11 +53,12 @@ void main() {
     expect(find.byKey(DevicesKeys.approve('other')), findsOneWidget);
   });
 
-  testWidgets('Rename device uses Orbit popup, input and buttons', (
+  testWidgets('Rename device uses approved Orbit popup, field and actions', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(390, 844));
     addTearDown(() => tester.binding.setSurfaceSize(null));
+
     final renamed = <String>[];
     await tester.pumpWidget(MaterialApp(
       home: DevicesScreen(
@@ -71,73 +72,9 @@ void main() {
             isTrusted: true,
           ),
         ],
-        onRenameDevice: (id, name) async => renamed.add('
-    tester,
-  ) async {
-    await tester.binding.setSurfaceSize(const Size(390, 844));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    var revoked = false;
-    await tester.pumpWidget(
-      MaterialApp(
-        home: DevicesScreen(
-          devices: const <OrbitRegisteredDevice>[
-            OrbitRegisteredDevice(
-              id: 'other',
-              name: 'Tablet',
-              platform: 'iOS',
-              lastSeenLabel: 'Yesterday',
-            ),
-          ],
-          onRevokeDevice: (id) async {
-            revoked = id == 'other';
-          },
-        ),
-      ),
-    );
-    await tester.ensureVisible(find.byKey(DevicesKeys.revoke('other')));
-    await tester.tap(find.byKey(DevicesKeys.revoke('other')));
-    await tester.pumpAndSettle();
-    expect(find.text('Remove device?'), findsOneWidget);
-    expect(revoked, isFalse);
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
-    expect(revoked, isFalse);
-  });
-}
- + 'id:' + '
-    tester,
-  ) async {
-    await tester.binding.setSurfaceSize(const Size(390, 844));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    var revoked = false;
-    await tester.pumpWidget(
-      MaterialApp(
-        home: DevicesScreen(
-          devices: const <OrbitRegisteredDevice>[
-            OrbitRegisteredDevice(
-              id: 'other',
-              name: 'Tablet',
-              platform: 'iOS',
-              lastSeenLabel: 'Yesterday',
-            ),
-          ],
-          onRevokeDevice: (id) async {
-            revoked = id == 'other';
-          },
-        ),
-      ),
-    );
-    await tester.ensureVisible(find.byKey(DevicesKeys.revoke('other')));
-    await tester.tap(find.byKey(DevicesKeys.revoke('other')));
-    await tester.pumpAndSettle();
-    expect(find.text('Remove device?'), findsOneWidget);
-    expect(revoked, isFalse);
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
-    expect(revoked, isFalse);
-  });
-}
- + 'name'),
+        onRenameDevice: (id, name) async {
+          renamed.add('$id:$name');
+        },
       ),
     ));
 
@@ -150,12 +87,17 @@ void main() {
     expect(find.byType(OrbitPopupTextButton), findsOneWidget);
     expect(find.text('Rename device'), findsOneWidget);
     expect(find.byType(AlertDialog), findsNothing);
-    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, 'My phone');
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      'My phone',
+    );
 
     await tester.enterText(find.byType(TextField), '  ');
     await tester.pumpAndSettle();
     expect(
-      tester.widget<OrbitPopupPrimaryButton>(find.byType(OrbitPopupPrimaryButton)).enabled,
+      tester.widget<OrbitPopupPrimaryButton>(
+        find.byType(OrbitPopupPrimaryButton),
+      ).enabled,
       isFalse,
     );
     expect(renamed, isEmpty);
@@ -163,17 +105,19 @@ void main() {
     await tester.enterText(find.byType(TextField), 'My tablet');
     await tester.pumpAndSettle();
     expect(
-      tester.widget<OrbitPopupPrimaryButton>(find.byType(OrbitPopupPrimaryButton)).enabled,
+      tester.widget<OrbitPopupPrimaryButton>(
+        find.byType(OrbitPopupPrimaryButton),
+      ).enabled,
       isTrue,
     );
     await tester.ensureVisible(find.text('Save'));
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
-    expect(renamed, ['current:My tablet']);
+    expect(renamed, <String>['current:My tablet']);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Rename cancel never submits', (tester) async {
+  testWidgets('Rename Cancel does not submit an update', (tester) async {
     await tester.binding.setSurfaceSize(const Size(390, 844));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     var saves = 0;
@@ -187,15 +131,19 @@ void main() {
             lastSeenLabel: 'Now',
           ),
         ],
-        onRenameDevice: (id, name) async => saves++,
+        onRenameDevice: (id, name) async {
+          saves++;
+        },
       ),
     ));
+
     await tester.tap(find.byKey(DevicesKeys.rename('current')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'Changed');
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(saves, 0);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('Remote device removal requires explicit confirmation', (
