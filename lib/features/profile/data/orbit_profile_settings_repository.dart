@@ -1,4 +1,4 @@
-import '../../../auth/data/orbit_identity_client.dart';
+import '../../auth/data/orbit_identity_client.dart';
 import '../domain/models/notification_settings.dart';
 import '../domain/models/privacy_settings.dart';
 import '../domain/models/profile_models.dart';
