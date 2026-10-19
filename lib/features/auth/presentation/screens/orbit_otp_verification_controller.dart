@@ -10,12 +10,14 @@ class OrbitOtpVerificationController extends StatefulWidget {
     required this.recipient,
     required this.onVerified,
     this.password,
+    this.codeAlreadySent = false,
     this.identityClient,
     super.key,
   });
 
   final String recipient;
   final String? password;
+  final bool codeAlreadySent;
   final VoidCallback onVerified;
   final OrbitIdentityClient? identityClient;
 
@@ -40,9 +42,12 @@ class _OrbitOtpVerificationControllerState
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _requestCode();
-    });
+    _sent = widget.codeAlreadySent;
+    if (!widget.codeAlreadySent) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _requestCode();
+      });
+    }
   }
 
   Future<void> _requestCode() async {
