@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_ui/app/app.dart';
 import 'package:orbit_ui/features/welcome/presentation/screens/notifications_screen.dart';
+import 'package:orbit_ui/features/auth/presentation/screens/login_screen.dart';
+import 'package:orbit_ui/app/routing/app_routes.dart';
 import 'package:orbit_ui/features/welcome/presentation/screens/share_location_screen.dart';
 import 'package:orbit_ui/features/welcome/presentation/screens/share_moments_screen.dart';
 import 'package:orbit_ui/features/welcome/presentation/screens/welcome2_screen.dart';
@@ -23,11 +25,17 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Future<void> navigateToNotifications(WidgetTester tester) async {
+  Future<void> navigateToLogin(WidgetTester tester) async {
     await tapVisible(tester, find.byKey(WelcomeKeys.getStartedButton));
     await tapVisible(tester, find.byKey(Welcome2Keys.nextButton));
     await tapVisible(tester, find.byKey(ShareMomentsKeys.nextButton));
     await tapVisible(tester, find.byKey(YourCircleKeys.nextButton));
+  }
+
+  Future<void> navigateToNotifications(WidgetTester tester) async {
+    final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+    navigator.pushNamed(AppRoutes.notifications);
+    await tester.pumpAndSettle();
   }
 
   testWidgets('Get Started opens the second welcome screen', (tester) async {
@@ -71,17 +79,16 @@ void main() {
     expect(find.byKey(YourCircleKeys.image), findsOneWidget);
   });
 
-  testWidgets('Your Circle Next opens Notifications', (tester) async {
+  testWidgets('Your Circle Next opens Login', (tester) async {
     await usePhoneViewport(tester);
 
     await tester.pumpWidget(const OrbitApp());
     await tester.pumpAndSettle();
 
-    await navigateToNotifications(tester);
+    await navigateToLogin(tester);
 
-    expect(find.byType(NotificationsScreen), findsOneWidget);
-    expect(find.text('Stay In the loop'), findsOneWidget);
-    expect(find.byKey(NotificationsKeys.image), findsOneWidget);
+    expect(find.byType(LoginScreen), findsOneWidget);
+    expect(find.byType(NotificationsScreen), findsNothing);
   });
 
   testWidgets('Notifications Allow opens Share Location', (tester) async {

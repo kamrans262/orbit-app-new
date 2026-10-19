@@ -5,6 +5,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../domain/models/nearby_person.dart';
 import '../widgets/invite_option_tile.dart';
 import '../widgets/nearby_person_tile.dart';
+import '../widgets/welcome_action_panel.dart';
 
 abstract final class InvitePeopleKeys {
   static const heading = Key('invite_people_heading');
@@ -12,6 +13,8 @@ abstract final class InvitePeopleKeys {
   static const body = Key('invite_people_body');
   static const nearbyHeading = Key('invite_people_nearby_heading');
   static const nearbyList = Key('invite_people_nearby_list');
+  static const doneButton = Key('invite_people_done_button');
+  static const skipButton = Key('invite_people_skip_button');
 
   static Key option(int index) => Key('invite_people_option_$index');
   static Key person(int index) => Key('invite_people_person_$index');
@@ -27,6 +30,8 @@ class InvitePeopleScreen extends StatelessWidget {
     required this.onInviteByUsername,
     required this.onAddPerson,
     required this.onOpenLogin,
+    this.onDone,
+    this.onSkip,
     this.nearbyPeople = NearbyPerson.demoPeople,
     super.key,
   });
@@ -44,6 +49,8 @@ class InvitePeopleScreen extends StatelessWidget {
   final VoidCallback onInviteByUsername;
   final ValueChanged<NearbyPerson> onAddPerson;
   final VoidCallback onOpenLogin;
+  final VoidCallback? onDone;
+  final VoidCallback? onSkip;
   final List<NearbyPerson> nearbyPeople;
 
   @override
@@ -164,6 +171,19 @@ class InvitePeopleScreen extends StatelessWidget {
                       );
                     },
                   ),
+                  if (onDone != null && onSkip != null) ...<Widget>[
+                    const SizedBox(height: 24),
+                    // Reuse the same primary/secondary actions as onboarding.
+                    // Done completes the step; it does not fabricate an invite.
+                    WelcomeActionPanel(
+                      primaryKey: InvitePeopleKeys.doneButton,
+                      primaryLabel: 'Done',
+                      onPrimaryPressed: onDone!,
+                      secondaryKey: InvitePeopleKeys.skipButton,
+                      secondaryLabel: 'Skip',
+                      onSecondaryPressed: onSkip,
+                    ),
+                  ],
                 ],
               ),
             ),

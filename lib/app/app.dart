@@ -69,10 +69,11 @@ class OrbitApp extends StatelessWidget {
                   if (!context.mounted) return;
                   final signupPending =
                       OrbitIdentityClient.instance.pendingSignupName != null;
-                  Navigator.of(context).pushReplacementNamed(
+                  Navigator.of(context).pushNamedAndRemoveUntil(
                     state == OrbitRestoreState.authenticated
                         ? (signupPending ? AppRoutes.profileBasics : AppRoutes.home)
                         : AppRoutes.deviceRegistration,
+                    (_) => false,
                   );
                 },
               ),
@@ -131,21 +132,16 @@ class OrbitApp extends StatelessWidget {
               settings: settings,
               builder: (context) => DeviceRegistrationScreen(
                 onBack: () => Navigator.of(context).maybePop(),
-                onContinue: () async {
-                  try {
-                    final user = await OrbitIdentityClient.instance.currentUser();
-                    final data = Map<String, dynamic>.from(user['data'] as Map);
-                    if (!context.mounted) return;
-                    final hasProfile = (data['display_name'] as String?)?.isNotEmpty == true &&
-                        (data['username'] as String?)?.isNotEmpty == true;
-                    Navigator.of(context).pushReplacementNamed(
-                      hasProfile && OrbitIdentityClient.instance.pendingSignupName == null
-                          ? AppRoutes.home : AppRoutes.profileBasics,
-                    );
-                  } catch (_) {
-                    if (!context.mounted) return;
-                    Navigator.of(context).pushReplacementNamed(AppRoutes.profileBasics);
-                  }
+                onContinue: () {
+                  // The device-registration widget invokes this callback only
+                  // after the trusted key registration succeeds. An existing
+                  // user returns to Home; signup completes account basics.
+                  final signupPending =
+                      OrbitIdentityClient.instance.pendingSignupName != null;
+                  Navigator.of(context).pushNamedAndRemoveUntil(
+                    signupPending ? AppRoutes.profileBasics : AppRoutes.home,
+                    (_) => false,
+                  );
                 },
                 onRegisterDevice: OrbitIdentityClient.instance.registerDevice,
               ),
@@ -234,7 +230,7 @@ class OrbitApp extends StatelessWidget {
               settings: settings,
               builder: (context) => YourCircleScreen(
                 onNext: () {
-                  Navigator.of(context).pushNamed(AppRoutes.notifications);
+                  Navigator.of(context).pushReplacementNamed(AppRoutes.login);
                 },
               ),
             );
@@ -272,6 +268,11 @@ class OrbitApp extends StatelessWidget {
                 onNext: () {
                   Navigator.of(context).pushNamed(AppRoutes.circlePermission);
                 },
+                onSkip: () {
+                  Navigator.of(context).pushNamedAndRemoveUntil(
+                    AppRoutes.home, (_) => false,
+                  );
+                },
               ),
             );
           case AppRoutes.circlePermission:
@@ -281,6 +282,11 @@ class OrbitApp extends StatelessWidget {
                 onBack: () => Navigator.of(context).pop(),
                 onCreateCircle: () {
                   Navigator.of(context).pushNamed(AppRoutes.invitePeople);
+                },
+                onSkip: () {
+                  Navigator.of(context).pushNamedAndRemoveUntil(
+                    AppRoutes.home, (_) => false,
+                  );
                 },
               ),
             );
@@ -295,6 +301,18 @@ class OrbitApp extends StatelessWidget {
                 onAddPerson: (_) {},
                 onOpenLogin: () {
                   Navigator.of(context).pushNamed(AppRoutes.login);
+                },
+                // Finishes this onboarding step. Sending an actual invitation
+                // is owned by the separate Circles module, not this route.
+                onDone: () {
+                  Navigator.of(context).pushNamedAndRemoveUntil(
+                    AppRoutes.home, (_) => false,
+                  );
+                },
+                onSkip: () {
+                  Navigator.of(context).pushNamedAndRemoveUntil(
+                    AppRoutes.home, (_) => false,
+                  );
                 },
               ),
             );
