@@ -54,6 +54,7 @@ class _OrbitProfileBasicsScreenState extends State<OrbitProfileBasicsScreen> {
     try {
       await OrbitIdentityClient.instance.completePendingPasswordEnrollment();
       await OrbitIdentityClient.instance.updateProfileBasics(name, username);
+      OrbitIdentityClient.instance.finishStandardSignup();
       if (mounted) widget.onCompleted();
     } on OrbitIdentityException catch (e) {
       if (mounted) setState(() => _error = e.message);
