@@ -72,9 +72,12 @@ class OrbitApp extends StatelessWidget {
                 onVerified: () async {
                   final state = await OrbitIdentityClient.instance.restoreSession();
                   if (!context.mounted) return;
+                  final signupPending =
+                      OrbitIdentityClient.instance.pendingSignupName != null;
                   Navigator.of(context).pushReplacementNamed(
                     state == OrbitRestoreState.authenticated
-                        ? AppRoutes.home : AppRoutes.deviceRegistration,
+                        ? (signupPending ? AppRoutes.profileBasics : AppRoutes.home)
+                        : AppRoutes.deviceRegistration,
                   );
                 },
               ),
