@@ -43,6 +43,7 @@ class ProfileScreen extends StatefulWidget {
     this.viewState = ProfileViewState.populated,
     this.errorMessage = 'Something went wrong. Please try again.',
     this.settingsBuilder,
+    this.onSettingsClosed,
     this.momentDetailBuilder,
     this.onMomentPressed,
     super.key,
@@ -126,6 +127,7 @@ class ProfileScreen extends StatefulWidget {
   final VoidCallback onRetry;
   final String errorMessage;
   final WidgetBuilder? settingsBuilder;
+  final VoidCallback? onSettingsClosed;
   final Widget Function(BuildContext context, ProfileMomentData moment)?
   momentDetailBuilder;
   final ValueChanged<ProfileMomentData>? onMomentPressed;
@@ -394,9 +396,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     ];
   }
 
-  void _openSettings(BuildContext context) {
+  Future<void> _openSettings(BuildContext context) async {
     final customBuilder = widget.settingsBuilder;
-    Navigator.of(context).push<void>(
+    await Navigator.of(context).push<void>(
       AppFadeSlidePageRoute<void>(
         builder:
             customBuilder ??
@@ -407,6 +409,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
       ),
     );
+    if (mounted) widget.onSettingsClosed?.call();
   }
 
   void _openMoment(BuildContext context, ProfileMomentData moment) {
