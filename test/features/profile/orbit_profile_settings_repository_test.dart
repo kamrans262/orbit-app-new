@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'package:orbit_ui/features/auth/data/orbit_identity_client.dart';
+import 'package:orbit_ui/features/auth/presentation/screens/orbit_account_deletion_status_screen.dart';
 
 import 'package:flutter/material.dart';
 import 'package:orbit_ui/features/profile/presentation/screens/privacy_setting_screen.dart';
@@ -29,6 +31,21 @@ class _FakeProfileRepository extends OrbitProfileSettingsRepository {
     record = <String, dynamic>{...record, 'display_name': name,
       'username': username, if (bio != null) 'bio': bio};
   }
+}
+
+class _FakeDeletionClient extends OrbitIdentityClient {
+  bool cancelled = false;
+
+  @override
+  Future<Map<String, dynamic>> deletionStatus() async => <String, dynamic>{
+    'status': 'pending',
+    'request_id': 'fixture-id',
+    'can_cancel': true,
+    'eligible_for_erasure_at': '2026-11-20T00:00:00+00:00',
+  };
+
+  @override
+  Future<void> cancelDeletion() async { cancelled = true; }
 }
 
 void main() {
@@ -159,6 +176,27 @@ void main() {
     )));
     expect(find.text('SOS & Safety alerts'), findsOneWidget);
     expect(find.textContaining('Safety alerts are managed separately'), findsOneWidget);
+  });
+
+  testWidgets('A newly verified pending-deletion user may review and cancel',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final fake = _FakeDeletionClient();
+    await tester.pumpWidget(MaterialApp(
+      routes: <String, WidgetBuilder>{
+        '/home': (_) => const Scaffold(body: Text('Account access restored')),
+      },
+      home: OrbitAccountDeletionStatusScreen(identity: fake),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Your account is scheduled for deletion'), findsOneWidget);
+    expect(find.textContaining('NOT yet been erased'), findsOneWidget);
+    await tester.tap(find.text('Cancel deletion request'));
+    await tester.pumpAndSettle();
+    expect(fake.cancelled, true);
+    expect(find.text('Account access restored'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   test('Notification values round trip through backend JSON contract', () {
