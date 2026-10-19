@@ -103,8 +103,16 @@ class _OrbitMyProfileScreenState extends State<OrbitMyProfileScreen> {
           );
         }
         final data = snapshot.data!;
+        final offline = data['_offline_cached'] == true;
         final profile = _repo.fromProfile(data);
-        return ProfileScreen(
+        return Column(
+          children: <Widget>[
+            if (offline)
+              const MaterialBanner(
+                content: Text('Offline profile — last synced data. Editing requires a connection.'),
+                actions: <Widget>[SizedBox.shrink()],
+              ),
+            Expanded(child: ProfileScreen(
           isLiveAccount: true,
           profile: profile,
           onTabSelected: widget.onTabSelected,
@@ -115,8 +123,15 @@ class _OrbitMyProfileScreenState extends State<OrbitMyProfileScreen> {
             profile: profile,
             onTabSelected: widget.onTabSelected,
             onAddPressed: widget.onAddPressed,
-            onEditProfilePressed: () =>
-                _edit(settingsContext, profile, data['username'] as String? ?? ''),
+            onEditProfilePressed: () {
+              if (offline) {
+                ScaffoldMessenger.of(settingsContext).showSnackBar(const SnackBar(
+                  content: Text('Reconnect before editing your profile.'),
+                ));
+                return;
+              }
+              _edit(settingsContext, profile, data['username'] as String? ?? '');
+            },
             onNotificationPressed: () {
               Navigator.of(settingsContext).push<void>(
                 AppFadeSlidePageRoute<void>(
@@ -132,6 +147,8 @@ class _OrbitMyProfileScreenState extends State<OrbitMyProfileScreen> {
               );
             },
           ),
+            )),
+          ],
         );
       },
     );
