@@ -131,7 +131,7 @@ class _OrbitPrivacyPreferencesScreenState
         return PrivacySettingScreen(
           initialSettings: current,
           locationActivityOptions: const ['Active', 'While moving', 'Off'],
-          onSettingsChanged: _update,
+          onSaveSettings: _repo.savePrivacy,
           onBack: () => Navigator.of(context).pop(),
         );
       },
