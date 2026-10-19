@@ -4,8 +4,11 @@ import 'package:flutter/material.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../core/popups/orbit_popup_modal.dart';
 import '../../../../core/widgets/app_primary_button.dart';
 import '../../../../core/widgets/app_screen_header.dart';
+import '../../../../core/widgets/app_text_field.dart';
+import 'package:flutter/services.dart';
 
 /// Public identifiers for Orbit Devices widget/navigation tests.
 abstract final class DevicesKeys {
@@ -15,6 +18,7 @@ abstract final class DevicesKeys {
   static const status = Key('devices_status');
   static const register = Key('devices_register');
   static const retry = Key('devices_retry');
+  static const renameField = Key('devices_rename_field');
 
   static Key row(String id) => ValueKey<String>('devices_row_$id');
   static Key rename(String id) => ValueKey<String>('devices_rename_$id');
@@ -135,40 +139,45 @@ class _DevicesScreenState extends State<DevicesScreen> {
     final controller = TextEditingController(text: device.name);
     String? newName;
     try {
-      newName = await showDialog<String>(
+      newName = await showOrbitPopupModal<String>(
         context: context,
-        builder: (dialogContext) => AlertDialog(
-          backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
+        popupId: 'rename_device',
+        builder: (dialogContext) => Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(dialogContext).bottom,
           ),
-          title: const Text(
-            'Rename device',
-            style: TextStyle(
-              fontFamily: AppTypography.fontFamily,
-              fontWeight: FontWeight.w600,
+          child: OrbitPopupModal(
+            title: 'Rename device',
+            showCloseButton: true,
+            onClose: () => Navigator.of(dialogContext).pop(),
+            content: AppTextField(
+              label: 'Device name',
+              fieldKey: DevicesKeys.renameField,
+              controller: controller,
+              textCapitalization: TextCapitalization.sentences,
+              textInputAction: TextInputAction.done,
+              inputFormatters: <TextInputFormatter>[
+                LengthLimitingTextInputFormatter(48),
+              ],
             ),
-          ),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            maxLength: 48,
-            textCapitalization: TextCapitalization.sentences,
-            decoration: const InputDecoration(labelText: 'Device name'),
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                final value = controller.text.trim();
-                if (value.isNotEmpty) Navigator.of(dialogContext).pop(value);
+            primaryAction: ValueListenableBuilder<TextEditingValue>(
+              valueListenable: controller,
+              builder: (context, value, _) {
+                final name = value.text.trim();
+                return OrbitPopupPrimaryButton(
+                  label: 'Save',
+                  enabled: name.isNotEmpty &&
+                      name.length <= 48 &&
+                      name != device.name,
+                  onPressed: () => Navigator.of(dialogContext).pop(name),
+                );
               },
-              child: const Text('Save'),
             ),
-          ],
+            secondaryAction: OrbitPopupTextButton(
+              label: 'Cancel',
+              onPressed: () => Navigator.of(dialogContext).pop(),
+            ),
+          ),
         ),
       );
     } finally {

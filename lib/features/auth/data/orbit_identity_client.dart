@@ -6,7 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 
-enum OrbitRestoreState { signedOut, authenticated, deviceRegistration }
+enum OrbitRestoreState { signedOut, authenticated, deviceRegistration, deletionPending }
 
 class OrbitIdentityException implements Exception {
   OrbitIdentityException(this.message, [this.statusCode]);
@@ -28,6 +28,9 @@ class OrbitIdentityClient {
   static const _idKey = 'orbit.identity.installation.v1';
   static const _publicKey = 'orbit.identity.public_key.v1';
   static const _privateKey = 'orbit.identity.private_key.v1';
+  static const _userIdKey = 'orbit.identity.user_id.v1';
+  static const _profileCacheKey = 'orbit.profile.encrypted_cache.v1';
+  static const _profileCacheTtl = Duration(hours: 1);
 
   final http.Client _http;
   final FlutterSecureStorage _storage;
@@ -160,6 +163,13 @@ class OrbitIdentityClient {
     if (access is! String || refreshToken is! String) {
       throw OrbitIdentityException('Invalid session response.');
     }
+    final user = tokens['user'];
+    if (user is Map && user['id'] is String) {
+      final nextUser = user['id'] as String;
+      final lastUser = await _storage.read(key: _userIdKey);
+      if (lastUser != nextUser) await _storage.delete(key: _profileCacheKey);
+      await _storage.write(key: _userIdKey, value: nextUser);
+    }
     await _storage.write(key: _refreshKey, value: refreshToken);
     _access = access;
   }
@@ -201,6 +211,9 @@ class OrbitIdentityClient {
       if (error.statusCode == 403) {
         return OrbitRestoreState.deviceRegistration;
       }
+      if (error.statusCode == 409 && error.message.contains('pending deletion')) {
+        return OrbitRestoreState.deletionPending;
+      }
       if (error.statusCode == 401) {
         await clearSession();
       }
@@ -238,10 +251,22 @@ class OrbitIdentityClient {
     await clearSession();
   }
 
+  Future<Map<String, dynamic>> deletionStatus() async {
+    final result = await _send('GET', '/me/deletion-status', protected: true);
+    return Map<String, dynamic>.from(result['data'] as Map);
+  }
+
+  Future<void> cancelDeletion() async {
+    await _send('POST', '/me/deletion-cancel', protected: true,
+        body: <String, Object?>{'confirm': true});
+  }
+
   Future<void> clearSession() async {
     abandonStandardSignup();
     _access = null;
     await _storage.delete(key: _refreshKey);
+    await _storage.delete(key: _userIdKey);
+    await _storage.delete(key: _profileCacheKey);
   }
 
   Future<void> signOut() async {
@@ -282,6 +307,87 @@ class OrbitIdentityClient {
     return data['key_registered'] == true && data['trust_state'] == 'trusted';
   }
 
+  /// Profile-only encrypted cache, owned by the most recently verified user.
+  /// Offline reads are clearly flagged; privacy and consent are never cached as
+  /// authorization, and all writes must still reach the server.
+  Future<Map<String, dynamic>> profile() async {
+    try {
+      final result = await _send('GET', '/me/profile', protected: true);
+      final data = Map<String, dynamic>.from(result['data'] as Map);
+      final owner = await _storage.read(key: _userIdKey);
+      if (owner != null && owner == data['id']) {
+        await _storage.write(key: _profileCacheKey, value: jsonEncode({
+          'user_id': owner,
+          'cached_at_ms': DateTime.now().toUtc().millisecondsSinceEpoch,
+          'data': data,
+        }));
+      }
+      return data;
+    } on OrbitIdentityException catch (error) {
+      // No cached fallback for revocation, missing trust or rejected sessions.
+      if (error.statusCode != null || _access == null) rethrow;
+      final owner = await _storage.read(key: _userIdKey);
+      final raw = await _storage.read(key: _profileCacheKey);
+      if (owner == null || raw == null) rethrow;
+      try {
+        final record = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+        final cachedAt = DateTime.fromMillisecondsSinceEpoch(
+          record['cached_at_ms'] as int, isUtc: true);
+        if (record['user_id'] != owner ||
+            DateTime.now().toUtc().difference(cachedAt).isNegative ||
+            DateTime.now().toUtc().difference(cachedAt) > _profileCacheTtl) {
+          rethrow;
+        }
+        final data = Map<String, dynamic>.from(record['data'] as Map);
+        if (data['id'] != owner) {
+          rethrow;
+        }
+        return <String, dynamic>{...data, '_offline_cached': true};
+      } catch (_) {
+        rethrow;
+      }
+    }
+  }
+
+  Future<Map<String, dynamic>> saveProfile(
+    String name,
+    String username, {
+    String? bio,
+  }) async {
+    final result = await _send('PATCH', '/me/profile', protected: true,
+        body: <String, Object?>{
+          'display_name': name.trim(),
+          'username': username.trim(),
+          if (bio != null) 'bio': bio.trim(),
+        });
+    await _storage.delete(key: _profileCacheKey);
+    return Map<String, dynamic>.from(result['data'] as Map);
+  }
+
+  Future<Map<String, dynamic>> notificationPreferences() async {
+    final result = await _send('GET', '/me/preferences/notifications', protected: true);
+    return Map<String, dynamic>.from(result['data'] as Map);
+  }
+
+  Future<Map<String, dynamic>> saveNotificationPreferences(
+      Map<String, Object?> values) async {
+    final result = await _send('PATCH', '/me/preferences/notifications',
+        protected: true, body: values);
+    return Map<String, dynamic>.from(result['data'] as Map);
+  }
+
+  Future<Map<String, dynamic>> privacyPreferences() async {
+    final result = await _send('GET', '/me/preferences/privacy', protected: true);
+    return Map<String, dynamic>.from(result['data'] as Map);
+  }
+
+  Future<Map<String, dynamic>> savePrivacyPreferences(
+      Map<String, Object?> values) async {
+    final result = await _send('PATCH', '/me/preferences/privacy',
+        protected: true, body: values);
+    return Map<String, dynamic>.from(result['data'] as Map);
+  }
+
   Future<Map<String, dynamic>> currentUser() =>
       _send('GET', '/me', protected: true);
 
@@ -294,11 +400,12 @@ class OrbitIdentityClient {
       });
   }
 
-  Future<void> updateProfileBasics(String displayName, String username) async {
+  Future<void> updateProfileBasics(String displayName, String username, {String? bio}) async {
     await _send('PATCH', '/me/profile-basics', protected: true,
         body: <String, Object?>{
           'display_name': displayName.trim(),
           'username': username.trim(),
+          if (bio != null) 'bio': bio.trim(),
         });
   }
 

@@ -26,6 +26,7 @@ class OrbitProfileBasicsScreen extends StatefulWidget {
 class _OrbitProfileBasicsScreenState extends State<OrbitProfileBasicsScreen> {
   final _name = TextEditingController();
   final _username = TextEditingController();
+  final _bio = TextEditingController();
   bool _busy = false;
   String? _error;
 
@@ -39,6 +40,7 @@ class _OrbitProfileBasicsScreenState extends State<OrbitProfileBasicsScreen> {
   void dispose() {
     _name.dispose();
     _username.dispose();
+    _bio.dispose();
     super.dispose();
   }
 
@@ -46,14 +48,19 @@ class _OrbitProfileBasicsScreenState extends State<OrbitProfileBasicsScreen> {
     if (_busy) return;
     final name = _name.text.trim();
     final username = _username.text.trim();
-    if (name.length < 2 || !RegExp(r'^[a-zA-Z0-9_-]{3,32}$').hasMatch(username)) {
-      setState(() => _error = 'Enter a name and a username (3–32 letters, numbers, _ or -).');
+    if (name.length < 2 || !RegExp(r'^[a-zA-Z0-9._]{3,32}$').hasMatch(username)) {
+      setState(() => _error = 'Enter a name and a username (3–32 letters, numbers, dots or underscores).');
+      return;
+    }
+    if (_bio.text.trim().length > 280) {
+      setState(() => _error = 'Bio must be 280 characters or fewer.');
       return;
     }
     setState(() { _busy = true; _error = null; });
     try {
       await OrbitIdentityClient.instance.completePendingPasswordEnrollment();
-      await OrbitIdentityClient.instance.updateProfileBasics(name, username);
+      await OrbitIdentityClient.instance.updateProfileBasics(name, username,
+          bio: _bio.text.trim());
       OrbitIdentityClient.instance.finishStandardSignup();
       if (mounted) widget.onCompleted();
     } on OrbitIdentityException catch (e) {
@@ -90,6 +97,15 @@ class _OrbitProfileBasicsScreenState extends State<OrbitProfileBasicsScreen> {
               label: 'Username',
               hintText: 'Your username',
               textInputAction: TextInputAction.done,
+            ),
+            const SizedBox(height: 10),
+            AppTextField(
+              controller: _bio,
+              label: 'Bio (optional)',
+              hintText: 'A few words about you',
+              keyboardType: TextInputType.multiline,
+              textInputAction: TextInputAction.newline,
+              maxLines: 3,
             ),
             if (_error != null) ...[
               const SizedBox(height: 10),

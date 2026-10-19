@@ -43,6 +43,8 @@ class ProfileScreen extends StatefulWidget {
     this.viewState = ProfileViewState.populated,
     this.errorMessage = 'Something went wrong. Please try again.',
     this.settingsBuilder,
+    this.isLiveAccount = false,
+    this.onSettingsClosed,
     this.momentDetailBuilder,
     this.onMomentPressed,
     super.key,
@@ -126,6 +128,8 @@ class ProfileScreen extends StatefulWidget {
   final VoidCallback onRetry;
   final String errorMessage;
   final WidgetBuilder? settingsBuilder;
+  final bool isLiveAccount;
+  final VoidCallback? onSettingsClosed;
   final Widget Function(BuildContext context, ProfileMomentData moment)?
   momentDetailBuilder;
   final ValueChanged<ProfileMomentData>? onMomentPressed;
@@ -333,6 +337,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ];
       case ProfileViewState.populated:
         if (_selectedProfileTab == 2) return _gallerySlivers();
+        // Until Places/Friends/Moments APIs exist, never show example places,
+        // maps or 'friends nearby' on the signed-in user's profile.
+        if (widget.isLiveAccount) {
+          return <Widget>[
+            SliverToBoxAdapter(
+              child: _ProfileMessageState(
+                key: ProfileKeys.emptyState,
+                child: Text(_selectedProfileTab == 1
+                    ? 'No saved places yet'
+                    : 'Your activity will appear here'),
+              ),
+            ),
+          ];
+        }
         return <Widget>[
           SliverToBoxAdapter(
             child: ProfileOverviewSections(
@@ -394,9 +412,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     ];
   }
 
-  void _openSettings(BuildContext context) {
+  Future<void> _openSettings(BuildContext context) async {
     final customBuilder = widget.settingsBuilder;
-    Navigator.of(context).push<void>(
+    await Navigator.of(context).push<void>(
       AppFadeSlidePageRoute<void>(
         builder:
             customBuilder ??
@@ -407,6 +425,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
       ),
     );
+    if (mounted) widget.onSettingsClosed?.call();
   }
 
   void _openMoment(BuildContext context, ProfileMomentData moment) {

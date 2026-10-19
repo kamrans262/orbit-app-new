@@ -390,6 +390,11 @@ class SettingsScreen extends StatelessWidget {
       if (!context.mounted) return;
       Navigator.of(context, rootNavigator: true)
           .pushNamedAndRemoveUntil(AppRoutes.welcome, (_) => false);
+    } on OrbitIdentityException catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(error.message),
+      ));
     } catch (_) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(

@@ -19,12 +19,14 @@ class NotificationScreen extends StatefulWidget {
   const NotificationScreen({
     this.initialSettings = NotificationSettings.demo,
     this.onSettingsChanged,
+    this.onSaveSettings,
     this.onBack,
     super.key,
   });
 
   final NotificationSettings initialSettings;
   final ValueChanged<NotificationSettings>? onSettingsChanged;
+  final Future<NotificationSettings> Function(NotificationSettings)? onSaveSettings;
   final VoidCallback? onBack;
 
   @override
@@ -38,6 +40,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
   static const double _maxContentWidth = 600;
 
   late NotificationSettings _settings;
+  bool _saving = false;
 
   @override
   void initState() {
@@ -86,7 +89,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
       ),
       _NotificationRowSpec(
         id: 'sos',
-        title: 'SOS alerts',
+        title: 'SOS & Safety alerts',
         value: _settings.sosAlertsEnabled,
         onChanged: (value) =>
             _update(_settings.copyWith(sosAlertsEnabled: value)),
@@ -154,10 +157,22 @@ class _NotificationScreenState extends State<NotificationScreen> {
                         _screenPadding,
                       ),
                       itemCount: rows.length,
-                      separatorBuilder: (_, __) =>
+                      separatorBuilder: (_, _) =>
                           const SizedBox(height: _rowGap),
                       itemBuilder: (context, index) {
-                        return _NotificationSettingRow(spec: rows[index]);
+                        final row = rows[index];
+                        if (row.id == 'sos') {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              const Text('Safety alerts are managed separately from social alerts. Device permissions may still affect delivery.',
+                                  style: TextStyle(fontSize: 12, color: Color(0xFF5D6574))),
+                              const SizedBox(height: 8),
+                              _NotificationSettingRow(spec: row),
+                            ],
+                          );
+                        }
+                        return _NotificationSettingRow(spec: row);
                       },
                     ),
                   ),
@@ -170,12 +185,28 @@ class _NotificationScreenState extends State<NotificationScreen> {
     );
   }
 
-  void _update(NotificationSettings next) {
-    if (!mounted || next == _settings) {
+  Future<void> _update(NotificationSettings next) async {
+    if (!mounted || _saving || next == _settings) return;
+    final save = widget.onSaveSettings;
+    if (save == null) {
+      setState(() => _settings = next);
+      widget.onSettingsChanged?.call(next);
       return;
     }
-    setState(() => _settings = next);
-    widget.onSettingsChanged?.call(next);
+    setState(() => _saving = true);
+    try {
+      final confirmed = await save(next);
+      if (!mounted) return;
+      setState(() => _settings = confirmed);
+      widget.onSettingsChanged?.call(confirmed);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Notification preference could not be saved. The previous value is still active.'),
+      ));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 }
 

@@ -31,7 +31,8 @@ class _OrbitSessionWelcomeGateState extends State<OrbitSessionWelcomeGate> {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!mounted) return;
             final route = state == OrbitRestoreState.authenticated
-                ? '/home' : '/device-registration';
+                ? '/home' : state == OrbitRestoreState.deletionPending
+                    ? '/deletion-status' : '/device-registration';
             Navigator.of(context).pushNamedAndRemoveUntil(route, (_) => false);
           });
           return const Scaffold(
@@ -76,7 +77,9 @@ class _OrbitProtectedHomeState extends State<OrbitProtectedHome> {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           final route = snapshot.data == OrbitRestoreState.deviceRegistration
-              ? '/device-registration' : '/';
+              ? '/device-registration'
+              : snapshot.data == OrbitRestoreState.deletionPending
+                  ? '/deletion-status' : '/';
           Navigator.of(context).pushNamedAndRemoveUntil(route, (_) => false);
         });
         return const Scaffold(

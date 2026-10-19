@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../features/home/presentation/screens/home_screen.dart';
 
 import '../core/widgets/app_keyboard_dismiss.dart';
+import '../core/widgets/orbit_gradient_scaffold_messenger.dart';
 
 import '../features/auth/presentation/screens/login_screen.dart';
 import '../features/auth/presentation/screens/orbit_otp_verification_controller.dart';
@@ -11,6 +12,7 @@ import '../features/auth/data/orbit_identity_client.dart';
 import '../features/auth/presentation/widgets/orbit_session_welcome_gate.dart';
 import '../features/auth/presentation/screens/device_registration_screen.dart';
 import '../features/auth/presentation/screens/orbit_password_reset_flow.dart';
+import '../features/auth/presentation/screens/orbit_account_deletion_status_screen.dart';
 import '../features/auth/domain/orbit_auth_validation.dart';
 import '../features/auth/presentation/screens/verify_otp_screen.dart';
 import '../features/auth/presentation/screens/sign_up_screen.dart';
@@ -41,8 +43,9 @@ class OrbitApp extends StatelessWidget {
       title: 'Orbit',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
-      builder: (context, child) =>
-          AppKeyboardDismiss(child: child ?? const SizedBox.shrink()),
+      builder: (context, child) => OrbitGradientScaffoldMessenger(
+        child: AppKeyboardDismiss(child: child ?? const SizedBox.shrink()),
+      ),
       initialRoute: AppRoutes.welcome,
       onGenerateRoute: (settings) {
         switch (settings.name) {
@@ -80,7 +83,8 @@ class OrbitApp extends StatelessWidget {
                   Navigator.of(context).pushNamedAndRemoveUntil(
                     state == OrbitRestoreState.authenticated
                         ? (signupPending ? AppRoutes.profileBasics : AppRoutes.home)
-                        : AppRoutes.deviceRegistration,
+                        : state == OrbitRestoreState.deletionPending
+                            ? AppRoutes.deletionStatus : AppRoutes.deviceRegistration,
                     (_) => false,
                   );
                 },
@@ -97,6 +101,11 @@ class OrbitApp extends StatelessWidget {
                 recipient: otpRecipient,
                 onVerifyCode: (_) {},
               ),
+            );
+          case AppRoutes.deletionStatus:
+            return MaterialPageRoute<void>(
+              settings: settings,
+              builder: (context) => const OrbitAccountDeletionStatusScreen(),
             );
           case AppRoutes.login:
             return MaterialPageRoute<void>(

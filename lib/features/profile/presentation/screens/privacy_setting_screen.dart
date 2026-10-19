@@ -40,6 +40,7 @@ class PrivacySettingScreen extends StatefulWidget {
       'Off',
     ],
     this.onSettingsChanged,
+    this.onSaveSettings,
     this.onBlockedUsersPressed,
     this.onBack,
     super.key,
@@ -49,6 +50,8 @@ class PrivacySettingScreen extends StatefulWidget {
   final List<String> locationVisibilityOptions;
   final List<String> locationActivityOptions;
   final ValueChanged<PrivacySettings>? onSettingsChanged;
+  /// In live mode, no privacy setting becomes visible until this resolves.
+  final Future<PrivacySettings> Function(PrivacySettings)? onSaveSettings;
   final VoidCallback? onBlockedUsersPressed;
   final VoidCallback? onBack;
 
@@ -65,6 +68,7 @@ class _PrivacySettingScreenState extends State<PrivacySettingScreen> {
   static const double _maxContentWidth = 600;
 
   late PrivacySettings _settings;
+  bool _saving = false;
 
   @override
   void initState() {
@@ -130,6 +134,12 @@ class _PrivacySettingScreenState extends State<PrivacySettingScreen> {
                         _screenPadding,
                       ),
                       children: <Widget>[
+                        if (_saving) ...<Widget>[
+                          const LinearProgressIndicator(minHeight: 2),
+                          const SizedBox(height: 12),
+                          const Text('Applying your privacy choice…'),
+                          const SizedBox(height: 12),
+                        ],
                         OrbitDropdownField(
                           fieldKey: PrivacySettingKeys.locationVisibility,
                           label: 'Who can see location',
@@ -149,7 +159,50 @@ class _PrivacySettingScreenState extends State<PrivacySettingScreen> {
                             _settings.copyWith(locationActivity: value),
                           ),
                         ),
+                        const SizedBox(height: _betweenDropdownSections),
+                        OrbitDropdownField(
+                          label: 'Presence visible to',
+                          value: _settings.presenceVisibility,
+                          items: const ['My Circle', 'Friends', 'Nobody'],
+                          onChanged: (v) => _update(_settings.copyWith(presenceVisibility: v)),
+                        ),
+                        const SizedBox(height: _betweenDropdownSections),
+                        OrbitDropdownField(
+                          label: 'Activity visible to',
+                          value: _settings.activityVisibility,
+                          items: const ['My Circle', 'Friends', 'Nobody'],
+                          onChanged: (v) => _update(_settings.copyWith(activityVisibility: v)),
+                        ),
+                        const SizedBox(height: _betweenDropdownSections),
+                        OrbitDropdownField(
+                          label: 'Who can Ping me',
+                          value: _settings.pingEligibility,
+                          items: const ['My Circle', 'Friends', 'Nobody'],
+                          onChanged: (v) => _update(_settings.copyWith(pingEligibility: v)),
+                        ),
+                        const SizedBox(height: _betweenDropdownSections),
+                        OrbitDropdownField(
+                          label: 'Who can message me',
+                          value: _settings.messageEligibility,
+                          items: const ['My Circle', 'Friends', 'Nobody'],
+                          onChanged: (v) => _update(_settings.copyWith(messageEligibility: v)),
+                        ),
+                        const SizedBox(height: _betweenDropdownSections),
+                        OrbitDropdownField(
+                          label: 'Default Moment audience',
+                          value: _settings.momentDefaultAudience,
+                          items: const ['My Circle', 'Selected People', 'Nobody'],
+                          onChanged: (v) => _update(_settings.copyWith(momentDefaultAudience: v)),
+                        ),
                         const SizedBox(height: _dropdownsToRowsGap),
+                        _PrivacyToggleRow(
+                          rowKey: const Key('privacy_read_receipts_row'),
+                          toggleKey: const Key('privacy_read_receipts_toggle'),
+                          title: 'Read receipts',
+                          value: _settings.readReceiptsEnabled,
+                          onChanged: (v) => _update(_settings.copyWith(readReceiptsEnabled: v)),
+                        ),
+                        const SizedBox(height: _rowGap),
                         _PrivacyToggleRow(
                           rowKey: PrivacySettingKeys.locationSharingRow,
                           toggleKey: PrivacySettingKeys.locationSharingToggle,
@@ -204,17 +257,18 @@ class _PrivacySettingScreenState extends State<PrivacySettingScreen> {
     );
   }
 
-  void _selectLiveLocation() {
-    _update(
+  Future<void> _selectLiveLocation() async {
+    await _update(
       _settings.copyWith(ghostModeEnabled: false, locationSharingEnabled: true),
     );
-    if (!mounted) return;
-    unawaited(
-      showStayConnectedPopup(
-        context,
-        onAllow: _openBatteryEducation,
-        onNotNow: () {},
-      ),
+    if (!mounted || _settings.ghostModeEnabled ||
+        !_settings.locationSharingEnabled) {
+      return;
+    }
+    await showStayConnectedPopup(
+      context,
+      onAllow: _openBatteryEducation,
+      onNotNow: () {},
     );
   }
 
@@ -223,12 +277,30 @@ class _PrivacySettingScreenState extends State<PrivacySettingScreen> {
     unawaited(showBatteryOptimizationPopup(context, onContinue: () {}));
   }
 
-  void _update(PrivacySettings next) {
-    if (!mounted || next == _settings) {
+  Future<void> _update(PrivacySettings next) async {
+    if (!mounted || _saving || next == _settings) return;
+    final save = widget.onSaveSettings;
+    if (save == null) {
+      setState(() => _settings = next); // Standalone UI preview.
+      widget.onSettingsChanged?.call(next);
       return;
     }
-    setState(() => _settings = next);
-    widget.onSettingsChanged?.call(next);
+    setState(() => _saving = true);
+    try {
+      final confirmed = await save(next);
+      if (!mounted) return;
+      setState(() => _settings = confirmed);
+      widget.onSettingsChanged?.call(confirmed);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Privacy change was not saved. Your previous settings remain active.'),
+      ));
+    } finally {
+      if (mounted) {
+        setState(() => _saving = false);
+      }
+    }
   }
 
   void _openBlockedUsers() {
