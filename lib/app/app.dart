@@ -65,6 +65,7 @@ class OrbitApp extends StatelessWidget {
                 builder: (context) => OrbitOtpVerificationController(
                   recipient: otpArgument.recipient!,
                   password: otpArgument.password,
+                  codeAlreadySent: otpArgument.codeAlreadySent,
                 onVerified: () async {
                   final state = await OrbitIdentityClient.instance.restoreSession();
                   if (!context.mounted) return;
@@ -101,20 +102,25 @@ class OrbitApp extends StatelessWidget {
             return MaterialPageRoute<void>(
               settings: settings,
               builder: (context) => LoginScreen(
-                onLogIn: (emailOrPhone, password) {
+                preflight: (emailOrPhone, password) async {
                   final error = OrbitAuthValidation.login(emailOrPhone, password);
-                  if (error != null) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text(error),
-                    ));
-                    return;
+                  if (error != null) return error;
+                  try {
+                    await OrbitIdentityClient.instance.requestPasswordCode(
+                      emailOrPhone.trim(), password);
+                    return null;
+                  } on OrbitIdentityException catch (e) {
+                    return e.message;
                   }
+                },
+                onLogIn: (emailOrPhone, password) {
                   OrbitIdentityClient.instance.abandonStandardSignup();
                   Navigator.of(context).pushNamed(
                     AppRoutes.verifyOtp,
                     arguments: OrbitOtpEntryArguments(
                       recipient: emailOrPhone.trim(),
                       password: password,
+                      codeAlreadySent: true,
                     ),
                   );
                 },
@@ -168,20 +174,31 @@ class OrbitApp extends StatelessWidget {
             return MaterialPageRoute<void>(
               settings: settings,
               builder: (context) => SignUpScreen(
-                onSignUp: (fullName, emailOrPhone, password) {
+                preflight: (fullName, emailOrPhone, password) async {
                   final destination = emailOrPhone.trim();
                   final error = OrbitAuthValidation.signup(
                       fullName, destination, password);
-                  if (error != null) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text(error),
-                    ));
-                    return;
+                  if (error != null) return error;
+                  try {
+                    await OrbitIdentityClient.instance.requestCode(
+                      destination.contains('@') ? 'email' : 'sms',
+                      destination,
+                      purpose: 'signup',
+                    );
+                    return null;
+                  } on OrbitIdentityException catch (e) {
+                    return e.message;
                   }
+                },
+                onSignUp: (fullName, emailOrPhone, password) {
+                  final destination = emailOrPhone.trim();
                   OrbitIdentityClient.instance.beginStandardSignup(fullName, password);
                   Navigator.of(context).pushNamed(
                     AppRoutes.verifyOtp,
-                    arguments: OrbitOtpEntryArguments(recipient: destination),
+                    arguments: OrbitOtpEntryArguments(
+                      recipient: destination,
+                      codeAlreadySent: true,
+                    ),
                   );
                 },
                 onAppleSignUp: () {
@@ -348,11 +365,16 @@ class OrbitApp extends StatelessWidget {
   }
 }
 
-/// Navigation-only parameters. The password is used once to request an OTP;
-/// it is never persisted to Flutter preferences or passed into URLs.
+/// Navigation-only parameters. Password is retained in memory only for
+/// authenticated resends; it is never placed in URLs or persisted.
 class OrbitOtpEntryArguments {
-  const OrbitOtpEntryArguments({this.recipient, this.password});
+  const OrbitOtpEntryArguments({
+    this.recipient,
+    this.password,
+    this.codeAlreadySent = false,
+  });
 
   final String? recipient;
   final String? password;
+  final bool codeAlreadySent;
 }
