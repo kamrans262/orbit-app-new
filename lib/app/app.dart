@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../features/home/presentation/screens/home_screen.dart';
 
 import '../core/widgets/app_keyboard_dismiss.dart';
+import '../core/widgets/orbit_gradient_scaffold_messenger.dart';
 
 import '../features/auth/presentation/screens/login_screen.dart';
 import '../features/auth/presentation/screens/orbit_otp_verification_controller.dart';
@@ -42,8 +43,9 @@ class OrbitApp extends StatelessWidget {
       title: 'Orbit',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
-      builder: (context, child) =>
-          AppKeyboardDismiss(child: child ?? const SizedBox.shrink()),
+      builder: (context, child) => OrbitGradientScaffoldMessenger(
+        child: AppKeyboardDismiss(child: child ?? const SizedBox.shrink()),
+      ),
       initialRoute: AppRoutes.welcome,
       onGenerateRoute: (settings) {
         switch (settings.name) {
