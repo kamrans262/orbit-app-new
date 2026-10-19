@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
-import '../screens/profile_screen.dart';
+import '../screens/orbit_my_profile_screen.dart';
 
 Future<int?> openProfileScreen({
   required BuildContext context,
@@ -9,7 +9,7 @@ Future<int?> openProfileScreen({
 }) {
   return Navigator.of(context).push<int>(
     AppFadeSlidePageRoute<int>(
-      builder: (profileContext) => ProfileScreen.demo(
+      builder: (profileContext) => OrbitMyProfileScreen(
         onTabSelected: (index) {
           if (index == 3) {
             return;
