@@ -102,6 +102,7 @@ class OrbitApp extends StatelessWidget {
                   );
                 },
                 onCodeSignIn: () {
+                  OrbitIdentityClient.instance.abandonStandardSignup();
                   Navigator.of(context).pushNamed(AppRoutes.otpSignIn);
                 },
                 onForgotPassword: () {
@@ -179,6 +180,7 @@ class OrbitApp extends StatelessWidget {
                   );
                 },
                 onCodeSignUp: () {
+                  OrbitIdentityClient.instance.abandonStandardSignup();
                   Navigator.of(context).pushNamed(AppRoutes.otpSignIn);
                 },
                 onAppleSignUp: () {
