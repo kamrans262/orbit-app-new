@@ -6,6 +6,7 @@ import '../core/widgets/app_keyboard_dismiss.dart';
 
 import '../features/auth/presentation/screens/login_screen.dart';
 import '../features/auth/presentation/screens/orbit_otp_sign_in_screen.dart';
+import '../features/auth/presentation/screens/orbit_profile_basics_screen.dart';
 import '../features/auth/data/orbit_identity_client.dart';
 import '../features/auth/presentation/widgets/orbit_session_welcome_gate.dart';
 import '../features/auth/presentation/screens/device_registration_screen.dart';
@@ -58,9 +59,14 @@ class OrbitApp extends StatelessWidget {
             return MaterialPageRoute<void>(
               settings: settings,
               builder: (context) => OrbitOtpSignInScreen(
-                onVerified: () => Navigator.of(context).pushReplacementNamed(
-                  AppRoutes.deviceRegistration,
-                ),
+                onVerified: () async {
+                  final state = await OrbitIdentityClient.instance.restoreSession();
+                  if (!context.mounted) return;
+                  Navigator.of(context).pushReplacementNamed(
+                    state == OrbitRestoreState.authenticated
+                        ? AppRoutes.home : AppRoutes.deviceRegistration,
+                  );
+                },
               ),
             );
           case AppRoutes.login:
@@ -99,9 +105,17 @@ class OrbitApp extends StatelessWidget {
               builder: (context) => DeviceRegistrationScreen(
                 onBack: () => Navigator.of(context).maybePop(),
                 onContinue: () {
-                  Navigator.of(context).pushReplacementNamed(AppRoutes.notifications);
+                  Navigator.of(context).pushReplacementNamed(AppRoutes.profileBasics);
                 },
                 onRegisterDevice: OrbitIdentityClient.instance.registerDevice,
+              ),
+            );
+          case AppRoutes.profileBasics:
+            return MaterialPageRoute<void>(
+              settings: settings,
+              builder: (context) => OrbitProfileBasicsScreen(
+                onCompleted: () => Navigator.of(context)
+                    .pushReplacementNamed(AppRoutes.notifications),
               ),
             );
           case AppRoutes.signUp:

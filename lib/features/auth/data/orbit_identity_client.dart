@@ -224,6 +224,14 @@ class OrbitIdentityClient {
   Future<Map<String, dynamic>> currentUser() =>
       _send('GET', '/me', protected: true);
 
+  Future<void> updateProfileBasics(String displayName, String username) async {
+    await _send('PATCH', '/me/profile-basics', protected: true,
+        body: <String, Object?>{
+          'display_name': displayName.trim(),
+          'username': username.trim(),
+        });
+  }
+
   Future<List<Map<String, dynamic>>> devices() async {
     final response = await _send('GET', '/me/devices', protected: true);
     return (response['data'] as List<dynamic>)
