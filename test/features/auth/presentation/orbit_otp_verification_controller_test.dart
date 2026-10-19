@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -61,6 +62,108 @@ void main() {
     expect(find.text('Enter the Code'), findsOneWidget);
     expect(find.textContaining('member@example.test'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Already-dispatched OTP opens the approved screen without a second request',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    var requests = 0;
+    final client = OrbitIdentityClient(client: MockClient((_) async {
+      requests++;
+      return http.Response('{"message":"unexpected duplicate request"}', 503);
+    }));
+    await tester.pumpWidget(MaterialApp(home: OrbitOtpVerificationController(
+      recipient: 'member@example.test',
+      identityClient: client,
+      codeAlreadySent: true,
+      onVerified: () {},
+    )));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 150));
+    expect(requests, 0);
+    expect(find.byType(VerifyOtpScreen), findsOneWidget);
+    expect(find.byKey(VerifyOtpKeys.otpInput), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Login rejection stays on Login and prevents repeat taps',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final result = Completer<String?>();
+    var checks = 0;
+    var navigations = 0;
+    await tester.pumpWidget(MaterialApp(home: LoginScreen(
+      preflight: (_, __) {
+        checks++;
+        return result.future;
+      },
+      onLogIn: (_, __) => navigations++,
+      onForgotPassword: () {},
+      onAppleLogin: () {},
+      onGoogleLogin: () {},
+      onSignUp: () {},
+    )));
+    await tester.enterText(find.byType(TextField).at(0), 'existing@example.test');
+    await tester.enterText(find.byType(TextField).at(1), 'WrongPassword123');
+    await tester.tap(find.byKey(LoginKeys.loginButton));
+    await tester.pump();
+    expect(checks, 1);
+    expect(navigations, 0);
+    expect(find.byType(LoginScreen), findsOneWidget);
+    result.complete('Invalid credentials.');
+    await tester.pump();
+    expect(find.text('Invalid credentials.'), findsOneWidget);
+    expect(navigations, 0);
+  });
+
+  testWidgets('Sign Up duplicate stays on Sign Up without reaching OTP',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    var navigations = 0;
+    var requests = 0;
+    await tester.pumpWidget(MaterialApp(home: SignUpScreen(
+      preflight: (_, __, ___) async {
+        requests++;
+        return 'An account already exists. Please log in instead.';
+      },
+      onSignUp: (_, __, ___) => navigations++,
+      onAppleSignUp: () {},
+      onGoogleSignUp: () {},
+      onLogIn: () {},
+    )));
+    await tester.enterText(find.byType(TextField).at(0), 'Existing User');
+    await tester.enterText(find.byType(TextField).at(1), 'existing@example.test');
+    await tester.enterText(find.byType(TextField).at(2), 'StrongPassword123');
+    await tester.tap(find.byKey(SignUpKeys.signUpButton));
+    await tester.pump();
+    expect(requests, 1);
+    expect(navigations, 0);
+    expect(find.byType(SignUpScreen), findsOneWidget);
+    expect(find.text('An account already exists. Please log in instead.'),
+        findsOneWidget);
+  });
+
+  testWidgets('Valid preflight continues exactly once to existing OTP navigation',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    var continuations = 0;
+    await tester.pumpWidget(MaterialApp(home: LoginScreen(
+      preflight: (_, __) async => null,
+      onLogIn: (_, __) => continuations++,
+      onForgotPassword: () {},
+      onAppleLogin: () {},
+      onGoogleLogin: () {},
+      onSignUp: () {},
+    )));
+    await tester.enterText(find.byType(TextField).at(0), 'existing@example.test');
+    await tester.enterText(find.byType(TextField).at(1), 'CorrectPassword123');
+    await tester.tap(find.byKey(LoginKeys.loginButton));
+    await tester.pump();
+    expect(continuations, 1);
   });
 
   testWidgets('Failed OTP delivery remains on original screen and offers retry',
