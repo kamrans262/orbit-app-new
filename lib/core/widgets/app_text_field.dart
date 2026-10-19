@@ -16,6 +16,7 @@ class AppTextField extends StatefulWidget {
     this.suffixIcon,
     this.keyboardType,
     this.textInputAction,
+    this.maxLines = 1,
     this.obscureText = false,
     this.validator,
     this.enabled = true,
@@ -46,6 +47,7 @@ class AppTextField extends StatefulWidget {
   final Widget? suffixIcon;
   final TextInputType? keyboardType;
   final TextInputAction? textInputAction;
+  final int maxLines;
   final bool obscureText;
   final FormFieldValidator<String>? validator;
   final bool enabled;
@@ -157,7 +159,7 @@ class _AppTextFieldState extends State<AppTextField> {
               children: <Widget>[
                 Container(
                   key: widget.fieldKey,
-                  height: AppTextField.referenceHeight,
+                  height: widget.maxLines > 1 ? 104 : AppTextField.referenceHeight,
                   padding: const EdgeInsets.symmetric(
                     horizontal: AppTextField.horizontalContentPadding,
                   ),
@@ -193,7 +195,7 @@ class _AppTextFieldState extends State<AppTextField> {
                               obscureText: widget.obscureText,
                               keyboardType: widget.keyboardType,
                               textInputAction: widget.textInputAction,
-                              maxLines: 1,
+                              maxLines: widget.maxLines,
                               textAlignVertical: TextAlignVertical.center,
                               style: const TextStyle(
                                 fontFamily: AppTypography.fontFamily,
