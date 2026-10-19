@@ -20,7 +20,7 @@ void main() {
     await tester.tap(login);
     await tester.pumpAndSettle();
     expect(find.byType(HomeScreen), findsNothing);
-    expect(find.textContaining('Password sign-in is awaiting client approval'),
+    expect(find.textContaining('Enter your email or phone and password.'),
         findsOneWidget);
 
     final otpButton = find.text('Continue with a code');
