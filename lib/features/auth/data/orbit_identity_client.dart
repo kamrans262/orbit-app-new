@@ -49,6 +49,11 @@ class OrbitIdentityClient {
     _pendingSignupPassword = null;
   }
 
+  void finishStandardSignup() {
+    // Called only after password enrollment (when supplied) and profile save.
+    abandonStandardSignup();
+  }
+
   Future<void> completePendingPasswordEnrollment() async {
     final value = _pendingSignupPassword;
     if (value == null) return;
