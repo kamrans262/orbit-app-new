@@ -295,7 +295,9 @@ class _PrivacySettingScreenState extends State<PrivacySettingScreen> {
         content: Text('Privacy change was not saved. Your previous settings remain active.'),
       ));
     } finally {
-      if (mounted) setState(() => _saving = false);
+      if (mounted) {
+        setState(() => _saving = false);
+      }
     }
   }
 
