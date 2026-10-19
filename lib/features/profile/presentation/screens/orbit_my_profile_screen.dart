@@ -33,7 +33,11 @@ class _OrbitMyProfileScreenState extends State<OrbitMyProfileScreen> {
   late Future<Map<String, dynamic>> _profile = _repo.loadProfile();
 
   void _reload() {
-    if (mounted) setState(() => _profile = _repo.loadProfile());
+    if (mounted) {
+      setState(() {
+        _profile = _repo.loadProfile();
+      });
+    }
   }
 
   void _edit(BuildContext settingsContext, ProfileData profile, String username) {
