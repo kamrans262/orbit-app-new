@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../auth/data/orbit_identity_client.dart';
 import '../../../auth/presentation/screens/orbit_sessions_screen.dart';
+import '../../../auth/presentation/screens/orbit_link_identity_screen.dart';
 import '../../../../app/routing/app_routes.dart';
 
 import '../../../../app/theme/app_typography.dart';
@@ -217,6 +218,11 @@ class SettingsScreen extends StatelessWidget {
                               label: 'Sessions',
                               override: null,
                             ),
+                            onVerifiedContactsPressed: () => _handleDestination(
+                              context,
+                              label: 'Verified contacts',
+                              override: null,
+                            ),
                             onMoreMenuPressed: () => _handleDestination(
                               context,
                               label: 'Orbit Menu',
@@ -250,6 +256,12 @@ class SettingsScreen extends StatelessWidget {
       Navigator.of(context).push<void>(
         AppFadeSlidePageRoute<void>(builder: (_) => const SubscriptionScreen()),
       );
+      return;
+    }
+    if (label == 'Verified contacts') {
+      Navigator.of(context).push<void>(AppFadeSlidePageRoute<void>(
+        builder: (_) => const OrbitLinkIdentityScreen(),
+      ));
       return;
     }
     if (label == 'Sessions') {
@@ -418,6 +430,7 @@ class _SettingsCard extends StatelessWidget {
     required this.onDevicesPressed,
     required this.onSubscriptionPressed,
     required this.onSessionsPressed,
+    required this.onVerifiedContactsPressed,
   });
 
   final VoidCallback onEditProfilePressed;
@@ -431,6 +444,7 @@ class _SettingsCard extends StatelessWidget {
   final VoidCallback onDevicesPressed;
   final VoidCallback onSubscriptionPressed;
   final VoidCallback onSessionsPressed;
+  final VoidCallback onVerifiedContactsPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -489,6 +503,12 @@ class _SettingsCard extends StatelessWidget {
         icon: Icons.devices_other_rounded,
         label: 'Devices',
         onTap: onDevicesPressed,
+      ),
+      _SettingsEntry(
+        id: 'verified_contacts',
+        icon: Icons.verified_user_outlined,
+        label: 'Verified contacts',
+        onTap: onVerifiedContactsPressed,
       ),
       _SettingsEntry(
         id: 'sessions',

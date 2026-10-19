@@ -224,6 +224,15 @@ class OrbitIdentityClient {
   Future<Map<String, dynamic>> currentUser() =>
       _send('GET', '/me', protected: true);
 
+  Future<void> linkIdentity(String channel, String recipient, String code) async {
+    await _send('POST', '/me/identities/link', protected: true,
+      body: <String, Object?>{
+        'channel': channel,
+        'recipient': recipient.trim(),
+        'code': code.trim(),
+      });
+  }
+
   Future<void> updateProfileBasics(String displayName, String username) async {
     await _send('PATCH', '/me/profile-basics', protected: true,
         body: <String, Object?>{
