@@ -350,11 +350,12 @@ class OrbitIdentityClient {
       });
   }
 
-  Future<void> updateProfileBasics(String displayName, String username) async {
+  Future<void> updateProfileBasics(String displayName, String username, {String? bio}) async {
     await _send('PATCH', '/me/profile-basics', protected: true,
         body: <String, Object?>{
           'display_name': displayName.trim(),
           'username': username.trim(),
+          if (bio != null) 'bio': bio.trim(),
         });
   }
 
