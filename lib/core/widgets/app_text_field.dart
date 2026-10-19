@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_typography.dart';
@@ -16,6 +17,8 @@ class AppTextField extends StatefulWidget {
     this.suffixIcon,
     this.keyboardType,
     this.textInputAction,
+    this.textCapitalization = TextCapitalization.none,
+    this.inputFormatters,
     this.maxLines = 1,
     this.obscureText = false,
     this.validator,
@@ -47,6 +50,8 @@ class AppTextField extends StatefulWidget {
   final Widget? suffixIcon;
   final TextInputType? keyboardType;
   final TextInputAction? textInputAction;
+  final TextCapitalization textCapitalization;
+  final List<TextInputFormatter>? inputFormatters;
   final int maxLines;
   final bool obscureText;
   final FormFieldValidator<String>? validator;
@@ -195,6 +200,8 @@ class _AppTextFieldState extends State<AppTextField> {
                               obscureText: widget.obscureText,
                               keyboardType: widget.keyboardType,
                               textInputAction: widget.textInputAction,
+                              textCapitalization: widget.textCapitalization,
+                              inputFormatters: widget.inputFormatters,
                               maxLines: widget.maxLines,
                               textAlignVertical: TextAlignVertical.center,
                               style: const TextStyle(
