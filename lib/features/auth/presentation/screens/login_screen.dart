@@ -28,6 +28,7 @@ abstract final class LoginKeys {
 class LoginScreen extends StatefulWidget {
   const LoginScreen({
     required this.onLogIn,
+    this.preflight,
     required this.onForgotPassword,
     required this.onAppleLogin,
     required this.onGoogleLogin,
@@ -36,6 +37,8 @@ class LoginScreen extends StatefulWidget {
   });
 
   final void Function(String emailOrPhone, String password) onLogIn;
+  // Optional API gate: keep validation and delivery on the Login screen.
+  final Future<String?> Function(String emailOrPhone, String password)? preflight;
   final VoidCallback onForgotPassword;
   final VoidCallback onAppleLogin;
   final VoidCallback onGoogleLogin;
@@ -50,6 +53,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _passwordController = TextEditingController();
 
   bool _obscurePassword = true;
+  bool _submitting = false;
 
   @override
   void dispose() {
@@ -58,8 +62,30 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _submit() {
-    widget.onLogIn(_emailController.text, _passwordController.text);
+  Future<void> _submit() async {
+    if (_submitting) return;
+    final destination = _emailController.text;
+    final password = _passwordController.text;
+    if (widget.preflight == null) {
+      widget.onLogIn(destination, password);
+      return;
+    }
+    setState(() => _submitting = true);
+    String? error;
+    try {
+      error = await widget.preflight!(destination, password);
+    } catch (_) {
+      error = 'Unable to connect to Orbit. Please try again.';
+    }
+    if (!mounted) return;
+    setState(() => _submitting = false);
+    if (error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error)),
+      );
+      return;
+    }
+    widget.onLogIn(destination, password);
   }
 
   @override
@@ -110,7 +136,7 @@ class _LoginScreenState extends State<LoginScreen> {
             const SizedBox(height: 16),
             SizedBox(
               key: LoginKeys.loginButton,
-              child: AppPrimaryButton(label: 'Log in', onPressed: _submit),
+              child: AppPrimaryButton(label: 'Log in', onPressed: _submit, enabled: !_submitting),
             ),
             const SizedBox(height: 20),
             const AuthDivider(),
