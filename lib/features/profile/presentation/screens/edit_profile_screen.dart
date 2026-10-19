@@ -16,6 +16,7 @@ abstract final class EditProfileKeys {
   static const changePhoto = Key('edit_profile_change_photo');
   static const fullNameField = Key('edit_profile_full_name_field');
   static const usernameField = Key('edit_profile_username_field');
+  static const bioField = Key('edit_profile_bio_field');
   static const saveButton = Key('edit_profile_save_button');
   static const takePhoto = Key('edit_profile_take_photo');
   static const chooseGallery = Key('edit_profile_choose_gallery');
@@ -38,6 +39,7 @@ class EditProfileScreen extends StatefulWidget {
     required this.profile,
     this.initialFullName,
     this.initialUsername,
+    this.initialBio,
     this.onBack,
     this.onPickPhoto,
     this.onSave,
@@ -47,6 +49,7 @@ class EditProfileScreen extends StatefulWidget {
   final ProfileData profile;
   final String? initialFullName;
   final String? initialUsername;
+  final String? initialBio;
   final VoidCallback? onBack;
   final Future<EditProfilePhotoSelection?> Function(
     EditProfilePhotoSource source,
@@ -79,6 +82,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   late final TextEditingController _fullNameController;
   late final TextEditingController _usernameController;
+  late final TextEditingController _bioController;
 
   EditProfilePhotoSelection? _selectedPhoto;
   bool _isSaving = false;
@@ -90,12 +94,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     super.initState();
     _fullNameController = TextEditingController(text: _initialFullName());
     _usernameController = TextEditingController(text: _initialUsername());
+    _bioController = TextEditingController(text: widget.initialBio ?? widget.profile.bio);
   }
 
   @override
   void dispose() {
     _fullNameController.dispose();
     _usernameController.dispose();
+    _bioController.dispose();
     super.dispose();
   }
 
@@ -228,6 +234,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                           );
                                         }
                                       },
+                                    ),
+                                    const SizedBox(height: _fieldGap),
+                                    AppTextField(
+                                      label: 'Bio (optional)',
+                                      fieldKey: EditProfileKeys.bioField,
+                                      controller: _bioController,
+                                      keyboardType: TextInputType.multiline,
+                                      textInputAction: TextInputAction.newline,
+                                      maxLines: 3,
+                                      validator: (value) =>
+                                          (value ?? '').trim().length > 280
+                                              ? 'Bio cannot exceed 280 characters'
+                                              : null,
                                     ),
                                     const Spacer(),
                                     const SizedBox(height: 24),
@@ -400,6 +419,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     final request = UpdateProfileRequest(
       fullName: _fullNameController.text.trim(),
       username: _usernameController.text.trim(),
+      bio: _bioController.text.trim(),
       profileImageReference: _selectedPhoto?.profileImageReference,
     );
 
