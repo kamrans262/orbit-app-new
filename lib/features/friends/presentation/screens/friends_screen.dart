@@ -31,6 +31,7 @@ class FriendsScreen extends StatefulWidget {
     this.hasMore = false,
     this.onLoadMore,
     this.liveMode = false,
+    this.offlineStale = false,
     super.key,
   });
 
@@ -77,6 +78,7 @@ class FriendsScreen extends StatefulWidget {
   final bool hasMore;
   final VoidCallback? onLoadMore;
   final bool liveMode;
+  final bool offlineStale;
 
   @override
   State<FriendsScreen> createState() => _FriendsScreenState();
@@ -170,6 +172,15 @@ class _FriendsScreenState extends State<FriendsScreen> {
                 ),
               ),
               const SizedBox(height: _headerToListGap),
+              if (widget.offlineStale)
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(20, 0, 20, 12),
+                  child: Text(
+                    'OFFLINE • READ ONLY • Saved friends may be out of date. Reconnect to verify.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                  ),
+                ),
               Expanded(
                 child: widget.isLoading && visibleFriends.isEmpty
                     ? const Center(child: CircularProgressIndicator())
@@ -218,7 +229,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
                                   imagePath: friend.imagePath ?? '',
                                   isFavorite: friend.isFavorite,
                                 ),
-                                onTap: () => _openFriend(friend),
+                                onTap: widget.offlineStale ? null : () => _openFriend(friend),
                                 onFavoritePressed: () =>
                                     _toggleFavorite(friend.id),
                                 showFavoriteAction: !widget.liveMode,
@@ -248,6 +259,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
   }
 
   void _openFriend(FriendMemberData friend) {
+    if (widget.liveMode && widget.onFriendPressed == null) return;
     final override = widget.onFriendPressed;
     if (override != null) {
       override(friend);
