@@ -7,15 +7,17 @@ import '../../../home/presentation/widgets/favorite_person_tile.dart';
 import '../../data/orbit_social_repository.dart';
 
 class OrbitFriendRequestsScreen extends StatefulWidget {
-  const OrbitFriendRequestsScreen({super.key, this.repository});
+  const OrbitFriendRequestsScreen({super.key, this.repository, this.initialDirection = 'incoming'})
+      : assert(initialDirection == 'incoming' || initialDirection == 'outgoing');
   final OrbitSocialRepository? repository;
+  final String initialDirection;
   @override
   State<OrbitFriendRequestsScreen> createState() => _OrbitFriendRequestsScreenState();
 }
 
 class _OrbitFriendRequestsScreenState extends State<OrbitFriendRequestsScreen> {
   late final OrbitSocialRepository _repo = widget.repository ?? OrbitSocialRepository();
-  String _direction = 'incoming';
+  late String _direction;
   List<OrbitFriendRequest> _requests = const [];
   bool _busy = false;
   bool _hasMore = false;
@@ -26,6 +28,7 @@ class _OrbitFriendRequestsScreenState extends State<OrbitFriendRequestsScreen> {
   @override
   void initState() {
     super.initState();
+    _direction = widget.initialDirection;
     _load(reset: true);
   }
 
