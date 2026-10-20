@@ -126,6 +126,7 @@ class InvitePeopleScreen extends StatelessWidget {
                     label: 'Invite by Username',
                     onTap: onInviteByUsername,
                   ),
+                  if (nearbyPeople.isNotEmpty) ...[
                   const SizedBox(height: _optionsToNearbyGap),
                   const Text(
                     'Near By People',
@@ -171,6 +172,7 @@ class InvitePeopleScreen extends StatelessWidget {
                       );
                     },
                   ),
+                  ],
                   if (onDone != null && onSkip != null) ...<Widget>[
                     const SizedBox(height: 24),
                     // Reuse the same primary/secondary actions as onboarding.
