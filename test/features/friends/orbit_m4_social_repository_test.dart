@@ -57,7 +57,7 @@ void main() {
     expect(client.calls,isEmpty);
     await repo.search('Fatima Noor');
     expect(client.calls.single,
-      'GET /people/search?q=Fatima%20Noor&page=1');
+      'GET /people/search?q=Fatima+Noor&page=1');
   });
 
   test('Block, request and contact APIs preserve authenticated transport methods', () async {
