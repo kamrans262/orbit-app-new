@@ -65,7 +65,9 @@ class _OrbitLiveFriendsScreenState extends State<OrbitLiveFriendsScreen>
         _revision = result.revision;
         _offline = false;
       });
-      await _store.save(_people);
+      // A storage/Keychain error must never turn a successfully loaded
+      // server-authorized Friends list into a false network failure.
+      try { await _store.save(_people); } catch (_) {}
     } catch (failure) {
       if (!mounted || epoch != _epoch) return;
       if (_outage(failure)) {
