@@ -168,6 +168,7 @@ class OrbitCircleRepository {
     if (uri != null && uri.hasScheme) {
       if (uri.scheme != 'https' ||
           uri.host != 'indigo-caribou-178970.hostingersite.com' ||
+          uri.userInfo.isNotEmpty || (uri.hasPort && uri.port != 443) ||
           uri.pathSegments.length != 3 || uri.pathSegments[0] != 'invite' ||
           uri.pathSegments[1] != 'circle' || uri.hasQuery || uri.hasFragment) {
         throw const FormatException('Invalid Orbit Circle invitation link.');
