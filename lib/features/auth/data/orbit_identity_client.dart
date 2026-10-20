@@ -32,6 +32,7 @@ class OrbitIdentityClient {
   static const _privateKey = 'orbit.identity.private_key.v1';
   static const _userIdKey = 'orbit.identity.user_id.v1';
   static const _profileCacheKey = 'orbit.profile.encrypted_cache.v1';
+  static const _friendsCacheKey = 'orbit.social.friends_snapshot.v1';
 
   final http.Client _http;
   final FlutterSecureStorage _storage;
@@ -168,7 +169,10 @@ class OrbitIdentityClient {
     if (user is Map && user['id'] is String) {
       final nextUser = user['id'] as String;
       final lastUser = await _storage.read(key: _userIdKey);
-      if (lastUser != nextUser) await _storage.delete(key: _profileCacheKey);
+      if (lastUser != nextUser) {
+        await _storage.delete(key: _profileCacheKey);
+        await _storage.delete(key: _friendsCacheKey);
+      }
       await _storage.write(key: _userIdKey, value: nextUser);
     }
     await _storage.write(key: _refreshKey, value: refreshToken);
@@ -277,6 +281,7 @@ class OrbitIdentityClient {
     await _storage.delete(key: _refreshKey);
     await _storage.delete(key: _userIdKey);
     await _storage.delete(key: _profileCacheKey);
+    await _storage.delete(key: _friendsCacheKey);
   }
 
   Future<void> signOut() async {
@@ -399,6 +404,26 @@ class OrbitIdentityClient {
 
   /// All M4 social requests share the verified Orbit bearer token, refresh,
   /// trust/deletion denial and 20-second timeout; no second HTTP stack.
+  /// Owner-bound OS-secure-storage access. Only call after a verified,
+  /// trusted, server-authorized Friends read. It cannot unlock offline Home.
+  Future<String?> currentLocalSocialOwner() async {
+    final token = await _storage.read(key: _refreshKey);
+    if (token == null || token.isEmpty) return null;
+    return _storage.read(key: _userIdKey);
+  }
+
+  Future<void> storeFriendsSnapshot(String owner, String payload) async {
+    if (await currentLocalSocialOwner() != owner) return;
+    await _storage.write(key: _friendsCacheKey, value: payload);
+  }
+
+  Future<String?> readFriendsSnapshot() async {
+    if (await currentLocalSocialOwner() == null) return null;
+    return _storage.read(key: _friendsCacheKey);
+  }
+
+  Future<void> clearFriendsSnapshot() => _storage.delete(key: _friendsCacheKey);
+
   Future<Map<String, dynamic>> socialRequest(String method, String path,
       {Map<String, Object?>? body}) {
     if (!path.startsWith('/') || path.startsWith('//') ||
