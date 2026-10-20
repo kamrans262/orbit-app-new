@@ -69,7 +69,6 @@ class OrbitApp extends StatelessWidget {
 
   Route<dynamic> _route(RouteSettings settings) {
     switch (settings.name) {
-        switch (settings.name) {
           case AppRoutes.welcome:
             return MaterialPageRoute<void>(
               settings: settings,
