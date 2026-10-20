@@ -95,6 +95,66 @@ class _OrbitPersonScreenState extends State<OrbitPersonScreen> {
     }
   }
 
+  void _futureFeature(String feature) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('$feature will be available when its secured module is enabled. No data was shared.'),
+    ));
+  }
+
+  Widget _futureAction(String name, IconData icon) => AppActionRow(
+    leadingIcon: icon,
+    iconBackgroundColor: const Color(0xFFF2EAFE),
+    leadingIconColor: const Color(0xFF7C3AED),
+    title: name,
+    trailing: const Icon(Icons.lock_outline, size: 18, color: Color(0xFF64748B)),
+    onTap: () => _futureFeature(name),
+  );
+
+  Future<void> _more() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            AppActionRow(
+              leadingIcon: Icons.block,
+              iconBackgroundColor: const Color(0xFFFEE2E2),
+              leadingIconColor: const Color(0xFFB91C1C),
+              title: 'Block user',
+              onTap: () {
+                Navigator.of(ctx).pop();
+                _requestBlock();
+              },
+            ),
+            const SizedBox(height: 12),
+            AppActionRow(
+              leadingIcon: Icons.flag_outlined,
+              iconBackgroundColor: const Color(0xFFF2EAFE),
+              leadingIconColor: const Color(0xFF7C3AED),
+              title: 'Report user (moderation not yet available)',
+              onTap: () {
+                Navigator.of(ctx).pop();
+                _futureFeature('Reporting');
+              },
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _requestBlock() async {
+    if (await _confirm('Block ${_person.name}?',
+        'This removes the friendship and protected access. Unblocking does not restore friendship.',
+        'Block')) {
+      await _mutate(() => _repo.block(_person.id), success: 'Blocked user.');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final friend = _person.relationship == 'friend';
@@ -122,6 +182,26 @@ class _OrbitPersonScreenState extends State<OrbitPersonScreen> {
             TextButton(onPressed: _refresh, child: const Text('Retry')),
           ],
           if (!_loading && _error == null) ...[
+            const Text('Quick Actions', style: TextStyle(
+              fontFamily: AppTypography.fontFamily, fontSize: 16,
+              fontWeight: FontWeight.w600)),
+            const SizedBox(height: 12),
+            _futureAction('Message', Icons.chat_bubble_outline_rounded),
+            const SizedBox(height: 10),
+            _futureAction('Ping', Icons.notifications_active_outlined),
+            const SizedBox(height: 10),
+            _futureAction('Navigate', Icons.near_me_outlined),
+            const SizedBox(height: 10),
+            _futureAction('Check-In', Icons.location_on_outlined),
+            const SizedBox(height: 10),
+            AppActionRow(
+              leadingIcon: Icons.more_horiz,
+              iconBackgroundColor: const Color(0xFFF2EAFE),
+              leadingIconColor: const Color(0xFF7C3AED),
+              title: 'More',
+              onTap: _more,
+            ),
+            const SizedBox(height: 18),
             AppActionRow(
               leadingIcon: friend ? Icons.check_circle_outline : Icons.person_add_alt_outlined,
               iconBackgroundColor: const Color(0xFFF2EAFE),
