@@ -107,7 +107,10 @@ void main() {
       repository: repo,
     )));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Manage sent request'));
+    // Person Detail is a lazy ListView. Scroll to build the relationship
+    // action before trying to tap it in a compact widget-test viewport.
+    await tester.scrollUntilVisible(find.text('Manage sent request'), 160,
+      scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('Manage sent request'));
     await tester.pumpAndSettle();
     expect(find.text('Friend Requests'), findsOneWidget);
