@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../../../../app/theme/app_colors.dart';
+import '../../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_action_row.dart';
 import '../../../../core/widgets/app_screen_header.dart';
 import '../../../home/presentation/widgets/home_media_image.dart';
 import '../../data/orbit_social_repository.dart';
+import 'orbit_friend_requests_screen.dart';
 import '../widgets/orbit_social_confirmation.dart';
 
 /// Authenticated person detail. A friend is never represented as a Circle.
@@ -134,6 +136,14 @@ class _OrbitPersonScreenState extends State<OrbitPersonScreen> {
     );
   }
 
+  Future<void> _openRequests(String direction) async {
+    await Navigator.of(context).push<void>(AppFadeSlidePageRoute<void>(
+      builder: (_) => OrbitFriendRequestsScreen(
+        repository: _repo, initialDirection: direction),
+    ));
+    if (mounted) await _refresh();
+  }
+
   Future<void> _requestBlock() async {
     if (await _confirm('Block ${_person.name}?',
         'This removes the friendship and protected access. Unblocking does not restore friendship.',
@@ -193,10 +203,12 @@ class _OrbitPersonScreenState extends State<OrbitPersonScreen> {
               leadingIcon: friend ? Icons.check_circle_outline : Icons.person_add_alt_outlined,
               iconBackgroundColor: const Color(0xFFF2EAFE),
               leadingIconColor: const Color(0xFF7C3AED),
-              title: friend ? 'Friends' : outgoing ? 'Friend request sent'
-                : incoming ? 'Request received' : 'Send friend request',
+              title: friend ? 'Friends' : outgoing ? 'Manage sent request'
+                : incoming ? 'Review received request' : 'Send friend request',
               trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: _busy || outgoing || incoming || friend ? null
+              onTap: _busy || friend ? null
+                : outgoing ? () => _openRequests('outgoing')
+                : incoming ? () => _openRequests('incoming')
                 : () => _mutate(() => _repo.sendRequest(_person.id),
                     success: 'Friend request sent.'),
             ),
