@@ -21,7 +21,8 @@ class _OrbitLiveCircleSettingsScreenState extends State<OrbitLiveCircleSettingsS
   late final OrbitCircleRepository _repo=widget.repository ?? OrbitCircleRepository();
   late OrbitCircle _circle=widget.circle;
   Timer? _debounce;
-  bool _saving=false;
+  Future<void>? _saveInFlight;
+  CircleSettings? _pending;
   @override
   void dispose(){_debounce?.cancel();super.dispose();}
 
@@ -48,24 +49,53 @@ class _OrbitLiveCircleSettingsScreenState extends State<OrbitLiveCircleSettingsS
 
   void _onChanged(CircleSettings next) {
     if (!_circle.can('edit')) return;
-    // Never update permission toggles: server sharing is default OFF.
+    _pending = next;
     _debounce?.cancel();
-    _debounce=Timer(const Duration(milliseconds:650),() async {
-      if(_saving) return;
-      final name=next.name.trim();
-      if(name.isEmpty || name.length>80) return;
-      _saving=true;
-      try {
-        final updated=await _repo.update(_circle.id,
-          name:name,color:_hex(next.colorValue));
-        if(mounted) setState(()=>_circle=updated);
-      } catch(e) { _error(e); }
-      finally { _saving=false; }
+    _debounce = Timer(const Duration(milliseconds:650), () {
+      _persist();
     });
+  }
+
+  Future<bool> _persist() async {
+    final inFlight = _saveInFlight;
+    if (inFlight != null) {
+      try { await inFlight; } catch (_) {}
+    }
+    if (!mounted) return false;
+    final next = _pending;
+    if (next == null) return true;
+    final name=next.name.trim();
+    if(name.isEmpty || name.length>80) {
+      _error(const FormatException('Circle name must be between 1 and 80 characters.'));
+      return false;
+    }
+    _pending=null;
+    final task=() async {
+      final updated=await _repo.update(_circle.id,
+        name:name,color:_hex(next.colorValue));
+      if(mounted) setState(()=>_circle=updated);
+    }();
+    _saveInFlight=task;
+    try {
+      await task;
+    } catch(e) {
+      _pending=next;
+      _error(e);
+      return false;
+    } finally {
+      if (identical(_saveInFlight,task)) _saveInFlight=null;
+    }
+    return _pending == null ? true : _persist();
+  }
+
+  Future<void> _back() async {
+    _debounce?.cancel();
+    if(await _persist() && mounted)Navigator.of(context).maybePop();
   }
 
   Future<void> _manage() async {
     _debounce?.cancel();
+    if(!await _persist() || !mounted) return;
     await Navigator.of(context).push<void>(AppFadeSlidePageRoute<void>(
       builder:(_)=>OrbitLiveCircleManageScreen(circle:_circle,repository:_repo)));
     if(!mounted) return;
@@ -78,11 +108,15 @@ class _OrbitLiveCircleSettingsScreenState extends State<OrbitLiveCircleSettingsS
   }
 
   Future<void> _invites() async {
+    _debounce?.cancel();
+    if(!await _persist() || !mounted) return;
     await Navigator.of(context).push<void>(AppFadeSlidePageRoute<void>(
       builder:(_)=>OrbitLiveCircleInvitesScreen(circle:_circle,repository:_repo)));
   }
 
   Future<void> _archive() async {
+    _debounce?.cancel();
+    if(!await _persist() || !mounted)return;
     try {
       await _repo.archive(_circle.id);
       if(mounted) Navigator.of(context).pop();
@@ -100,7 +134,7 @@ class _OrbitLiveCircleSettingsScreenState extends State<OrbitLiveCircleSettingsS
       sharingControlsEnabled:false,
       archiveInsteadOfDelete:true,
       showDestructiveAction:_circle.can('archive'),
-      onBack:()=>Navigator.of(context).maybePop(),
+      onBack:_back,
       onSettingsChanged:_onChanged,
       onDeleteConfirmed:(_)=>_archive(),
       onInviteManagementPressed:_circle.can('invite') ? _invites : null,
