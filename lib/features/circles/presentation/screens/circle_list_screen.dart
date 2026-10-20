@@ -221,8 +221,8 @@ class _CircleListScreenState extends State<CircleListScreen> {
                                 key: CircleListKeys.circle(circle.id),
                                 data: circle,
                                 onTap: () => _openCircle(context, circle),
-                                onFavoritePressed: () =>
-                                    _toggleFavorite(circle.id),
+                                onFavoritePressed: widget.onFavoriteChanged == null
+                                    ? null : () => _toggleFavorite(circle.id),
                               );
                             }, childCount: visible.length),
                           );
