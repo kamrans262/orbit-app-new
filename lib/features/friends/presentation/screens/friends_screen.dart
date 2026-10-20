@@ -173,13 +173,19 @@ class _FriendsScreenState extends State<FriendsScreen> {
               ),
               const SizedBox(height: _headerToListGap),
               if (widget.offlineStale)
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(20, 0, 20, 12),
-                  child: Text(
-                    'OFFLINE • READ ONLY • Saved friends may be out of date. Reconnect to verify.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                  ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                  child: Column(children: [
+                    const Text(
+                      'OFFLINE • READ ONLY • Saved friends may be out of date.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                    ),
+                    TextButton(
+                      onPressed: widget.isLoading ? null : widget.onRetry,
+                      child: const Text('Reconnect and verify'),
+                    ),
+                  ]),
                 ),
               Expanded(
                 child: widget.isLoading && visibleFriends.isEmpty
