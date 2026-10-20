@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../features/home/presentation/screens/home_screen.dart';
+import '../features/friends/presentation/screens/orbit_discover_friends_screen.dart';
 
 import '../core/widgets/app_keyboard_dismiss.dart';
 
@@ -329,11 +330,18 @@ class OrbitApp extends StatelessWidget {
             return MaterialPageRoute<void>(
               settings: settings,
               builder: (context) => InvitePeopleScreen(
-                onInviteByContacts: () {},
-                onInviteByQrCode: () {},
-                onInviteByLink: () {},
-                onInviteByUsername: () {},
+                // M4 discovery requires the just-verified trusted user session.
+                // Friend invites are NOT automatic Circle membership (M5).
+                onInviteByContacts: () => Navigator.of(context).push<void>(
+                  MaterialPageRoute(builder: (_) => const OrbitDiscoverFriendsScreen())),
+                onInviteByQrCode: () => Navigator.of(context).push<void>(
+                  MaterialPageRoute(builder: (_) => const OrbitDiscoverFriendsScreen())),
+                onInviteByLink: () => Navigator.of(context).push<void>(
+                  MaterialPageRoute(builder: (_) => const OrbitDiscoverFriendsScreen())),
+                onInviteByUsername: () => Navigator.of(context).push<void>(
+                  MaterialPageRoute(builder: (_) => const OrbitDiscoverFriendsScreen())),
                 onAddPerson: (_) {},
+                nearbyPeople: const [],
                 onOpenLogin: () {
                   Navigator.of(context).pushNamed(AppRoutes.login);
                 },
