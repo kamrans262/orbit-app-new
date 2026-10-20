@@ -10,13 +10,16 @@ import '../../domain/models/friend_details_models.dart';
 import 'circle_list_screen.dart';
 import 'orbit_live_circle_detail_screen.dart';
 import 'orbit_live_create_circle_screen.dart';
+import 'orbit_circle_qr_scan_screen.dart';
 
 /// Real account-bound M5 Circles surface. No M4 demo Circle identifiers
 /// or fake membership/presence/location values ever reach this screen.
 class OrbitLiveCirclesScreen extends StatefulWidget {
-  const OrbitLiveCirclesScreen({super.key, this.repository, this.store});
+  const OrbitLiveCirclesScreen({super.key, this.repository, this.store,
+    this.initialInviteCode});
   final OrbitCircleRepository? repository;
   final OrbitCircleSnapshotStore? store;
+  final String? initialInviteCode;
 
   @override
   State<OrbitLiveCirclesScreen> createState() => _OrbitLiveCirclesScreenState();
@@ -35,7 +38,12 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _load();
+    _load().then((_) {
+      if (!mounted || widget.initialInviteCode == null) return;
+      if (!_offline && !_busy && _error == null) {
+        _join(widget.initialInviteCode!);
+      }
+    });
   }
 
   @override
@@ -151,6 +159,16 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
     }
   }
 
+  Future<void> _scan() async {
+    if(_offline || _busy) return;
+    final code = await Navigator.of(context).push<String>(
+      AppFadeSlidePageRoute<String>(
+        builder:(_) => OrbitCircleQrScanScreen(repository:_repo),
+      ),
+    );
+    if(mounted && code != null) await _join(code);
+  }
+
   Future<void> _incoming() async {
     if (_offline || _busy) return;
     try {
@@ -211,13 +229,12 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
           style: TextStyle(fontFamily: AppTypography.fontFamily,fontSize:12)),
       ),
     if (!_offline && !_busy)
-      Align(alignment: Alignment.centerRight,
-        child: TextButton.icon(
-          onPressed: _incoming,
-          icon: const Icon(Icons.mail_outline),
-          label: const Text('Invitations'),
-        ),
-    ),
+      Row(mainAxisAlignment:MainAxisAlignment.end,children:[
+        TextButton.icon(onPressed:_scan,
+          icon:const Icon(Icons.qr_code_scanner),label:const Text('Scan QR')),
+        TextButton.icon(onPressed:_incoming,
+          icon:const Icon(Icons.mail_outline),label:const Text('Invitations')),
+      ]),
     Expanded(child: CircleListScreen(
       circles: _circles.map((circle) => CircleGroupData(
         id: circle.id, name: circle.name,
@@ -230,7 +247,7 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
       onRetry: _load,
       onBack: () => Navigator.of(context).maybePop(),
       // Server does not support favorites; do not fabricate persistent favorite.
-      onFavoriteChanged: (_) {},
+      onFavoriteChanged: null,
       onCreatePressed: _offline || _busy ? () => _notify('Reconnect to create a Circle.') : _create,
       onJoinRequested: _offline || _busy ? (_) => _notify('Reconnect to join a Circle.') : _join,
       onCirclePressed: _offline ? (_) => _notify('Reconnect to view Circle members.')
