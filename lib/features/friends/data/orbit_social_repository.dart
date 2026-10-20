@@ -114,17 +114,20 @@ class OrbitSocialRepository {
     await _request('POST', '/friends/requests/${Uri.encodeComponent(requestId)}/$action');
   }
 
-  Future<void> removeFriend(String id) async =>
-      _request('DELETE', '/friends/${Uri.encodeComponent(id)}');
+  Future<void> removeFriend(String id) async {
+    await _request('DELETE', '/friends/${Uri.encodeComponent(id)}');
+  }
 
   Future<OrbitFriendPage<OrbitPerson>> blocks({int page = 1}) async =>
       _page(await _request('GET', '/me/blocks?page=$page'), OrbitPerson.fromJson);
 
-  Future<void> block(String id) async =>
-      _request('POST', '/me/blocks', body: {'user_id': id});
+  Future<void> block(String id) async {
+    await _request('POST', '/me/blocks', body: {'user_id': id});
+  }
 
-  Future<void> unblock(String id) async =>
-      _request('DELETE', '/me/blocks/${Uri.encodeComponent(id)}');
+  Future<void> unblock(String id) async {
+    await _request('DELETE', '/me/blocks/${Uri.encodeComponent(id)}');
+  }
 
   Future<Map<String, dynamic>> discoverySettings() => _request('GET', '/me/social/discovery');
   Future<Map<String, dynamic>> updateDiscovery(Map<String, Object?> values) =>
