@@ -29,6 +29,14 @@ Source: Orbit M4 Deep Requirements Audit (2026-10-20), based on PRD, TRD, flows,
 6. Do not declare M4 accepted until 35 audit scenarios have been exercised including two real accounts, pagination, profile privacy, mutual block, pending session/deletion, invite expiry, error rollback and separate device account-switch; no destructive testing on Hostinger.
 7. Do **not** enable erasure processing; `ORBIT_M3_ERASURE_EXECUTION_ENABLED=false` remains the server gate. Backend review retains M3 deletion checks.
 
+## Native integration development status (October 20 verification)
+
+- A native single-contact picker, QR scanning/generation, and Android intent / iOS universal-link handlers are present in the M4 branch. Native camera/contact permissions must be exercised on both operating systems.
+- Android and iOS HTTPS app links require domain association verification from the Hostinger domain; deployment of the well-known manifests on the backend is a separate release step, **not evidence that app links work before deployment**.
+- The owner-scoped, short-lived, encrypted Friends snapshot is read-only and deliberately has no protected relationship entitlements. It is never valid authentication and cannot bypass M3's offline-profile-only session-restoration gate. Other-device block revocation cannot be guaranteed during a network outage; this remains an explicit acceptance/security constraint.
+- M4 revision polling provides foreground relationship refresh; a future authenticated realtime delivery worker and transport-subscription revocation are separate from polling and must not be represented as delivered.
+- All 35 audit acceptance scenarios still require closure or explicit downstream-module classification. Passing static analysis, widget tests, and Android CI build is not live two-account acceptance.
+
 ## Manual acceptance sequence after an approved backend deploy
 
 1. Create two disposable test accounts A/B on trusted devices.
