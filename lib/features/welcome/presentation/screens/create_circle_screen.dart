@@ -22,11 +22,13 @@ abstract final class CreateCircleKeys {
 class CreateCircleScreen extends StatefulWidget {
   const CreateCircleScreen({
     required this.onNext,
+    this.onCreateRequested,
     this.onSkip,
     super.key,
   });
 
   final VoidCallback onNext;
+  final Future<void> Function(String name, String color, String icon)? onCreateRequested;
   final VoidCallback? onSkip;
 
   @override
@@ -42,6 +44,7 @@ class _CreateCircleScreenState extends State<CreateCircleScreen> {
   late final TextEditingController _nameController;
   int _selectedColorIndex = 0;
   int _selectedIconIndex = 0;
+  bool _saving = false;
 
   static const List<_CircleColorOption> _colors = <_CircleColorOption>[
     _CircleColorOption(border: Color(0xFFF43F8E), fill: Color(0xFFEE8EB8)),
@@ -65,13 +68,39 @@ class _CreateCircleScreenState extends State<CreateCircleScreen> {
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(text: 'Best Friends');
+    _nameController = TextEditingController(text: widget.onCreateRequested == null ? 'Best Friends' : '');
   }
 
   @override
   void dispose() {
     _nameController.dispose();
     super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final name = _nameController.text.trim();
+    if (_saving) return;
+    if (name.isEmpty || name.length > 80) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Enter a Circle name between 1 and 80 characters.')));
+      return;
+    }
+    final save = widget.onCreateRequested;
+    if (save == null) { widget.onNext(); return; }
+    setState(() => _saving = true);
+    try {
+      final color = _colors[_selectedColorIndex].fill;
+      final hex = '#${(color.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}';
+      const keys = <String>['home','person','star','music','location','sunny'];
+      await save(name,hex,keys[_selectedIconIndex]);
+      if (mounted) widget.onNext();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Unable to create Circle: $error')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override
@@ -171,7 +200,7 @@ class _CreateCircleScreenState extends State<CreateCircleScreen> {
                       child: WelcomeActionPanel(
                         primaryKey: CreateCircleKeys.nextButton,
                         primaryLabel: 'Create Circle',
-                        onPrimaryPressed: widget.onNext,
+                        onPrimaryPressed: _saving ? null : _submit,
                         secondaryKey: widget.onSkip == null
                             ? null
                             : CreateCircleKeys.skipButton,
