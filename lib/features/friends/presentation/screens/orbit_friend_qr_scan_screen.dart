@@ -61,7 +61,7 @@ class _OrbitFriendQrScanScreenState extends State<OrbitFriendQrScanScreen> {
             errorBuilder: (context, error) => Center(
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: Text('Camera is unavailable. You can enter the invite code manually.\n\u0024{error.errorCode}',
+                child: Text('Camera access is unavailable. Enter the friend invitation code manually instead.',
                   textAlign: TextAlign.center),
               ),
             ),
