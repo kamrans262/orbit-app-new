@@ -59,3 +59,10 @@ jobs:
         run: python3 -c "import plistlib; plistlib.load(open('ios/Runner/Info.plist','rb'))"
       - name: Android debug build with native M4 plugins
         run: flutter build apk --debug
+      - name: Save Android debug build for M4 device acceptance
+        uses: actions/upload-artifact@v4
+        with:
+          name: orbit-m4-debug-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
