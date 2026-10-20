@@ -23,8 +23,12 @@ jobs:
         run: flutter pub get
       - name: Analyze M4 Flutter implementation
         run: |
-          dart analyze lib/features/friends lib/app/app.dart lib/features/auth/data/orbit_identity_client.dart lib/features/home/presentation/widgets/favorite_person_tile.dart lib/features/profile/presentation/screens/profile_settings_screen.dart lib/features/profile/presentation/screens/privacy_setting_screen.dart lib/features/profile/presentation/screens/blocked_users_screen.dart lib/features/profile/presentation/screens/orbit_live_blocked_users_screen.dart lib/features/welcome/presentation/screens/invite_people_screen.dart test/features/friends
+          dart analyze lib/features/friends lib/core/navigation/orbit_invite_link_runtime.dart lib/app/app.dart lib/features/auth/data/orbit_identity_client.dart lib/features/home/presentation/widgets/favorite_person_tile.dart lib/features/profile/presentation/screens/profile_settings_screen.dart lib/features/profile/presentation/screens/privacy_setting_screen.dart lib/features/profile/presentation/screens/blocked_users_screen.dart lib/features/profile/presentation/screens/orbit_live_blocked_users_screen.dart lib/features/welcome/presentation/screens/invite_people_screen.dart test/features/friends
       - name: M4 repository and widgets
         run: flutter test test/features/friends/
       - name: M3 profile/offline regression
         run: flutter test test/features/auth/orbit_m3_offline_profile_test.dart
+      - name: Validate iOS plist XML structure
+        run: python3 -c "import plistlib; plistlib.load(open('ios/Runner/Info.plist','rb'))"
+      - name: Android debug build with native M4 plugins
+        run: flutter build apk --debug
