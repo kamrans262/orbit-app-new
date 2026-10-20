@@ -33,6 +33,7 @@ class OrbitIdentityClient {
   static const _userIdKey = 'orbit.identity.user_id.v1';
   static const _profileCacheKey = 'orbit.profile.encrypted_cache.v1';
   static const _friendsCacheKey = 'orbit.social.friends_snapshot.v1';
+  static const _circlesCacheKey = 'orbit.circles.read_only_snapshot.v1';
 
   final http.Client _http;
   final FlutterSecureStorage _storage;
@@ -172,6 +173,7 @@ class OrbitIdentityClient {
       if (lastUser != nextUser) {
         await _storage.delete(key: _profileCacheKey);
         await _storage.delete(key: _friendsCacheKey);
+    await _storage.delete(key: _circlesCacheKey);
       }
       await _storage.write(key: _userIdKey, value: nextUser);
     }
@@ -423,6 +425,21 @@ class OrbitIdentityClient {
   }
 
   Future<void> clearFriendsSnapshot() => _storage.delete(key: _friendsCacheKey);
+
+  /// M5 cached only sanitized Circle names and IDs, never membership lists,
+  /// privacy grants, access tokens, location or invitation credentials.
+  Future<void> storeCirclesSnapshot(String owner, String payload) async {
+    if (await currentLocalSocialOwner() != owner) return;
+    await _storage.write(key: _circlesCacheKey, value: payload);
+  }
+
+  Future<String?> readCirclesSnapshot() async {
+    if (await currentLocalSocialOwner() == null) return null;
+    return _storage.read(key: _circlesCacheKey);
+  }
+
+  Future<void> clearCirclesSnapshot() =>
+      _storage.delete(key: _circlesCacheKey);
 
   Future<Map<String, dynamic>> socialRequest(String method, String path,
       {Map<String, Object?>? body}) {
