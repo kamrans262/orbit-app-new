@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/m4-social-graph-flutter
+      - feature/m5-circles-flutter-integration
   pull_request:
     branches:
       - feature/m3-completion-offline
@@ -48,11 +49,13 @@ jobs:
             if [ "${attempt}" -eq 3 ]; then exit 1; fi
             sleep 6
           done
-      - name: Analyze M4 Flutter implementation
+      - name: Analyze M4 and M5 Flutter implementations
         run: |
-          dart analyze lib/features/friends lib/core/navigation/orbit_invite_link_runtime.dart lib/app/app.dart lib/features/auth/data/orbit_identity_client.dart lib/features/home/presentation/widgets/favorite_person_tile.dart lib/features/profile/presentation/screens/profile_settings_screen.dart lib/features/profile/presentation/screens/privacy_setting_screen.dart lib/features/profile/presentation/screens/blocked_users_screen.dart lib/features/profile/presentation/screens/orbit_live_blocked_users_screen.dart lib/features/welcome/presentation/screens/invite_people_screen.dart test/features/friends
+          dart analyze lib/features/circles lib/features/welcome/presentation/screens/create_circle_screen.dart lib/features/welcome/presentation/screens/circle_permission_screen.dart lib/features/friends lib/core/navigation/orbit_invite_link_runtime.dart lib/app/app.dart lib/features/auth/data/orbit_identity_client.dart lib/features/home/presentation/widgets/favorite_person_tile.dart lib/features/profile/presentation/screens/profile_settings_screen.dart lib/features/profile/presentation/screens/privacy_setting_screen.dart lib/features/profile/presentation/screens/blocked_users_screen.dart lib/features/profile/presentation/screens/orbit_live_blocked_users_screen.dart lib/features/welcome/presentation/screens/invite_people_screen.dart test/features/friends
       - name: M4 repository and widgets
         run: flutter test test/features/friends/
+      - name: M5 Circle repository and widgets
+        run: flutter test test/features/circles/
       - name: M3 profile/offline regression
         run: flutter test test/features/auth/orbit_m3_offline_profile_test.dart
       - name: Validate iOS plist XML structure
@@ -62,7 +65,7 @@ jobs:
       - name: Save Android debug build for M4 device acceptance
         uses: actions/upload-artifact@v4
         with:
-          name: orbit-m4-debug-apk
+          name: orbit-m5-debug-apk
           path: build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error
           retention-days: 7
