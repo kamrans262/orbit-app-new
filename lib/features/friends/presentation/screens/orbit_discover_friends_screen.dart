@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
@@ -122,7 +123,33 @@ class _OrbitDiscoverFriendsScreenState extends State<OrbitDiscoverFriendsScreen>
     try {
       final data = await _repo.createInvite();
       final url = data['invite_url'] as String?;
-      if (url != null && mounted) await Share.share(url, subject: 'Orbit friend invitation');
+      if (url == null || !mounted) return;
+      await showModalBottomSheet<void>(
+        context: context,
+        backgroundColor: Colors.white,
+        isScrollControlled: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+        builder: (ctx) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Text('Friend Invitation', style: TextStyle(
+                fontSize: 20, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 12),
+              const Text('Scan this QR code or share the private link. It can only be redeemed once and expires in seven days.'),
+              const SizedBox(height: 20),
+              Center(child: QrImageView(data: url, version: QrVersions.auto,
+                size: 220, backgroundColor: Colors.white)),
+              const SizedBox(height: 12),
+              TextButton.icon(
+                onPressed: () async => Share.share(url, subject: 'Orbit friend invitation'),
+                icon: const Icon(Icons.ios_share), label: const Text('Share invitation')),
+              const SizedBox(height: 8),
+            ]),
+          ),
+        ),
+      );
     } catch (_) {
       if (mounted) _notice('Could not create an invitation. Try again.');
     }
