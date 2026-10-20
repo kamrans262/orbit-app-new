@@ -48,6 +48,14 @@ class OrbitInviteLinkRuntime extends NavigatorObserver {
     if (_route == AppRoutes.home) _dispatch();
   }
 
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    // A valid link may arrive while another page is above Home. Re-evaluate
+    // it on return; never redeem or open private data without auth.
+    _route = previousRoute?.settings.name;
+    if (_route == AppRoutes.home) _dispatch();
+  }
+
   void _dispatch() {
     if (_pending == null || _opening || _route != AppRoutes.home) return;
     _opening = true;
