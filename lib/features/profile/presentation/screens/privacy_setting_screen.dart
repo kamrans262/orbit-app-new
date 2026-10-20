@@ -8,7 +8,7 @@ import '../../../../core/widgets/app_screen_header.dart';
 import '../../../circles/presentation/widgets/circle_setting_toggle.dart';
 import '../../domain/models/privacy_settings.dart';
 import '../widgets/orbit_dropdown_field.dart';
-import 'blocked_users_screen.dart';
+import 'orbit_live_blocked_users_screen.dart';
 import '../../../../core/popups/orbit_popup_variants.dart';
 
 abstract final class PrivacySettingKeys {
@@ -311,7 +311,7 @@ class _PrivacySettingScreenState extends State<PrivacySettingScreen> {
     }
 
     Navigator.of(context).push<void>(
-      AppFadeSlidePageRoute<void>(builder: (_) => const BlockUsersScreen()),
+      AppFadeSlidePageRoute<void>(builder: (_) => const OrbitLiveBlockedUsersScreen()),
     );
   }
 }
