@@ -32,6 +32,7 @@ class FriendDetailsScreen extends StatefulWidget {
     required this.groups,
     required this.onBack,
     required this.onAddMember,
+    this.liveInviteMode = false,
     this.initialSegment = FriendDetailsSegment.circle,
     this.viewState = FriendDetailsViewState.loaded,
     this.errorMessage = 'Something went wrong. Please try again.',
@@ -140,6 +141,7 @@ class FriendDetailsScreen extends StatefulWidget {
   final List<CircleGroupData> groups;
   final VoidCallback onBack;
   final VoidCallback onAddMember;
+  final bool liveInviteMode;
   final FriendDetailsSegment initialSegment;
   final FriendDetailsViewState viewState;
   final String errorMessage;
@@ -227,7 +229,7 @@ class _FriendDetailsScreenState extends State<FriendDetailsScreen> {
   void _openInvitePeople() {
     // Production M5 owns the invitation flow; never open demo invite UI.
     widget.onAddMember();
-    if (widget.onAddMember != null) return;
+    if (widget.liveInviteMode) return;
     Navigator.of(context).push<void>(
       AppFadeSlidePageRoute<void>(
         builder: (_) => InvitePeopleScreen(
