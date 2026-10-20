@@ -397,6 +397,17 @@ class OrbitIdentityClient {
     return Map<String, dynamic>.from(result['data'] as Map);
   }
 
+  /// All M4 social requests share the verified Orbit bearer token, refresh,
+  /// trust/deletion denial and 20-second timeout; no second HTTP stack.
+  Future<Map<String, dynamic>> socialRequest(String method, String path,
+      {Map<String, Object?>? body}) {
+    if (!path.startsWith('/') || path.startsWith('//') ||
+        path.contains('..') || path.contains('://')) {
+      throw ArgumentError.value(path, 'path', 'Unsafe API path');
+    }
+    return _send(method, path, body: body, protected: true);
+  }
+
   Future<Map<String, dynamic>> currentUser() =>
       _send('GET', '/me', protected: true);
 
