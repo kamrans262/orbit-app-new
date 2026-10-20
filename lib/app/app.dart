@@ -338,6 +338,7 @@ class _OrbitAppState extends State<OrbitApp> {
             return MaterialPageRoute<void>(
               settings: settings,
               builder: (context) => CirclePermissionScreen(
+                circleAlreadyCreated: createdCircle != null,
                 onBack: () => Navigator.of(context).pop(),
                 onCreateCircle: () {
                   if (createdCircle == null) {
