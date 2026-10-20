@@ -48,7 +48,7 @@ class _OrbitSessionsScreenState extends State<OrbitSessionsScreen> {
         await OrbitIdentityClient.instance.clearSession();
         if (!mounted) return;
         Navigator.of(context, rootNavigator: true)
-            .pushNamedAndRemoveUntil(AppRoutes.welcome, (_) => false);
+            .pushNamedAndRemoveUntil(AppRoutes.login, (_) => false);
         return;
       }
       _reload();
@@ -80,7 +80,7 @@ class _OrbitSessionsScreenState extends State<OrbitSessionsScreen> {
       await OrbitIdentityClient.instance.signOutAll();
       if (!mounted) return;
       Navigator.of(context, rootNavigator: true)
-          .pushNamedAndRemoveUntil(AppRoutes.welcome, (_) => false);
+          .pushNamedAndRemoveUntil(AppRoutes.login, (_) => false);
     } catch (_) {
       if (mounted) setState(() => _error = 'Could not revoke all sessions. Try again.');
     } finally {

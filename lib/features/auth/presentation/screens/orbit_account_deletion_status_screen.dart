@@ -44,7 +44,7 @@ class _OrbitAccountDeletionStatusScreenState
       await _identity.clearSession();
     }
     if (!mounted) return;
-    Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.welcome, (_) => false);
+    Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.login, (_) => false);
   }
 
   @override
