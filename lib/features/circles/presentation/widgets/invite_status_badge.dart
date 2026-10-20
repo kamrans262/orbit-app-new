@@ -13,7 +13,10 @@ class InviteStatusBadge extends StatelessWidget {
     final palette = _paletteFor(status);
     return Container(
       constraints: const BoxConstraints(minHeight: 35),
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+      padding: EdgeInsets.symmetric(
+        horizontal: MediaQuery.sizeOf(context).width < 340 ? 10 : 18,
+        vertical: 9,
+      ),
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: palette.background,
