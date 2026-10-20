@@ -36,6 +36,7 @@ class DeviceRegistrationScreen extends StatefulWidget {
     this.onCheckApproval,
     this.onRequestRecoveryCode,
     this.onCompleteRecovery,
+    this.onSignInAgain,
     this.deviceName = 'This device',
     super.key,
   });
@@ -46,6 +47,7 @@ class DeviceRegistrationScreen extends StatefulWidget {
   final Future<bool> Function()? onCheckApproval;
   final Future<void> Function(String recipient, String password)? onRequestRecoveryCode;
   final Future<void> Function(String recipient, String password, String code)? onCompleteRecovery;
+  final Future<void> Function()? onSignInAgain;
   final String deviceName;
 
   @override
@@ -332,6 +334,13 @@ class _DeviceRegistrationScreenState extends State<DeviceRegistrationScreen> {
                                 }),
                                 child: const Text('Cancel'),
                               ),
+                              if (widget.onSignInAgain != null)
+                                TextButton(
+                                  onPressed: _registering ? null : () async {
+                                    await widget.onSignInAgain!();
+                                  },
+                                  child: const Text('Sign in again'),
+                                ),
                             ],
                           ),
                         ),
