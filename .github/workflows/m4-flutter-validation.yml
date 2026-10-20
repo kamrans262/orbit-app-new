@@ -1,0 +1,30 @@
+name: Orbit M4 Flutter validation
+
+on:
+  push:
+    branches:
+      - feature/m4-social-graph-flutter
+  pull_request:
+    branches:
+      - feature/m3-completion-offline
+  workflow_dispatch:
+
+jobs:
+  m4-flutter:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Resolve dependencies
+        run: flutter pub get
+      - name: Analyze M4 Flutter implementation
+        run: |
+          dart analyze lib/features/friends lib/features/profile/presentation/screens/blocked_users_screen.dart lib/features/profile/presentation/screens/orbit_live_blocked_users_screen.dart lib/features/welcome/presentation/screens/invite_people_screen.dart test/features/friends
+      - name: M4 repository and widgets
+        run: flutter test test/features/friends/orbit_m4_social_repository_test.dart
+      - name: M3 profile/offline regression
+        run: flutter test test/features/auth/orbit_m3_offline_profile_test.dart
