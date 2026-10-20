@@ -195,10 +195,10 @@ class _CircleInviteManagementScreenState
     return ListView.separated(
       key: CircleInviteManagementKeys.list(tab),
       physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(
-        _horizontalPadding,
+      padding: EdgeInsets.fromLTRB(
+        MediaQuery.sizeOf(context).width < 340 ? 12 : _horizontalPadding,
         0,
-        _horizontalPadding,
+        MediaQuery.sizeOf(context).width < 340 ? 12 : _horizontalPadding,
         _horizontalPadding,
       ),
       itemCount: invites.length,
