@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_ui/features/friends/data/orbit_social_repository.dart';
+import 'package:orbit_ui/features/friends/data/orbit_friend_snapshot.dart';
+import 'package:orbit_ui/features/auth/data/orbit_identity_client.dart';
+import 'package:orbit_ui/features/friends/presentation/screens/orbit_person_screen.dart';
 import 'package:orbit_ui/features/friends/presentation/screens/orbit_live_friends_screen.dart';
 import 'package:orbit_ui/features/profile/presentation/screens/orbit_live_blocked_users_screen.dart';
 
@@ -34,6 +37,53 @@ class _FakeSocial extends OrbitSocialRepository {
   }
 }
 
+
+class _RequestSocial extends OrbitSocialRepository {
+  String? lastDirection;
+
+  @override
+  Future<OrbitPerson> preview(String id) async =>
+      const OrbitPerson(
+        id: 'person-01', name: 'Ayesha', username: 'ayesha',
+        relationship: 'outgoing_pending',
+      );
+
+  @override
+  Future<OrbitFriendPage<OrbitFriendRequest>> requests(
+      String direction, {int page = 1}) async {
+    lastDirection = direction;
+    return const OrbitFriendPage<OrbitFriendRequest>(
+      page: 1, hasMore: false, items: <OrbitFriendRequest>[],
+    );
+  }
+}
+
+class _OfflineSocial extends _FakeSocial {
+  bool disconnected = true;
+
+  @override
+  Future<OrbitFriendPage<OrbitPerson>> friends({int page = 1}) async {
+    if (disconnected) throw OrbitIdentityException('Connection unavailable.');
+    return super.friends(page: page);
+  }
+}
+
+class _MemoryFriendSnapshot extends OrbitFriendSnapshotStore {
+  @override
+  Future<OrbitFriendSnapshot?> read() async => OrbitFriendSnapshot(
+    savedAt: DateTime.now(),
+    people: const <OrbitPerson>[
+      OrbitPerson(id: 'cached-1', name: 'Saved Friend', username: 'saved'),
+    ],
+  );
+
+  @override
+  Future<void> save(List<OrbitPerson> people) async {}
+
+  @override
+  Future<void> clear() async {}
+}
+
 void main() {
   testWidgets('Live Friends shows real records and never demo people',
       (tester) async {
@@ -46,6 +96,39 @@ void main() {
     expect(find.byTooltip('Find friends'),findsOneWidget);
     expect(find.byTooltip('Friend requests'),findsOneWidget);
     expect(repo.friendReads,1);
+  });
+
+
+  testWidgets('Person Detail pending request opens the authoritative Sent tab',
+      (tester) async {
+    final repo = _RequestSocial();
+    await tester.pumpWidget(MaterialApp(home: OrbitPersonScreen(
+      person: const OrbitPerson(id: 'person-01', name: 'Ayesha', username: 'ayesha'),
+      repository: repo,
+    )));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Manage sent request'));
+    await tester.tap(find.text('Manage sent request'));
+    await tester.pumpAndSettle();
+    expect(find.text('Friend Requests'), findsOneWidget);
+    expect(repo.lastDirection, 'outgoing');
+  });
+
+  testWidgets('Offline Friends remains read-only and refreshes on resume',
+      (tester) async {
+    final repo = _OfflineSocial();
+    await tester.pumpWidget(MaterialApp(home: OrbitLiveFriendsScreen(
+      repository: repo, snapshotStore: _MemoryFriendSnapshot(),
+    )));
+    await tester.pumpAndSettle();
+    expect(find.text('Saved Friend'), findsOneWidget);
+    expect(find.textContaining('OFFLINE'), findsOneWidget);
+    expect(find.byTooltip('Find friends'), findsNothing);
+    repo.disconnected = false;
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(find.text('Ayesha'), findsOneWidget);
+    expect(find.textContaining('OFFLINE'), findsNothing);
   });
 
   testWidgets('Live blocking waits for server and clears account on success',
