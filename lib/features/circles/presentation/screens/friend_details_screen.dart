@@ -225,7 +225,9 @@ class _FriendDetailsScreenState extends State<FriendDetailsScreen> {
   }
 
   void _openInvitePeople() {
+    // Production M5 owns the invitation flow; never open demo invite UI.
     widget.onAddMember();
+    if (widget.onAddMember != null) return;
     Navigator.of(context).push<void>(
       AppFadeSlidePageRoute<void>(
         builder: (_) => InvitePeopleScreen(
