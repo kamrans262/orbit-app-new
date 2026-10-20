@@ -33,6 +33,7 @@ class FriendDetailsScreen extends StatefulWidget {
     required this.onBack,
     required this.onAddMember,
     this.liveInviteMode = false,
+    this.showAddMemberButton = true,
     this.initialSegment = FriendDetailsSegment.circle,
     this.viewState = FriendDetailsViewState.loaded,
     this.errorMessage = 'Something went wrong. Please try again.',
@@ -142,6 +143,7 @@ class FriendDetailsScreen extends StatefulWidget {
   final VoidCallback onBack;
   final VoidCallback onAddMember;
   final bool liveInviteMode;
+  final bool showAddMemberButton;
   final FriendDetailsSegment initialSegment;
   final FriendDetailsViewState viewState;
   final String errorMessage;
@@ -279,7 +281,7 @@ class _FriendDetailsScreenState extends State<FriendDetailsScreen> {
             ),
           ),
           const SizedBox(width: 10),
-          AppCircularIconButton(
+          if (widget.showAddMemberButton) AppCircularIconButton(
             key: FriendDetailsKeys.addMemberButton,
             semanticLabel: 'Add member',
             onPressed: _openInvitePeople,
