@@ -134,10 +134,61 @@ class OrbitSocialRepository {
       _request('PATCH', '/me/social/discovery', body: values);
 
   Future<Map<String, dynamic>> createInvite() => _request('POST', '/friends/invites');
-  Future<void> redeemInvite(String code) async =>
-      _request('POST', '/friends/invites/redeem', body: {'invite_code': code.trim()});
-  Future<Map<String, dynamic>> previewInvite(String code) =>
-      _request('POST', '/friends/invites/preview', body: {'invite_code': code.trim()});
+  /// Only redeem codes hosted by our official Orbit invitation origin.
+  /// The user may paste either the private code or the shared invite URL.
+  String invitationCode(String input) {
+    final value = input.trim();
+    if (RegExp(r'^[A-Za-z0-9_-]{43}
+
+  /// The backend does not read the device's address book. The user must
+  /// explicitly select/provide contacts; never upload without consent.
+  Future<List<OrbitPerson>> matchContacts(List<Map<String, String>> contacts) async {
+    final data = await _request('POST', '/people/contacts/match', body: {
+      'consent_confirmed': true,
+      'contacts': contacts.map((c) => <String, Object?>{
+        'type': c['type'], 'value': c['value'],
+      }).toList(),
+    });
+    final rows = data['items'] as List<dynamic>? ?? [];
+    return rows.map((r) => OrbitPerson.fromJson(
+      Map<String, dynamic>.from((r as Map)['person'] as Map))).toList(growable: false);
+  }
+}
+).hasMatch(value)) return value;
+    final uri = Uri.tryParse(value);
+    if (uri == null || uri.scheme != 'https' ||
+        uri.host != 'indigo-caribou-178970.hostingersite.com' ||
+        uri.pathSegments.length != 3 || uri.pathSegments[0] != 'invite' ||
+        uri.pathSegments[1] != 'friend' ||
+        !RegExp(r'^[A-Za-z0-9_-]{43}
+
+  /// The backend does not read the device's address book. The user must
+  /// explicitly select/provide contacts; never upload without consent.
+  Future<List<OrbitPerson>> matchContacts(List<Map<String, String>> contacts) async {
+    final data = await _request('POST', '/people/contacts/match', body: {
+      'consent_confirmed': true,
+      'contacts': contacts.map((c) => <String, Object?>{
+        'type': c['type'], 'value': c['value'],
+      }).toList(),
+    });
+    final rows = data['items'] as List<dynamic>? ?? [];
+    return rows.map((r) => OrbitPerson.fromJson(
+      Map<String, dynamic>.from((r as Map)['person'] as Map))).toList(growable: false);
+  }
+}
+).hasMatch(uri.pathSegments[2])) {
+      throw const FormatException('Invalid Orbit invitation code.');
+    }
+    return uri.pathSegments[2];
+  }
+
+  Future<void> redeemInvite(String input) async {
+    await _request('POST', '/friends/invites/redeem',
+        body: {'invite_code': invitationCode(input)});
+  }
+  Future<Map<String, dynamic>> previewInvite(String input) =>
+      _request('POST', '/friends/invites/preview',
+          body: {'invite_code': invitationCode(input)});
 
   /// The backend does not read the device's address book. The user must
   /// explicitly select/provide contacts; never upload without consent.
