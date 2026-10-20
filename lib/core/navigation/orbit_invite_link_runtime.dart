@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import '../../app/routing/app_routes.dart';
 import '../../features/auth/data/orbit_identity_client.dart';
 import '../../features/friends/data/orbit_social_repository.dart';
+import '../../features/circles/data/orbit_circle_repository.dart';
+import '../../features/circles/presentation/screens/orbit_live_circles_screen.dart';
 import '../../features/friends/presentation/screens/orbit_discover_friends_screen.dart';
 import 'app_fade_slide_page_route.dart';
 
@@ -18,6 +20,7 @@ class OrbitInviteLinkRuntime extends NavigatorObserver {
   final navigatorKey = GlobalKey<NavigatorState>();
   StreamSubscription<Uri>? _links;
   String? _pending;
+  String? _pendingCircle;
   bool _opening = false;
   String? _route;
 
@@ -30,6 +33,16 @@ class OrbitInviteLinkRuntime extends NavigatorObserver {
     try {
       final code = OrbitSocialRepository().invitationCode(url.toString());
       _pending = code;
+      _pendingCircle = null;
+      _dispatch();
+      return;
+    } on FormatException {
+      // A Circle URL has a different route and a separate strict code shape.
+    }
+    try {
+      final code = OrbitCircleRepository().validateCode(url.toString());
+      _pendingCircle = code;
+      _pending = null;
       _dispatch();
     } on FormatException {
       // Never open arbitrary URLs or leak their payload to telemetry.
@@ -57,7 +70,8 @@ class OrbitInviteLinkRuntime extends NavigatorObserver {
   }
 
   void _dispatch() {
-    if (_pending == null || _opening || _route != AppRoutes.home) return;
+    if ((_pending == null && _pendingCircle == null) ||
+        _opening || _route != AppRoutes.home) return;
     _opening = true;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       try {
@@ -66,11 +80,19 @@ class OrbitInviteLinkRuntime extends NavigatorObserver {
         if (state != OrbitRestoreState.authenticated) return;
         final nav = navigatorKey.currentState;
         final code = _pending;
-        if (nav == null || code == null || !nav.mounted) return;
+        final circleCode = _pendingCircle;
+        if (nav == null || !nav.mounted || (code == null && circleCode == null)) return;
         _pending = null;
-        await nav.push<void>(AppFadeSlidePageRoute<void>(
-          builder: (_) => OrbitDiscoverFriendsScreen(initialInviteCode: code),
-        ));
+        _pendingCircle = null;
+        if (circleCode != null) {
+          await nav.push<void>(AppFadeSlidePageRoute<void>(
+            builder: (_) => OrbitLiveCirclesScreen(initialInviteCode: circleCode),
+          ));
+        } else if (code != null) {
+          await nav.push<void>(AppFadeSlidePageRoute<void>(
+            builder: (_) => OrbitDiscoverFriendsScreen(initialInviteCode: code),
+          ));
+        }
       } catch (_) {
         // Keep the link for manual retry. Never navigate through rejected auth.
       } finally {
