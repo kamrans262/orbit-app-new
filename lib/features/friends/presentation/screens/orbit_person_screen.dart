@@ -6,6 +6,7 @@ import '../../../../core/widgets/app_action_row.dart';
 import '../../../../core/widgets/app_screen_header.dart';
 import '../../../home/presentation/widgets/home_media_image.dart';
 import '../../data/orbit_social_repository.dart';
+import '../widgets/orbit_social_confirmation.dart';
 
 /// Authenticated person detail. A friend is never represented as a Circle.
 /// Location, online status, photo and private bio are not part of M4 API.
@@ -44,24 +45,10 @@ class _OrbitPersonScreenState extends State<OrbitPersonScreen> {
     }
   }
 
-  Future<bool> _confirm(String title, String body, String action) async {
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
-        title: Text(title, style: const TextStyle(fontFamily: AppTypography.fontFamily)),
-        content: Text(body, style: const TextStyle(fontFamily: AppTypography.fontFamily)),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text(action, style: const TextStyle(color: Color(0xFFEF4444)))),
-        ],
-      ),
-    );
-    return result ?? false;
-  }
+  Future<bool> _confirm(String title, String body, String action) =>
+      confirmOrbitSocialAction(context,
+        title: title, description: body,
+        confirmation: action, destructive: true);
 
   Future<void> _mutate(Future<void> Function() action,
       {required String success}) async {
