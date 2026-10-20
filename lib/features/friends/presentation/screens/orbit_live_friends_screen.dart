@@ -33,7 +33,15 @@ class _OrbitLiveFriendsScreenState extends State<OrbitLiveFriendsScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _load(reset: true);
-    _revisionTimer = Timer.periodic(const Duration(seconds: 25), (_) => _checkRevision());
+    _revisionTimer = Timer.periodic(const Duration(seconds: 25), (_) {
+      // A stale offline view must not remain stuck after connectivity returns.
+      // Refresh via authenticated server read; never replay offline mutations.
+      if (_offline) {
+        _load(reset: true);
+      } else {
+        _checkRevision();
+      }
+    });
   }
   @override
   void dispose() {
@@ -44,7 +52,13 @@ class _OrbitLiveFriendsScreenState extends State<OrbitLiveFriendsScreen>
   }
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _checkRevision();
+    if (state == AppLifecycleState.resumed) {
+      if (_offline) {
+        _load(reset: true);
+      } else {
+        _checkRevision();
+      }
+    }
   }
   bool _outage(Object e) => e is OrbitIdentityException &&
       (e.statusCode == null || e.statusCode! >= 500);
