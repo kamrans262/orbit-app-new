@@ -334,8 +334,11 @@ class OrbitApp extends StatelessWidget {
                 // Friend invites are NOT automatic Circle membership (M5).
                 onInviteByContacts: () => Navigator.of(context).push<void>(
                   MaterialPageRoute(builder: (_) => const OrbitDiscoverFriendsScreen())),
-                onInviteByQrCode: () => Navigator.of(context).push<void>(
-                  MaterialPageRoute(builder: (_) => const OrbitDiscoverFriendsScreen())),
+                onInviteByQrCode: () {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text('QR scanning is not yet connected. Use Invite by Link or enter a friend code from Find Friends.'),
+                  ));
+                },
                 onInviteByLink: () => Navigator.of(context).push<void>(
                   MaterialPageRoute(builder: (_) => const OrbitDiscoverFriendsScreen())),
                 onInviteByUsername: () => Navigator.of(context).push<void>(
