@@ -218,7 +218,9 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
   }
 
   @override
-  Widget build(BuildContext context) => Column(children: [
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: AppColors.background,
+    body: SafeArea(child: Column(children: [
     if (_offline)
       Container(
         color: const Color(0xFFFFF0E7),
@@ -253,5 +255,6 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
       onCirclePressed: _offline ? (_) => _notify('Reconnect to view Circle members.')
         : (c) => _open(_circles.firstWhere((x) => x.id == c.id)),
     )),
-  ]);
+  ])),
+  );
 }
