@@ -222,6 +222,7 @@ class _CircleListScreenState extends State<CircleListScreen> {
                               return CircleGroupCard(
                                 key: CircleListKeys.circle(circle.id),
                                 data: circle,
+                                showFavoriteButton: widget.enableFavoriteControls,
                                 onTap: () => _openCircle(context, circle),
                                 onFavoritePressed: !widget.enableFavoriteControls
                                     ? null : () => _toggleFavorite(circle.id),
