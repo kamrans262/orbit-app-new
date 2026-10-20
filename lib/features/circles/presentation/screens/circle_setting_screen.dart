@@ -43,6 +43,9 @@ class CircleSettingScreen extends StatefulWidget {
     this.onSettingsChanged,
     this.onDeleteConfirmed,
     this.onInviteManagementPressed,
+    this.sharingControlsEnabled = true,
+    this.archiveInsteadOfDelete = false,
+    this.showDestructiveAction = true,
     super.key,
   }) : assert(
          viewState != CircleSettingsViewState.loaded || settings != null,
@@ -82,6 +85,9 @@ class CircleSettingScreen extends StatefulWidget {
   final ValueChanged<CircleSettings>? onSettingsChanged;
   final ValueChanged<CircleSettings>? onDeleteConfirmed;
   final VoidCallback? onInviteManagementPressed;
+  final bool sharingControlsEnabled;
+  final bool archiveInsteadOfDelete;
+  final bool showDestructiveAction;
 
   @override
   State<CircleSettingScreen> createState() => _CircleSettingScreenState();
@@ -269,6 +275,7 @@ class _CircleSettingScreenState extends State<CircleSettingScreen> {
           ),
         ),
         const SizedBox(height: _colorToRowsGap),
+        if (widget.sharingControlsEnabled) ...<Widget>[
         _buildSettingRow(
           id: 'live_location',
           title: 'Live Location',
@@ -312,8 +319,22 @@ class _CircleSettingScreenState extends State<CircleSettingScreen> {
           onChanged: (value) =>
               _updateSettings(settings.copyWith(sosAlertsEnabled: value)),
         ),
-        const SizedBox(height: _rowsToDeleteGap),
-        _DeleteCircleButton(onTap: _showDeleteConfirmation),
+        ] else
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 20),
+            child: Text(
+              'Location, Moments, Ping and SOS sharing are OFF. '
+              'Circle membership never enables sharing automatically.',
+              style: TextStyle(fontFamily: AppTypography.fontFamily,
+                fontSize: 13, color: Color(0xFF64748B)),
+            ),
+          ),
+        if (widget.showDestructiveAction) ...<Widget>[
+          const SizedBox(height: _rowsToDeleteGap),
+          _DeleteCircleButton(
+            onTap: _showDeleteConfirmation,
+            label: widget.archiveInsteadOfDelete ? 'Archive Circle' : 'Delete Circle'),
+        ],
       ],
     );
   }
@@ -393,8 +414,8 @@ class _CircleSettingScreenState extends State<CircleSettingScreen> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24),
           ),
-          title: const Text(
-            'Delete Circle?',
+          title: Text(
+            widget.archiveInsteadOfDelete ? 'Archive Circle?' : 'Delete Circle?',
             style: TextStyle(
               fontFamily: AppTypography.fontFamily,
               fontSize: 18,
@@ -402,8 +423,10 @@ class _CircleSettingScreenState extends State<CircleSettingScreen> {
               color: Color(0xFF0F1724),
             ),
           ),
-          content: const Text(
-            'This action requires confirmation before the circle can be deleted.',
+          content: Text(
+            widget.archiveInsteadOfDelete
+              ? 'The Circle will be hidden and pending invitations revoked. You can restore it later.'
+              : 'This action requires confirmation before the circle can be deleted.',
             style: TextStyle(
               fontFamily: AppTypography.fontFamily,
               fontSize: 14,
@@ -427,8 +450,8 @@ class _CircleSettingScreenState extends State<CircleSettingScreen> {
             TextButton(
               key: CircleSettingKeys.deleteConfirmButton,
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text(
-                'Delete',
+              child: Text(
+                widget.archiveInsteadOfDelete ? 'Archive' : 'Delete',
                 style: TextStyle(
                   fontFamily: AppTypography.fontFamily,
                   fontWeight: FontWeight.w600,
@@ -508,15 +531,16 @@ class _CircleSummary extends StatelessWidget {
 }
 
 class _DeleteCircleButton extends StatelessWidget {
-  const _DeleteCircleButton({required this.onTap});
+  const _DeleteCircleButton({required this.onTap, this.label = 'Delete Circle'});
 
   final VoidCallback onTap;
+  final String label;
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
       button: true,
-      label: 'Delete Circle',
+      label: label,
       child: GestureDetector(
         key: CircleSettingKeys.deleteButton,
         behavior: HitTestBehavior.opaque,
@@ -529,19 +553,19 @@ class _DeleteCircleButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(30),
           ),
           alignment: Alignment.center,
-          child: const Row(
+          child: Row(
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
-              Icon(
+              const Icon(
                 Icons.delete_outline_rounded,
                 size: 17,
                 color: Color(0xFFF44336),
               ),
-              SizedBox(width: 6),
+              const SizedBox(width: 6),
               Text(
-                'Delete Circle',
-                style: TextStyle(
+                label,
+                style: const TextStyle(
                   fontFamily: AppTypography.fontFamily,
                   fontSize: 16,
                   height: 1.2,
