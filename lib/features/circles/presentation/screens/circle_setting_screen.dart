@@ -46,6 +46,7 @@ class CircleSettingScreen extends StatefulWidget {
     this.sharingControlsEnabled = true,
     this.archiveInsteadOfDelete = false,
     this.showDestructiveAction = true,
+    this.onManagePressed,
     super.key,
   }) : assert(
          viewState != CircleSettingsViewState.loaded || settings != null,
@@ -88,6 +89,7 @@ class CircleSettingScreen extends StatefulWidget {
   final bool sharingControlsEnabled;
   final bool archiveInsteadOfDelete;
   final bool showDestructiveAction;
+  final VoidCallback? onManagePressed;
 
   @override
   State<CircleSettingScreen> createState() => _CircleSettingScreenState();
@@ -223,6 +225,14 @@ class _CircleSettingScreenState extends State<CircleSettingScreen> {
               ),
             ),
           ),
+          if (widget.onManagePressed != null)
+            AppCircularIconButton(
+              semanticLabel: 'Manage Circle',
+              onPressed: widget.onManagePressed!,
+              icon: Icons.more_horiz_rounded,
+              iconSize: 24,
+              iconColor: const Color(0xFF7C3AED),
+            ),
         ],
       ),
     );
