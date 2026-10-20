@@ -235,7 +235,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
                                   imagePath: friend.imagePath ?? '',
                                   isFavorite: friend.isFavorite,
                                 ),
-                                onTap: widget.offlineStale ? null : () => _openFriend(friend),
+                                onTap: () { if (!widget.offlineStale) _openFriend(friend); },
                                 onFavoritePressed: () =>
                                     _toggleFavorite(friend.id),
                                 showFavoriteAction: !widget.liveMode,
