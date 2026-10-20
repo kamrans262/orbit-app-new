@@ -31,6 +31,9 @@ class BlockUsersScreen extends StatefulWidget {
     this.onBlockRequested,
     this.onUnblockRequested,
     this.liveMode = false,
+    this.hasMore = false,
+    this.isLoadingMore = false,
+    this.onLoadMore,
     this.onBack,
     super.key,
   });
@@ -48,6 +51,9 @@ class BlockUsersScreen extends StatefulWidget {
   final BlockUserRequest? onBlockRequested;
   final BlockUserRequest? onUnblockRequested;
   final bool liveMode;
+  final bool hasMore;
+  final bool isLoadingMore;
+  final VoidCallback? onLoadMore;
   final VoidCallback? onBack;
 
   @override
@@ -218,9 +224,15 @@ class _BlockUsersScreenState extends State<BlockUsersScreen> {
         _screenPadding,
         _screenPadding,
       ),
-      itemCount: _users.length,
+      itemCount: _users.length + (widget.hasMore ? 1 : 0),
       separatorBuilder: (context, index) => const SizedBox(height: _tileGap),
       itemBuilder: (context, index) {
+        if (index == _users.length) {
+          return Center(child: TextButton(
+            onPressed: widget.isLoadingMore ? null : widget.onLoadMore,
+            child: Text(widget.isLoadingMore ? 'Loading…' : 'Load more'),
+          ));
+        }
         final user = _users[index];
         return BlockUserTile(
           key: BlockUsersKeys.tile(user.id),
@@ -240,7 +252,9 @@ class _BlockUsersScreenState extends State<BlockUsersScreen> {
       setState(() => _mutating = true);
       try {
         if (callback != null) await callback(user);
-        if (mounted) setState(() => _users[index] = user.copyWith(isBlocked: false));
+        if (mounted && !widget.liveMode) {
+          setState(() => _users[index] = user.copyWith(isBlocked: false));
+        }
       } catch (_) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Unblock could not be saved. Previous block remains active.')));
@@ -260,7 +274,9 @@ class _BlockUsersScreenState extends State<BlockUsersScreen> {
     setState(() => _mutating = true);
     try {
       if (callback != null) await callback(user);
-      if (mounted) setState(() => _users[index] = user.copyWith(isBlocked: true));
+      if (mounted && !widget.liveMode) {
+        setState(() => _users[index] = user.copyWith(isBlocked: true));
+      }
     } catch (_) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Block could not be saved. Previous relationship remains active.')));
