@@ -30,6 +30,7 @@
             </array>
         </dict>
     </dict>
+    <key>FlutterDeepLinkingEnabled</key><false/>
     <key>UIApplicationSupportsIndirectInputEvents</key><true/>
     <key>UILaunchStoryboardName</key><string>LaunchScreen</string>
     <key>UIMainStoryboardFile</key><string>Main</string>
