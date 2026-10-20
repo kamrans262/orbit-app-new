@@ -23,6 +23,14 @@ class FriendsScreen extends StatefulWidget {
     required this.friends,
     this.onBack,
     this.onFriendPressed,
+    this.onDiscover,
+    this.onRequests,
+    this.isLoading = false,
+    this.errorMessage,
+    this.onRetry,
+    this.hasMore = false,
+    this.onLoadMore,
+    this.liveMode = false,
     super.key,
   });
 
@@ -61,6 +69,14 @@ class FriendsScreen extends StatefulWidget {
   final List<FriendMemberData> friends;
   final VoidCallback? onBack;
   final ValueChanged<FriendMemberData>? onFriendPressed;
+  final VoidCallback? onDiscover;
+  final VoidCallback? onRequests;
+  final bool isLoading;
+  final String? errorMessage;
+  final VoidCallback? onRetry;
+  final bool hasMore;
+  final VoidCallback? onLoadMore;
+  final bool liveMode;
 
   @override
   State<FriendsScreen> createState() => _FriendsScreenState();
@@ -138,6 +154,16 @@ class _FriendsScreenState extends State<FriendsScreen> {
                     setState(() => _query = value);
                   },
                   onBack: widget.onBack,
+                  trailingActions: <Widget>[
+                    if (widget.onRequests != null)
+                      IconButton(tooltip: 'Friend requests',
+                          icon: const Icon(Icons.person_add_alt_outlined),
+                          onPressed: widget.onRequests),
+                    if (widget.onDiscover != null)
+                      IconButton(tooltip: 'Find friends',
+                          icon: const Icon(Icons.person_search_outlined),
+                          onPressed: widget.onDiscover),
+                  ],
                   titleKey: FriendsKeys.headerTitle,
                   searchButtonKey: FriendsKeys.searchButton,
                   closeButtonKey: FriendsKeys.closeSearchButton,
@@ -145,9 +171,17 @@ class _FriendsScreenState extends State<FriendsScreen> {
               ),
               const SizedBox(height: _headerToListGap),
               Expanded(
-                child: visibleFriends.isEmpty
-                    ? const _FriendsEmptyState()
-                    : ListView.separated(
+                child: widget.isLoading && visibleFriends.isEmpty
+                    ? const Center(child: CircularProgressIndicator())
+                    : widget.errorMessage != null && visibleFriends.isEmpty
+                        ? Center(child: Column(mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(widget.errorMessage!, textAlign: TextAlign.center),
+                              TextButton(onPressed: widget.onRetry, child: const Text('Try again')),
+                            ]))
+                        : visibleFriends.isEmpty
+                            ? const _FriendsEmptyState()
+                            : ListView.separated(
                         key: FriendsKeys.scroll,
                         keyboardDismissBehavior:
                             ScrollViewKeyboardDismissBehavior.onDrag,
@@ -157,10 +191,16 @@ class _FriendsScreenState extends State<FriendsScreen> {
                           _horizontalPadding,
                           28,
                         ),
-                        itemCount: visibleFriends.length,
+                        itemCount: visibleFriends.length + (widget.hasMore ? 1 : 0),
                         separatorBuilder: (context, index) =>
                             const SizedBox(height: _rowGap),
                         itemBuilder: (context, index) {
+                          if (index == visibleFriends.length) {
+                            return Center(child: TextButton(
+                              onPressed: widget.isLoading ? null : widget.onLoadMore,
+                              child: Text(widget.isLoading ? 'Loading…' : 'Load more'),
+                            ));
+                          }
                           final friend = visibleFriends[index];
                           return KeyedSubtree(
                             key: FriendsKeys.row(friend.id),
@@ -181,6 +221,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
                                 onTap: () => _openFriend(friend),
                                 onFavoritePressed: () =>
                                     _toggleFavorite(friend.id),
+                                showFavoriteAction: !widget.liveMode,
                               ),
                             ),
                           );
