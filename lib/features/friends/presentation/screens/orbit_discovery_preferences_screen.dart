@@ -31,7 +31,7 @@ class _OrbitDiscoveryPreferencesScreenState extends State<OrbitDiscoveryPreferen
     } catch (_) {
       if (mounted) setState(() => _error = 'Discovery settings could not be loaded.');
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) { setState(() => _busy = false); }
     }
   }
 
