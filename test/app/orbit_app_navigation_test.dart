@@ -117,4 +117,16 @@ void main() {
     expect(find.byType(ShareLocationScreen), findsOneWidget);
     expect(find.byKey(ShareLocationKeys.image), findsOneWidget);
   });
+  testWidgets('startup login uses one route, without Welcome underneath',
+      (tester) async {
+    await usePhoneViewport(tester);
+    await tester.pumpWidget(const OrbitApp(initialRoute: AppRoutes.login));
+    await tester.pumpAndSettle();
+    expect(find.byType(LoginScreen), findsOneWidget);
+    expect(find.byType(WelcomeScreen), findsNothing);
+    final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+    expect(navigator.canPop(), isFalse);
+  });
+
+
 }
