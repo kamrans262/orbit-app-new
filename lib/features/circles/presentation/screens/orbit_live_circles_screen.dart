@@ -11,6 +11,7 @@ import 'circle_list_screen.dart';
 import 'orbit_live_circle_detail_screen.dart';
 import 'orbit_live_create_circle_screen.dart';
 import 'orbit_circle_qr_scan_screen.dart';
+import 'orbit_live_archived_circles_screen.dart';
 
 /// Real account-bound M5 Circles surface. No M4 demo Circle identifiers
 /// or fake membership/presence/location values ever reach this screen.
@@ -169,6 +170,16 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
     if(mounted && code != null) await _join(code);
   }
 
+  Future<void> _archived() async {
+    if(_offline || _busy)return;
+    await Navigator.of(context).push<void>(
+      AppFadeSlidePageRoute<void>(
+        builder:(_)=>OrbitLiveArchivedCirclesScreen(repository:_repo),
+      ),
+    );
+    if(mounted) await _load();
+  }
+
   Future<void> _incoming() async {
     if (_offline || _busy) return;
     try {
@@ -231,12 +242,17 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
           style: TextStyle(fontFamily: AppTypography.fontFamily,fontSize:12)),
       ),
     if (!_offline && !_busy)
-      Row(mainAxisAlignment:MainAxisAlignment.end,children:[
-        TextButton.icon(onPressed:_scan,
-          icon:const Icon(Icons.qr_code_scanner),label:const Text('Scan QR')),
-        TextButton.icon(onPressed:_incoming,
-          icon:const Icon(Icons.mail_outline),label:const Text('Invitations')),
-      ]),
+      SingleChildScrollView(
+        scrollDirection:Axis.horizontal,
+        child:Row(mainAxisAlignment:MainAxisAlignment.end,children:[
+          TextButton.icon(onPressed:_scan,
+            icon:const Icon(Icons.qr_code_scanner),label:const Text('Scan QR')),
+          TextButton.icon(onPressed:_incoming,
+            icon:const Icon(Icons.mail_outline),label:const Text('Invitations')),
+          TextButton.icon(onPressed:_archived,
+            icon:const Icon(Icons.archive_outlined),label:const Text('Archived')),
+        ]),
+      ),
     Expanded(child: CircleListScreen(
       circles: _circles.map((circle) => CircleGroupData(
         id: circle.id, name: circle.name,
