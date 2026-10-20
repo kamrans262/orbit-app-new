@@ -32,11 +32,55 @@ class OrbitIdentityClient {
   static const _privateKey = 'orbit.identity.private_key.v1';
   static const _userIdKey = 'orbit.identity.user_id.v1';
   static const _profileCacheKey = 'orbit.profile.encrypted_cache.v1';
+  static const _launchedKey = 'orbit.app.has_launched.v1';
 
   final http.Client _http;
   final FlutterSecureStorage _storage;
   String? _access;
   Future<void>? _pendingRefresh;
+  Map<String, dynamic>? _startupProfile;
+  Map<String, dynamic>? _startupNotifications;
+  Map<String, dynamic>? _startupPrivacy;
+
+  /// Preserve first-run state independently of sign-out. Legacy signed-in
+  /// installations already have a device installation ID.
+  Future<bool> hasLaunchedBefore() async =>
+      await _storage.read(key: _launchedKey) == 'true' ||
+      await _storage.read(key: _idKey) != null ||
+      await _storage.read(key: _userIdKey) != null ||
+      await _storage.read(key: _refreshKey) != null;
+
+  Future<void> markLaunched() async =>
+      _storage.write(key: _launchedKey, value: 'true');
+
+  /// Warm only currently implemented API resources; Home does not yet have
+  /// a live summary endpoint. Optional settings failures must not log out a
+  /// freshly verified session or block launch.
+  Future<void> preloadStartupData() async {
+    Future<Map<String, dynamic>?> optional(
+      Future<Map<String, dynamic>> Function() load,
+    ) async {
+      try {
+        return await load();
+      } on OrbitIdentityException catch (error) {
+        if (error.statusCode == 401 || error.statusCode == 403 ||
+            error.statusCode == 409) rethrow;
+        return null;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    final results = await Future.wait<Map<String, dynamic>?>([
+      optional(profile),
+      optional(notificationPreferences),
+      optional(privacyPreferences),
+    ]).timeout(const Duration(seconds: 8), onTimeout: () =>
+      <Map<String, dynamic>?>[null, null, null]);
+    _startupProfile = results[0];
+    _startupNotifications = results[1];
+    _startupPrivacy = results[2];
+  }
 
   // Ephemeral sign-up draft. Never stored on disk, sent to analytics or logs.
   String? _pendingSignupName;
@@ -222,10 +266,10 @@ class OrbitIdentityClient {
       // Server denial (403/409/422) must never grant any offline access.
       // Only network failures or temporary 5xx may show the one-hour,
       // read-only cached profile; never unlock the authenticated Home.
-      if (error.statusCode == null || (error.statusCode! >= 500)) {
-        if (await cachedProfileForOffline() != null) {
-          return OrbitRestoreState.offlineProfile;
-        }
+      if (error.statusCode == null || error.statusCode! >= 500) {
+        // Keep the refresh token. The offline screen offers retry even when
+        // there is no eligible encrypted profile snapshot to show.
+        return OrbitRestoreState.offlineProfile;
       }
       return OrbitRestoreState.signedOut;
     } catch (_) {
@@ -274,6 +318,9 @@ class OrbitIdentityClient {
   Future<void> clearSession() async {
     abandonStandardSignup();
     _access = null;
+    _startupProfile = null;
+    _startupNotifications = null;
+    _startupPrivacy = null;
     await _storage.delete(key: _refreshKey);
     await _storage.delete(key: _userIdKey);
     await _storage.delete(key: _profileCacheKey);
@@ -336,6 +383,11 @@ class OrbitIdentityClient {
   /// Offline reads are clearly flagged; privacy and consent are never cached as
   /// authorization, and all writes must still reach the server.
   Future<Map<String, dynamic>> profile() async {
+    final prefetched = _startupProfile;
+    if (prefetched != null) {
+      _startupProfile = null;
+      return prefetched;
+    }
     try {
       final result = await _send('GET', '/me/profile', protected: true);
       final data = Map<String, dynamic>.from(result['data'] as Map);
@@ -369,29 +421,42 @@ class OrbitIdentityClient {
           'username': username.trim(),
           if (bio != null) 'bio': bio.trim(),
         });
+    _startupProfile = null;
     await _storage.delete(key: _profileCacheKey);
     return Map<String, dynamic>.from(result['data'] as Map);
   }
 
   Future<Map<String, dynamic>> notificationPreferences() async {
+    final prefetched = _startupNotifications;
+    if (prefetched != null) {
+      _startupNotifications = null;
+      return prefetched;
+    }
     final result = await _send('GET', '/me/preferences/notifications', protected: true);
     return Map<String, dynamic>.from(result['data'] as Map);
   }
 
   Future<Map<String, dynamic>> saveNotificationPreferences(
       Map<String, Object?> values) async {
+    _startupNotifications = null;
     final result = await _send('PATCH', '/me/preferences/notifications',
         protected: true, body: values);
     return Map<String, dynamic>.from(result['data'] as Map);
   }
 
   Future<Map<String, dynamic>> privacyPreferences() async {
+    final prefetched = _startupPrivacy;
+    if (prefetched != null) {
+      _startupPrivacy = null;
+      return prefetched;
+    }
     final result = await _send('GET', '/me/preferences/privacy', protected: true);
     return Map<String, dynamic>.from(result['data'] as Map);
   }
 
   Future<Map<String, dynamic>> savePrivacyPreferences(
       Map<String, Object?> values) async {
+    _startupPrivacy = null;
     final result = await _send('PATCH', '/me/preferences/privacy',
         protected: true, body: values);
     return Map<String, dynamic>.from(result['data'] as Map);

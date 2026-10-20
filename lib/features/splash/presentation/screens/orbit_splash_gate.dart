@@ -16,6 +16,7 @@ class OrbitSplashGate extends StatefulWidget {
     this.displayDuration = const Duration(seconds: 2),
     this.fadeDuration = const Duration(milliseconds: 280),
     this.onSplashFinished,
+    this.preparedChild,
     super.key,
   });
 
@@ -23,6 +24,8 @@ class OrbitSplashGate extends StatefulWidget {
   final Duration displayDuration;
   final Duration fadeDuration;
   final VoidCallback? onSplashFinished;
+  /// Future started during splash. The live app must not render until ready.
+  final Future<Widget>? preparedChild;
 
   @override
   State<OrbitSplashGate> createState() => _OrbitSplashGateState();
@@ -32,16 +35,43 @@ class _OrbitSplashGateState extends State<OrbitSplashGate> {
   Timer? _timer;
   bool _showSplash = true;
   bool _didNotifyFinished = false;
+  bool _minimumElapsed = false;
+  Widget? _resolvedChild;
 
   @override
   void initState() {
     super.initState();
     _scheduleFinish();
+    final prepared = widget.preparedChild;
+    if (prepared != null) {
+      prepared.then((ready) {
+        if (!mounted) return;
+        _resolvedChild = ready;
+        _tryFinishSplash();
+      }, onError: (Object error, StackTrace stack) {
+        // The startup resolver supplies a safe Login/Offline fallback.
+        // Never unblock into Welcome when the session result is unknown.
+        FlutterError.reportError(FlutterErrorDetails(
+          exception: error,
+          stack: stack,
+          library: 'Orbit startup',
+        ));
+      });
+    }
   }
 
   void _scheduleFinish() {
     _timer?.cancel();
-    _timer = Timer(widget.displayDuration, _finishSplash);
+    _timer = Timer(widget.displayDuration, () {
+      _minimumElapsed = true;
+      _tryFinishSplash();
+    });
+  }
+
+  void _tryFinishSplash() {
+    if (!_minimumElapsed ||
+        (widget.preparedChild != null && _resolvedChild == null)) return;
+    _finishSplash();
   }
 
   void _finishSplash() {
@@ -68,11 +98,10 @@ class _OrbitSplashGateState extends State<OrbitSplashGate> {
     }
 
     _timer?.cancel();
-
+    _minimumElapsed = false;
     setState(() {
       _showSplash = true;
     });
-
     _scheduleFinish();
   }
 
@@ -110,7 +139,7 @@ class _OrbitSplashGateState extends State<OrbitSplashGate> {
               )
             : KeyedSubtree(
                 key: const ValueKey<String>('orbit-live-app'),
-                child: widget.child,
+                child: _resolvedChild ?? widget.child,
               ),
       ),
     );

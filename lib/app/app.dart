@@ -31,7 +31,14 @@ import '../features/app_update/presentation/orbit_update_runtime.dart';
 import '../features/connectivity/presentation/orbit_connectivity_runtime.dart';
 
 class OrbitApp extends StatelessWidget {
-  const OrbitApp({super.key});
+  const OrbitApp({
+    this.initialRoute = AppRoutes.welcome,
+    this.startupAuthenticated = false,
+    super.key,
+  });
+
+  final String initialRoute;
+  final bool startupAuthenticated;
 
   @override
   Widget build(BuildContext context) {
@@ -45,8 +52,23 @@ class OrbitApp extends StatelessWidget {
       theme: AppTheme.light,
       builder: (context, child) =>
           AppKeyboardDismiss(child: child ?? const SizedBox.shrink()),
-      initialRoute: AppRoutes.welcome,
-      onGenerateRoute: (settings) {
+      initialRoute: initialRoute,
+      // Flutter's default '/home' initial-route logic also inserts '/'.
+      // Build exactly one startup route so Welcome is never placed underneath
+      // Home/Login and cannot flash or re-run session restoration.
+      onGenerateInitialRoutes: (name) => <Route<dynamic>>[
+        _route(RouteSettings(
+          name: name,
+          arguments: name == AppRoutes.home && startupAuthenticated
+              ? const _VerifiedStartupHome() : null,
+        )),
+      ],
+      onGenerateRoute: _route,
+    );
+  }
+
+  Route<dynamic> _route(RouteSettings settings) {
+    switch (settings.name) {
         switch (settings.name) {
           case AppRoutes.welcome:
             return MaterialPageRoute<void>(
@@ -355,6 +377,7 @@ class OrbitApp extends StatelessWidget {
             return MaterialPageRoute<void>(
               settings: settings,
               builder: (context) => OrbitProtectedHome(
+                startupVerified: settings.arguments is _VerifiedStartupHome,
                 home: HomeScreen.demo(
                   onTabSelected: (index) {},
                   onAddPressed: () {},
@@ -374,9 +397,12 @@ class OrbitApp extends StatelessWidget {
               ),
             );
         }
-      },
-    );
   }
+}
+
+/// Only the app's initial-route builder can attach this verified marker.
+class _VerifiedStartupHome {
+  const _VerifiedStartupHome();
 }
 
 /// Navigation-only parameters. Password is retained in memory only for

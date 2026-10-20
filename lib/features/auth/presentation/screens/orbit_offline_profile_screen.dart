@@ -31,7 +31,7 @@ class _OrbitOfflineProfileScreenState extends State<OrbitOfflineProfileScreen> {
         OrbitRestoreState.authenticated => AppRoutes.home,
         OrbitRestoreState.deletionPending => AppRoutes.deletionStatus,
         OrbitRestoreState.deviceRegistration => AppRoutes.deviceRegistration,
-        OrbitRestoreState.signedOut => AppRoutes.welcome,
+        OrbitRestoreState.signedOut => AppRoutes.login,
         OrbitRestoreState.offlineProfile => null,
       };
       if (route != null) {
@@ -51,7 +51,7 @@ class _OrbitOfflineProfileScreenState extends State<OrbitOfflineProfileScreen> {
     setState(() => _working = true);
     await _identity.clearSession();
     if (!mounted) return;
-    Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.welcome, (_) => false);
+    Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.login, (_) => false);
   }
 
   @override

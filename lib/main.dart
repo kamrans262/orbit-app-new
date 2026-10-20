@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'app/app.dart';
+import 'features/splash/domain/orbit_startup_resolver.dart';
+import 'features/auth/data/orbit_identity_client.dart';
 import 'core/navigation/orbit_bottom_add_coordinator.dart';
 import 'features/app_update/presentation/orbit_update_runtime.dart';
 import 'features/connectivity/presentation/orbit_connectivity_runtime.dart';
@@ -22,6 +24,15 @@ void main() {
   // Avoid showing connectivity UI over the splash.
   OrbitConnectivityNavigatorObserver.autoMonitorEnabled = false;
 
+  // Resolve session and load available account basics while splash is visible.
+  // No Welcome/Get Started route is built before this future completes.
+  final preparedApp = OrbitStartupResolver(
+    OrbitIdentityClient.instance,
+  ).resolve().then((startup) => OrbitApp(
+    initialRoute: startup.route,
+    startupAuthenticated: startup.authenticated,
+  ));
+
   runApp(
     OrbitSplashGate(
       displayDuration: const Duration(seconds: 2),
@@ -29,7 +40,8 @@ void main() {
       onSplashFinished: () {
         OrbitConnectivityNavigatorObserver.startMonitoringAfterStartup();
       },
-      child: OrbitApp(),
+      preparedChild: preparedApp,
+      child: const OrbitApp(),
     ),
   );
 }
