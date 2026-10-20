@@ -59,11 +59,12 @@ class OrbitCircleMember {
 class OrbitCircleInvite {
   const OrbitCircleInvite({
     required this.id, required this.status,
-    this.person, this.circleId, this.circleName, this.code,
+    this.person, this.circleId, this.circleName, this.code, this.createdAt,
   });
   final String id, status;
   final OrbitCircleMember? person;
   final String? circleId, circleName, code;
+  final DateTime? createdAt;
 
   factory OrbitCircleInvite.fromJson(Map<String, dynamic> data) {
     final p = data['person'];
@@ -75,6 +76,7 @@ class OrbitCircleInvite {
       circleId: data['circle_id'] as String?,
       circleName: data['circle_name'] as String?,
       code: data['code'] as String?,
+      createdAt: DateTime.tryParse(data['created_at'] as String? ?? ''),
     );
   }
 }
