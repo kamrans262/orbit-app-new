@@ -82,7 +82,7 @@ class _OrbitPersonScreenState extends State<OrbitPersonScreen> {
           ? 'Could not save the change. Your previous relationship is still active.'
           : 'Could not complete the request.');
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) { setState(() => _busy = false); }
     }
   }
 
