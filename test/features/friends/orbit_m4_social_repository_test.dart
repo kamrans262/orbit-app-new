@@ -78,6 +78,16 @@ void main() {
     expect(() => repo.respond('req-2','approve'),throwsArgumentError);
   });
 
+  test('Invitation URL parsing accepts only official host and 43-character tokens', () {
+    final repo = OrbitSocialRepository(identity: _FakeIdentity());
+    const code = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+    expect(repo.invitationCode(code),code);
+    expect(repo.invitationCode('https://indigo-caribou-178970.hostingersite.com/invite/friend/$code'),code);
+    expect(() => repo.invitationCode('https://example.com/invite/friend/$code'),
+        throwsFormatException);
+    expect(() => repo.invitationCode('not-a-code'),throwsFormatException);
+  });
+
   test('Network failure does not manufacture friend lists or mark block successful', () async {
     final client = _FakeIdentity();
     client.errorPath = '/friends?page=1';
