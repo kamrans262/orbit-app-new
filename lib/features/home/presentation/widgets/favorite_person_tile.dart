@@ -9,12 +9,14 @@ class FavoritePersonTile extends StatelessWidget {
     required this.data,
     required this.onTap,
     required this.onFavoritePressed,
+    this.showFavoriteAction = true,
     super.key,
   });
 
   final FavoritePersonData data;
   final VoidCallback onTap;
   final VoidCallback onFavoritePressed;
+  final bool showFavoriteAction;
 
   @override
   Widget build(BuildContext context) {
@@ -80,7 +82,7 @@ class FavoritePersonTile extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                Semantics(
+                if (showFavoriteAction) Semantics(
                   button: true,
                   label: data.isFavorite
                       ? 'Remove ${data.name} from favorites'
