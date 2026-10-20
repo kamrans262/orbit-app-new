@@ -200,7 +200,7 @@ class _CreateCircleScreenState extends State<CreateCircleScreen> {
                       child: WelcomeActionPanel(
                         primaryKey: CreateCircleKeys.nextButton,
                         primaryLabel: 'Create Circle',
-                        onPrimaryPressed: _saving ? null : _submit,
+                        onPrimaryPressed: _submit,
                         secondaryKey: widget.onSkip == null
                             ? null
                             : CreateCircleKeys.skipButton,
