@@ -11,6 +11,7 @@ import '../../../home/domain/models/home_models.dart';
 import '../../../home/presentation/widgets/favorite_person_tile.dart';
 import '../../data/orbit_social_repository.dart';
 import 'orbit_person_screen.dart';
+import 'orbit_discovery_preferences_screen.dart';
 
 class OrbitDiscoverFriendsScreen extends StatefulWidget {
   const OrbitDiscoverFriendsScreen({super.key, this.repository});
@@ -165,6 +166,15 @@ class _OrbitDiscoverFriendsScreenState extends State<OrbitDiscoverFriendsScreen>
             controller: _search,
             onQueryChanged: _onQuery,
             onBack: () => Navigator.of(context).maybePop(),
+            trailingActions: <Widget>[
+              IconButton(
+                icon: const Icon(Icons.manage_accounts_outlined),
+                tooltip: 'Friend discovery settings',
+                onPressed: () => Navigator.of(context).push<void>(
+                  AppFadeSlidePageRoute<void>(builder: (_) =>
+                    OrbitDiscoveryPreferencesScreen(repository:_repo))),
+              ),
+            ],
           )),
         Expanded(child: ListView(
           padding: const EdgeInsets.symmetric(horizontal:20,vertical:8),
