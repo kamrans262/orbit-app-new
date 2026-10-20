@@ -29,6 +29,8 @@ class BlockUsersScreen extends StatefulWidget {
     this.errorMessage,
     this.onRetry,
     this.onBlockRequested,
+    this.onUnblockRequested,
+    this.liveMode = false,
     this.onBack,
     super.key,
   });
@@ -44,6 +46,8 @@ class BlockUsersScreen extends StatefulWidget {
   final String? errorMessage;
   final VoidCallback? onRetry;
   final BlockUserRequest? onBlockRequested;
+  final BlockUserRequest? onUnblockRequested;
+  final bool liveMode;
   final VoidCallback? onBack;
 
   @override
@@ -57,6 +61,7 @@ class _BlockUsersScreenState extends State<BlockUsersScreen> {
   static const double _maxContentWidth = 600;
 
   late List<UserPrivacyEntry> _users;
+  bool _mutating = false;
 
   @override
   void initState() {
@@ -92,7 +97,9 @@ class _BlockUsersScreenState extends State<BlockUsersScreen> {
       );
     }
 
-    return List<UserPrivacyEntry>.of(UserPrivacyEntry.demoUsers);
+    return widget.liveMode
+        ? <UserPrivacyEntry>[]
+        : List<UserPrivacyEntry>.of(UserPrivacyEntry.demoUsers);
   }
 
   @override
@@ -226,10 +233,20 @@ class _BlockUsersScreenState extends State<BlockUsersScreen> {
 
   Future<void> _handleUserAction(int index) async {
     final user = _users[index];
+    if (_mutating) return;
     if (user.isBlocked) {
-      setState(() {
-        _users[index] = user.copyWith(isBlocked: false);
-      });
+      final callback = widget.onUnblockRequested;
+      if (callback == null && widget.liveMode) return;
+      setState(() => _mutating = true);
+      try {
+        if (callback != null) await callback(user);
+        if (mounted) setState(() => _users[index] = user.copyWith(isBlocked: false));
+      } catch (_) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Unblock could not be saved. Previous block remains active.')));
+      } finally {
+        if (mounted) setState(() => _mutating = false);
+      }
       return;
     }
 
@@ -239,16 +256,17 @@ class _BlockUsersScreenState extends State<BlockUsersScreen> {
     }
 
     final callback = widget.onBlockRequested;
-    if (callback != null) {
-      await callback(user);
-      if (!mounted) {
-        return;
-      }
+    if (callback == null && widget.liveMode) return;
+    setState(() => _mutating = true);
+    try {
+      if (callback != null) await callback(user);
+      if (mounted) setState(() => _users[index] = user.copyWith(isBlocked: true));
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Block could not be saved. Previous relationship remains active.')));
+    } finally {
+      if (mounted) setState(() => _mutating = false);
     }
-
-    setState(() {
-      _users[index] = user.copyWith(isBlocked: true);
-    });
   }
 
   Future<bool> _showBlockConfirmation(UserPrivacyEntry user) async {
