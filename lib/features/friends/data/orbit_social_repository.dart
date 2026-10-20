@@ -129,6 +129,11 @@ class OrbitSocialRepository {
     await _request('DELETE', '/me/blocks/${Uri.encodeComponent(id)}');
   }
 
+  Future<int> currentRevision() async {
+    final result = await _request('GET', '/me/social/revision');
+    return (result['revision'] as num?)?.toInt() ?? 0;
+  }
+
   Future<Map<String, dynamic>> discoverySettings() => _request('GET', '/me/social/discovery');
   Future<Map<String, dynamic>> updateDiscovery(Map<String, Object?> values) =>
       _request('PATCH', '/me/social/discovery', body: values);
