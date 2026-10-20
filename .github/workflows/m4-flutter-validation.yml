@@ -25,6 +25,6 @@ jobs:
         run: |
           dart analyze lib/features/friends lib/features/profile/presentation/screens/blocked_users_screen.dart lib/features/profile/presentation/screens/orbit_live_blocked_users_screen.dart lib/features/welcome/presentation/screens/invite_people_screen.dart test/features/friends
       - name: M4 repository and widgets
-        run: flutter test test/features/friends/orbit_m4_social_repository_test.dart
+        run: flutter test test/features/friends/
       - name: M3 profile/offline regression
         run: flutter test test/features/auth/orbit_m3_offline_profile_test.dart
