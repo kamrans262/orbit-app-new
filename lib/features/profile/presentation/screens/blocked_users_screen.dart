@@ -208,8 +208,8 @@ class _BlockUsersScreenState extends State<BlockUsersScreen> {
           _BlockUsersMessageCard(
             key: BlockUsersKeys.emptyState,
             icon: Icons.person_off_outlined,
-            title: 'No users to show',
-            message: 'People available to block will appear here.',
+            title: 'No blocked users',
+            message: 'People you block from their profile will appear here.',
           ),
         ],
       );
