@@ -16,8 +16,9 @@ import 'orbit_friend_qr_scan_screen.dart';
 import 'orbit_discovery_preferences_screen.dart';
 
 class OrbitDiscoverFriendsScreen extends StatefulWidget {
-  const OrbitDiscoverFriendsScreen({super.key, this.repository});
+  const OrbitDiscoverFriendsScreen({super.key, this.repository, this.initialInviteCode});
   final OrbitSocialRepository? repository;
+  final String? initialInviteCode;
   @override
   State<OrbitDiscoverFriendsScreen> createState() => _OrbitDiscoverFriendsScreenState();
 }
@@ -33,6 +34,17 @@ class _OrbitDiscoverFriendsScreenState extends State<OrbitDiscoverFriendsScreen>
   bool _hasMore = false;
   int _page = 0;
   int _generation = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    final initial = widget.initialInviteCode;
+    if (initial != null && initial.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _previewAndRedeem(initial);
+      });
+    }
+  }
 
   @override
   void dispose() {
