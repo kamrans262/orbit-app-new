@@ -259,7 +259,7 @@ class _BlockUsersScreenState extends State<BlockUsersScreen> {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Unblock could not be saved. Previous block remains active.')));
       } finally {
-        if (mounted) setState(() => _mutating = false);
+        if (mounted) { setState(() => _mutating = false); }
       }
       return;
     }
