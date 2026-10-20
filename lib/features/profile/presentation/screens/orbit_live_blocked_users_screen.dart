@@ -49,7 +49,7 @@ class _OrbitLiveBlockedUsersScreenState extends State<OrbitLiveBlockedUsersScree
       if (mounted) setState(() =>
         _error = 'Blocked accounts could not be loaded. Please reconnect.');
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) { setState(() => _loading = false); }
     }
   }
 
