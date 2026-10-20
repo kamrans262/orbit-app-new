@@ -22,11 +22,10 @@ class _OrbitSessionWelcomeGateState extends State<OrbitSessionWelcomeGate> {
       future: _check,
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
-          // Never flash Get Started while an existing session is being checked.
-          return const Scaffold(
-            backgroundColor: AppColors.background,
-            body: Center(child: CircularProgressIndicator()),
-          );
+          // The production bootstrap resolves the route behind Splash.
+          // Direct OrbitApp usages (including test/storybook navigation)
+          // retain the existing Welcome behavior.
+          return widget.welcome;
         }
         final state = snapshot.data!;
         if (state != OrbitRestoreState.signedOut) {
