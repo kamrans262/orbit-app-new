@@ -133,7 +133,7 @@ class InvitePeopleScreen extends StatelessWidget {
                     key: InvitePeopleKeys.nearbyHeading,
                     style: TextStyle(
                       fontFamily: AppTypography.fontFamily,
-                      fontFamilyFallback: const <String>[
+                      fontFamilyFallback: <String>[
                         'Noto Color Emoji',
                         'Apple Color Emoji',
                         'Segoe UI Emoji',
