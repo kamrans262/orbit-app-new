@@ -32,6 +32,7 @@ class CircleListScreen extends StatefulWidget {
     required this.circles,
     this.onCirclePressed,
     this.onFavoriteChanged,
+    this.enableFavoriteControls = true,
     this.onCreatePressed,
     this.onJoinRequested,
     this.onRetry,
@@ -86,6 +87,7 @@ class CircleListScreen extends StatefulWidget {
   final List<CircleGroupData> circles;
   final ValueChanged<CircleGroupData>? onCirclePressed;
   final ValueChanged<CircleGroupData>? onFavoriteChanged;
+  final bool enableFavoriteControls;
   final VoidCallback? onCreatePressed;
   final ValueChanged<String>? onJoinRequested;
   final VoidCallback? onRetry;
@@ -221,7 +223,7 @@ class _CircleListScreenState extends State<CircleListScreen> {
                                 key: CircleListKeys.circle(circle.id),
                                 data: circle,
                                 onTap: () => _openCircle(context, circle),
-                                onFavoritePressed: widget.onFavoriteChanged == null
+                                onFavoritePressed: !widget.enableFavoriteControls
                                     ? null : () => _toggleFavorite(circle.id),
                               );
                             }, childCount: visible.length),
