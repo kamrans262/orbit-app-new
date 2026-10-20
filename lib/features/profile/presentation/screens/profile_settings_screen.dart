@@ -19,10 +19,10 @@ import 'edit_profile_screen.dart';
 import 'notification_screen.dart';
 import 'devices_screen.dart';
 import 'subscription_screen.dart';
-import 'blocked_users_screen.dart';
+import 'orbit_live_blocked_users_screen.dart';
 import 'privacy_setting_screen.dart';
 import '../../../../core/popups/orbit_popup_variants.dart';
-import '../../../friends/presentation/screens/friends_screen.dart';
+import '../../../friends/presentation/screens/orbit_live_friends_screen.dart';
 
 abstract final class SettingsKeys {
   static const scrollView = Key('settings_scroll_view');
@@ -304,7 +304,7 @@ class SettingsScreen extends StatelessWidget {
     }
     if (label == 'Blocked Users') {
       Navigator.of(context).push<void>(
-        AppFadeSlidePageRoute<void>(builder: (_) => const BlockedUsersScreen()),
+        AppFadeSlidePageRoute<void>(builder: (_) => const OrbitLiveBlockedUsersScreen()),
       );
       return;
     }
@@ -351,7 +351,7 @@ class SettingsScreen extends StatelessWidget {
     }
     if (label == 'Friends') {
       Navigator.of(context).push<void>(
-        AppFadeSlidePageRoute<void>(builder: (_) => FriendsScreen.demo()),
+        AppFadeSlidePageRoute<void>(builder: (_) => const OrbitLiveFriendsScreen()),
       );
       return;
     }
