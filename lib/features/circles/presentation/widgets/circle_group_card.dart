@@ -9,12 +9,14 @@ class CircleGroupCard extends StatelessWidget {
     required this.data,
     required this.onTap,
     required this.onFavoritePressed,
+    this.showFavoriteButton = true,
     super.key,
   });
 
   final CircleGroupData data;
   final VoidCallback onTap;
   final VoidCallback? onFavoritePressed;
+  final bool showFavoriteButton;
 
   @override
   Widget build(BuildContext context) {
@@ -48,7 +50,7 @@ class CircleGroupCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    Positioned(
+                    if (showFavoriteButton) Positioned(
                       top: -7,
                       right: -7,
                       child: Semantics(
