@@ -24,12 +24,14 @@ class CirclePermissionScreen extends StatefulWidget {
     required this.onBack,
     required this.onCreateCircle,
     this.onSkip,
+    this.circleAlreadyCreated = false,
     super.key,
   });
 
   final VoidCallback onBack;
   final VoidCallback onCreateCircle;
   final VoidCallback? onSkip;
+  final bool circleAlreadyCreated;
 
   @override
   State<CirclePermissionScreen> createState() => _CirclePermissionScreenState();
@@ -158,7 +160,7 @@ class _CirclePermissionScreenState extends State<CirclePermissionScreen> {
                   child: Center(
                     child: WelcomeActionPanel(
                       primaryKey: CirclePermissionKeys.createCircleButton,
-                      primaryLabel: 'Create Circle',
+                      primaryLabel: widget.circleAlreadyCreated ? 'Continue to Invites' : 'Create Circle',
                       onPrimaryPressed: widget.onCreateCircle,
                       secondaryKey: widget.onSkip == null
                           ? null
