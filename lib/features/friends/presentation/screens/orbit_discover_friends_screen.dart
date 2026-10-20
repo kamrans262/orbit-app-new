@@ -10,7 +10,9 @@ import '../../../../core/widgets/app_action_row.dart';
 import '../../../home/domain/models/home_models.dart';
 import '../../../home/presentation/widgets/favorite_person_tile.dart';
 import '../../data/orbit_social_repository.dart';
+import '../../data/orbit_contact_picker.dart';
 import 'orbit_person_screen.dart';
+import 'orbit_friend_qr_scan_screen.dart';
 import 'orbit_discovery_preferences_screen.dart';
 
 class OrbitDiscoverFriendsScreen extends StatefulWidget {
@@ -114,10 +116,30 @@ class _OrbitDiscoverFriendsScreenState extends State<OrbitDiscoverFriendsScreen>
     }
   }
 
-  Future<void> _redeem() async {
-    final code = await _ask('Enter invitation code', 'Paste the private code');
-    if (code == null || code.isEmpty) return;
+
+  Future<void> _previewAndRedeem(String tokenOrLink) async {
     try {
+      final code = _repo.invitationCode(tokenOrLink);
+      final data = await _repo.previewInvite(code);
+      if (!mounted) return;
+      final who = data['display_name'] as String? ??
+          data['username'] as String? ?? 'this person';
+      final accepted = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+          title: const Text('Friend invitation'),
+          content: Text('Send a friend request to $who? This does not grant location or Circle access.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+            TextButton(onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Send request')),
+          ],
+        ),
+      );
+      if (accepted != true) return;
       await _repo.redeemInvite(code);
       if (mounted) _notice('Friend request sent.');
     } catch (_) {
@@ -125,32 +147,79 @@ class _OrbitDiscoverFriendsScreenState extends State<OrbitDiscoverFriendsScreen>
     }
   }
 
-  Future<void> _matchContact() async {
-    final contact = await _ask('Find a contact', 'Email or international phone');
-    if (contact == null || contact.isEmpty || !mounted) return;
-    final permission = await showDialog<bool>(context: context,
+  Future<void> _redeem() async {
+    final code = await _ask('Enter invitation code', 'Paste code or Orbit link');
+    if (code == null || code.isEmpty) return;
+    await _previewAndRedeem(code);
+  }
+
+  Future<void> _scanQr() async {
+    final code = await Navigator.of(context).push<String>(
+      AppFadeSlidePageRoute<String>(builder: (_) =>
+        OrbitFriendQrScanScreen(repository: _repo)),
+    );
+    if (!mounted || code == null) return;
+    await _previewAndRedeem(code);
+  }
+
+  Future<void> _matchSelected(String type, String value) async {
+    if (!mounted) return;
+    final accepted = await showDialog<bool>(
+      context: context,
       builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
         title: const Text('Match this contact?'),
-        content: const Text('Only this contact will be sent to Orbit to find opted-in users. Your address book is not uploaded or stored. You can search names instead.'),
+        content: const Text('Only the one selected address or number will be checked against people who opted in. Orbit will not upload your address book.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Check')),
-        ]));
-    if (permission != true) return;
+          TextButton(onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Find friend')),
+        ],
+      ),
+    );
+    if (accepted != true) return;
     try {
-      final people = await _repo.matchContacts([{
-        'type': contact.contains('@') ? 'email' : 'phone',
-        'value': contact,
-      }]);
+      final matches = await _repo.matchContacts([
+        {'type': type, 'value': value},
+      ]);
       if (!mounted) return;
-      if (people.isEmpty) {
-        _notice('No opted-in contact found. Try name search.');
+      if (matches.isEmpty) {
+        _notice('No opted-in contact matched. Search by name instead.');
       } else {
-        await _person(people.first);
+        await _person(matches.first);
       }
     } catch (_) {
-      if (mounted) _notice('Contact lookup failed. Try again.');
+      if (mounted) _notice('Contact matching failed. You can search by name.');
     }
+  }
+
+  Future<void> _pickContact() async {
+    try {
+      final choice = await OrbitContactPicker().pick();
+      if (!mounted) return;
+      if (choice == null) {
+        _notice('No eligible contact selected. You can search by name or enter a contact manually.');
+        return;
+      }
+      await _matchSelected(choice.type, choice.value);
+    } catch (_) {
+      if (mounted) _notice('Contacts permission unavailable. Manual search still works.');
+    }
+  }
+
+  Future<void> _matchContact() async {
+    final contact = await _ask('Find a contact', 'Email or +country-code phone');
+    if (contact == null || contact.isEmpty) return;
+    final validEmail = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(contact);
+    final phone = contact.replaceAll(RegExp(r'[\s().-]'), '');
+    final validPhone = RegExp(r'^\+[1-9]\d{7,14}$').hasMatch(phone);
+    if (!validEmail && !validPhone) {
+      if (mounted) _notice('Enter a valid email or international phone number.');
+      return;
+    }
+    await _matchSelected(validEmail ? 'email' : 'phone',
+        validEmail ? contact.trim().toLowerCase() : phone);
   }
 
   @override
@@ -192,6 +261,18 @@ class _OrbitDiscoverFriendsScreenState extends State<OrbitDiscoverFriendsScreen>
                 iconBackgroundColor: const Color(0xFFF2EAFE),
                 leadingIconColor: const Color(0xFF7C3AED),
                 title: 'Enter Invite Code', onTap: _redeem),
+              const SizedBox(height:10),
+              AppActionRow(
+                leadingIcon: Icons.qr_code_scanner_outlined,
+                iconBackgroundColor: const Color(0xFFF2EAFE),
+                leadingIconColor: const Color(0xFF7C3AED),
+                title: 'Scan Invite QR', onTap: _scanQr),
+              const SizedBox(height:10),
+              AppActionRow(
+                leadingIcon: Icons.contact_page_outlined,
+                iconBackgroundColor: const Color(0xFFF2EAFE),
+                leadingIconColor: const Color(0xFF7C3AED),
+                title: 'Select Contact (optional)', onTap: _pickContact),
               const SizedBox(height:10),
               AppActionRow(
                 leadingIcon: Icons.contacts_outlined,
