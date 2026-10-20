@@ -6,7 +6,9 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 
-enum OrbitRestoreState { signedOut, authenticated, deviceRegistration, deletionPending }
+import 'orbit_offline_profile_snapshot.dart';
+
+enum OrbitRestoreState { signedOut, authenticated, deviceRegistration, deletionPending, offlineProfile }
 
 class OrbitIdentityException implements Exception {
   OrbitIdentityException(this.message, [this.statusCode]);
@@ -30,7 +32,6 @@ class OrbitIdentityClient {
   static const _privateKey = 'orbit.identity.private_key.v1';
   static const _userIdKey = 'orbit.identity.user_id.v1';
   static const _profileCacheKey = 'orbit.profile.encrypted_cache.v1';
-  static const _profileCacheTtl = Duration(hours: 1);
 
   final http.Client _http;
   final FlutterSecureStorage _storage;
@@ -216,10 +217,19 @@ class OrbitIdentityClient {
       }
       if (error.statusCode == 401) {
         await clearSession();
+        return OrbitRestoreState.signedOut;
+      }
+      // Server denial (403/409/422) must never grant any offline access.
+      // Only network failures or temporary 5xx may show the one-hour,
+      // read-only cached profile; never unlock the authenticated Home.
+      if (error.statusCode == null || (error.statusCode! >= 500)) {
+        if (await cachedProfileForOffline() != null) {
+          return OrbitRestoreState.offlineProfile;
+        }
       }
       return OrbitRestoreState.signedOut;
     } catch (_) {
-      // Avoid navigating into a demo Home when a session cannot be verified.
+      // Storage failures or malformed cache never unlock Home.
       return OrbitRestoreState.signedOut;
     }
   }
@@ -307,6 +317,21 @@ class OrbitIdentityClient {
     return data['key_registered'] == true && data['trust_state'] == 'trusted';
   }
 
+  /// Explicit, read-only offline preview. Requires an existing local session,
+  /// matching user identity and a fresh OS-secure-storage snapshot.
+  /// This does NOT verify current server-side trust or revocation.
+  Future<Map<String, dynamic>?> cachedProfileForOffline() async {
+    final refreshToken = await _storage.read(key: _refreshKey);
+    final owner = await _storage.read(key: _userIdKey);
+    final encryptedJson = await _storage.read(key: _profileCacheKey);
+    return OrbitOfflineProfileSnapshot.read(
+      encryptedJson,
+      owner: owner,
+      sessionPresent: refreshToken != null && refreshToken.isNotEmpty,
+      now: DateTime.now(),
+    );
+  }
+
   /// Profile-only encrypted cache, owned by the most recently verified user.
   /// Offline reads are clearly flagged; privacy and consent are never cached as
   /// authorization, and all writes must still reach the server.
@@ -316,36 +341,20 @@ class OrbitIdentityClient {
       final data = Map<String, dynamic>.from(result['data'] as Map);
       final owner = await _storage.read(key: _userIdKey);
       if (owner != null && owner == data['id']) {
-        await _storage.write(key: _profileCacheKey, value: jsonEncode({
-          'user_id': owner,
-          'cached_at_ms': DateTime.now().toUtc().millisecondsSinceEpoch,
-          'data': data,
-        }));
+        // OS-backed secure storage, no credentials or sensitive preferences.
+        await _storage.write(
+          key: _profileCacheKey,
+          value: OrbitOfflineProfileSnapshot.encode(data, DateTime.now()),
+        );
       }
       return data;
     } on OrbitIdentityException catch (error) {
-      // No cached fallback for revocation, missing trust or rejected sessions.
-      if (error.statusCode != null || _access == null) rethrow;
-      final owner = await _storage.read(key: _userIdKey);
-      final raw = await _storage.read(key: _profileCacheKey);
-      if (owner == null || raw == null) rethrow;
-      try {
-        final record = Map<String, dynamic>.from(jsonDecode(raw) as Map);
-        final cachedAt = DateTime.fromMillisecondsSinceEpoch(
-          record['cached_at_ms'] as int, isUtc: true);
-        if (record['user_id'] != owner ||
-            DateTime.now().toUtc().difference(cachedAt).isNegative ||
-            DateTime.now().toUtc().difference(cachedAt) > _profileCacheTtl) {
-          rethrow;
-        }
-        final data = Map<String, dynamic>.from(record['data'] as Map);
-        if (data['id'] != owner) {
-          rethrow;
-        }
-        return <String, dynamic>{...data, '_offline_cached': true};
-      } catch (_) {
-        rethrow;
-      }
+      // Device approval, deletion, suspension, logout or server rejection
+      // cannot fall back to an offline "authorized" session.
+      if (error.statusCode != null && error.statusCode! < 500) rethrow;
+      final cached = await cachedProfileForOffline();
+      if (cached == null) rethrow;
+      return cached;
     }
   }
 

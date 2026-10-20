@@ -8,6 +8,7 @@
   static const String deviceRegistration = '/device-registration';
   static const String profileBasics = '/profile-basics';
   static const String deletionStatus = '/deletion-status';
+  static const String offlineProfile = '/offline-profile';
   static const String welcome2 = '/welcome-2';
   static const String shareMoments = '/share-moments';
   static const String yourCircle = '/your-circle';

@@ -31,8 +31,11 @@ class _OrbitSessionWelcomeGateState extends State<OrbitSessionWelcomeGate> {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!mounted) return;
             final route = state == OrbitRestoreState.authenticated
-                ? '/home' : state == OrbitRestoreState.deletionPending
-                    ? '/deletion-status' : '/device-registration';
+                ? '/home'
+                : state == OrbitRestoreState.deletionPending
+                    ? '/deletion-status'
+                    : state == OrbitRestoreState.offlineProfile
+                        ? '/offline-profile' : '/device-registration';
             Navigator.of(context).pushNamedAndRemoveUntil(route, (_) => false);
           });
           return const Scaffold(
@@ -49,8 +52,9 @@ class _OrbitSessionWelcomeGateState extends State<OrbitSessionWelcomeGate> {
 /// Auth gate at the home route as well as app startup. A non-authorized user
 /// cannot reach demo Home through previous UI-only onboarding shortcuts.
 class OrbitProtectedHome extends StatefulWidget {
-  const OrbitProtectedHome({required this.home, super.key});
+  const OrbitProtectedHome({required this.home, this.identity, super.key});
   final Widget home;
+  final OrbitIdentityClient? identity;
 
   @override
   State<OrbitProtectedHome> createState() => _OrbitProtectedHomeState();
@@ -58,7 +62,7 @@ class OrbitProtectedHome extends StatefulWidget {
 
 class _OrbitProtectedHomeState extends State<OrbitProtectedHome> {
   late final Future<OrbitRestoreState> _check =
-      OrbitIdentityClient.instance.restoreSession();
+      (widget.identity ?? OrbitIdentityClient.instance).restoreSession();
 
   @override
   Widget build(BuildContext context) {
@@ -79,7 +83,9 @@ class _OrbitProtectedHomeState extends State<OrbitProtectedHome> {
           final route = snapshot.data == OrbitRestoreState.deviceRegistration
               ? '/device-registration'
               : snapshot.data == OrbitRestoreState.deletionPending
-                  ? '/deletion-status' : '/';
+                  ? '/deletion-status'
+                  : snapshot.data == OrbitRestoreState.offlineProfile
+                      ? '/offline-profile' : '/';
           Navigator.of(context).pushNamedAndRemoveUntil(route, (_) => false);
         });
         return const Scaffold(
