@@ -84,7 +84,7 @@ void main() {
     ));
     // Render the restricted screen through its own route without a duplicate
     // '/' entry in the navigator.
-    await tester.state<NavigatorState>(find.byType(Navigator))
+    tester.state<NavigatorState>(find.byType(Navigator))
         .pushNamed(AppRoutes.home);
     await tester.pumpAndSettle();
     expect(find.byType(AuthCard), findsOneWidget);
