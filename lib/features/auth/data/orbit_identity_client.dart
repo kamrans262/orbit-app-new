@@ -212,7 +212,12 @@ class OrbitIdentityClient {
     if (user is Map && user['id'] is String) {
       final nextUser = user['id'] as String;
       final lastUser = await _storage.read(key: _userIdKey);
-      if (lastUser != nextUser) await _storage.delete(key: _profileCacheKey);
+      if (lastUser != nextUser) {
+        _startupProfile = null;
+        _startupNotifications = null;
+        _startupPrivacy = null;
+        await _storage.delete(key: _profileCacheKey);
+      }
       await _storage.write(key: _userIdKey, value: nextUser);
     }
     await _storage.write(key: _refreshKey, value: refreshToken);
