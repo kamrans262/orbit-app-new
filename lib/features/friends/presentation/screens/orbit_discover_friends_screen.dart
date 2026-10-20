@@ -71,7 +71,7 @@ class _OrbitDiscoverFriendsScreenState extends State<OrbitDiscoverFriendsScreen>
         setState(() => _error = 'Search is unavailable. Please reconnect and retry.');
       }
     } finally {
-      if (mounted && serial == _generation) setState(() => _loading = false);
+      if (mounted && serial == _generation) { setState(() => _loading = false); }
     }
   }
 
