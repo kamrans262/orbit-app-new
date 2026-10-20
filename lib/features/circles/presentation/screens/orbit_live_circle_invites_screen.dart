@@ -29,7 +29,7 @@ class _OrbitLiveCircleInvitesScreenState extends State<OrbitLiveCircleInvitesScr
         final response=await _repo.outgoing(widget.circle.id,page:p);
         for(final invite in response.items){
           final person=invite.person;
-          if(person==null) continue;
+          if(person==null || !const {'pending','accepted','declined'}.contains(invite.status)) continue;
           final status=switch(invite.status){
             'accepted'=>CircleInviteStatus.accepted,
             'declined'=>CircleInviteStatus.declined,
@@ -37,7 +37,7 @@ class _OrbitLiveCircleInvitesScreenState extends State<OrbitLiveCircleInvitesScr
           };
           result.add(CircleInvite(
             id:invite.id,userId:person.id,userName:person.name,
-            avatarUrl:'',status:status,createdAt:DateTime.now(),
+            avatarUrl:'',status:status,createdAt:invite.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0),
           ));
         }
         if(!response.hasMore) break;
