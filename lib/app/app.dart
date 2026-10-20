@@ -4,6 +4,7 @@ import '../features/home/presentation/screens/home_screen.dart';
 import '../features/friends/presentation/screens/orbit_discover_friends_screen.dart';
 
 import '../core/widgets/app_keyboard_dismiss.dart';
+import '../core/navigation/orbit_invite_link_runtime.dart';
 
 import '../features/auth/presentation/screens/login_screen.dart';
 import '../features/auth/presentation/screens/orbit_otp_verification_controller.dart';
@@ -31,13 +32,26 @@ import 'theme/app_theme.dart';
 import '../features/app_update/presentation/orbit_update_runtime.dart';
 import '../features/connectivity/presentation/orbit_connectivity_runtime.dart';
 
-class OrbitApp extends StatelessWidget {
+class OrbitApp extends StatefulWidget {
   const OrbitApp({super.key});
+
+  @override
+  State<OrbitApp> createState() => _OrbitAppState();
+}
+
+class _OrbitAppState extends State<OrbitApp> {
+  @override
+  void initState() {
+    super.initState();
+    OrbitInviteLinkRuntime.instance.initialize();
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: OrbitInviteLinkRuntime.instance.navigatorKey,
       navigatorObservers: <NavigatorObserver>[
+        OrbitInviteLinkRuntime.instance,
         OrbitUpdateNavigatorObserver.instance,
         OrbitConnectivityNavigatorObserver.instance,
       ],
