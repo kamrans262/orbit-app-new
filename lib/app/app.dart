@@ -194,6 +194,15 @@ class OrbitApp extends StatelessWidget {
                 },
                 onRegisterDevice: OrbitIdentityClient.instance.registerDevice,
                 onCheckApproval: OrbitIdentityClient.instance.checkDeviceApproval,
+                onRequestRecoveryCode: OrbitIdentityClient.instance.requestDeviceRecoveryCode,
+                onCompleteRecovery: OrbitIdentityClient.instance.completeDeviceRecovery,
+                onSignInAgain: () async {
+                  await OrbitIdentityClient.instance.clearSession();
+                  if (!context.mounted) return;
+                  Navigator.of(context).pushNamedAndRemoveUntil(
+                    AppRoutes.login, (_) => false,
+                  );
+                },
               ),
             );
           case AppRoutes.profileBasics:

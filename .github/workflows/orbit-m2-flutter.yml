@@ -1,9 +1,9 @@
 name: Orbit Flutter M2 + M3 + Offline validation
 on:
   push:
-    branches: [feature/m2-auth-identity, feature/m3-profiles-settings, feature/m3-completion-offline]
+    branches: [feature/m2-auth-identity, feature/m3-profiles-settings, feature/m3-completion-offline, feature/device-recovery]
   pull_request:
-    branches: [main, feature/m2-auth-identity, feature/m3-profiles-settings]
+    branches: [main, feature/m2-auth-identity, feature/m3-profiles-settings, feature/device-recovery]
 concurrency:
   group: orbit-m2-flutter-${{ github.ref }}
   cancel-in-progress: true

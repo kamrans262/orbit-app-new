@@ -361,6 +361,32 @@ class OrbitIdentityClient {
     return record['trust_state'] == 'trusted';
   }
 
+  /// Two separate factors on a fresh pending-device session: account password
+  /// and a new OTP bound to purpose device_recovery.
+  Future<void> requestDeviceRecoveryCode(String recipient, String password) async {
+    await _send('POST', '/devices/recovery/request', protected: true,
+      body: <String, Object?>{
+        'recipient': recipient.trim(),
+        'password': password,
+      });
+  }
+
+  Future<void> completeDeviceRecovery(
+    String recipient, String password, String code,
+  ) async {
+    await _send('POST', '/devices/recovery/complete', protected: true,
+      body: <String, Object?>{
+        'recipient': recipient.trim(),
+        'password': password,
+        'code': code.trim(),
+        'confirm_revoke_others': true,
+      });
+    // Never declare Home trusted until server reflects the state change.
+    if (!await checkDeviceApproval()) {
+      throw OrbitIdentityException('Device recovery could not be verified.');
+    }
+  }
+
   /// Pending devices may check their own status without access to account data.
   Future<bool> checkDeviceApproval() async {
     final response = await _send('GET', '/devices/registration-status',
