@@ -14,7 +14,7 @@ class CircleGroupCard extends StatelessWidget {
 
   final CircleGroupData data;
   final VoidCallback onTap;
-  final VoidCallback onFavoritePressed;
+  final VoidCallback? onFavoritePressed;
 
   @override
   Widget build(BuildContext context) {
