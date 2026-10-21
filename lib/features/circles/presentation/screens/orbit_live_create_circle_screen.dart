@@ -15,8 +15,8 @@ class OrbitLiveCreateCircleScreen extends StatelessWidget {
     final repo = repository ?? OrbitCircleRepository();
     OrbitCircle? created;
     return CreateCircleScreen(
-      onCreateRequested: (name,color,icon) async {
-        created = await repo.create(name,color:color,icon:icon);
+      onCreateRequested: (name,color,icon,key) async {
+        created = await repo.create(name,color:color,icon:icon,idempotencyKey:key);
         onCreated?.call(created!);
       },
       onNext: () {
