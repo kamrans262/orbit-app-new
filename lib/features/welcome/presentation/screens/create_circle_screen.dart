@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
@@ -23,12 +24,14 @@ class CreateCircleScreen extends StatefulWidget {
   const CreateCircleScreen({
     required this.onNext,
     this.onCreateRequested,
+    this.onJoinRequested,
     this.onSkip,
     super.key,
   });
 
   final VoidCallback onNext;
-  final Future<void> Function(String name, String color, String icon)? onCreateRequested;
+  final Future<void> Function(String name, String color, String icon, String key)? onCreateRequested;
+  final VoidCallback? onJoinRequested;
   final VoidCallback? onSkip;
 
   @override
@@ -45,6 +48,8 @@ class _CreateCircleScreenState extends State<CreateCircleScreen> {
   int _selectedColorIndex = 0;
   int _selectedIconIndex = 0;
   bool _saving = false;
+  String _idempotencyKey = const Uuid().v4();
+  void _newDraft() { if (!_saving) _idempotencyKey = const Uuid().v4(); }
 
   static const List<_CircleColorOption> _colors = <_CircleColorOption>[
     _CircleColorOption(border: Color(0xFFF43F8E), fill: Color(0xFFEE8EB8)),
@@ -89,10 +94,23 @@ class _CreateCircleScreenState extends State<CreateCircleScreen> {
     if (save == null) { widget.onNext(); return; }
     setState(() => _saving = true);
     try {
+      // Explicit privacy review must precede the server mutation, not follow it.
+      final consent = await showDialog<bool>(context:context,builder:(dialog)=>
+        AlertDialog(backgroundColor:Colors.white,
+          title:const Text('Create private Circle?'),
+          content:const Text('Only invited people can join after accepting. '
+            'Live location, presence, Moments, Ping, chat and SOS sharing all start OFF. '
+            'You can invite friends after the Circle is created.'),
+          actions:[
+            TextButton(onPressed:()=>Navigator.pop(dialog,false),child:const Text('Cancel')),
+            TextButton(onPressed:()=>Navigator.pop(dialog,true),child:const Text('Create')),
+          ],
+        ));
+      if(consent != true || !mounted)return;
       final color = _colors[_selectedColorIndex].fill;
       final hex = '#${(color.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}';
       const keys = <String>['home','person','star','music','location','sunny'];
-      await save(name,hex,keys[_selectedIconIndex]);
+      await save(name,hex,keys[_selectedIconIndex],_idempotencyKey);
       if (mounted) widget.onNext();
     } catch (error) {
       if (!mounted) return;
@@ -146,12 +164,23 @@ class _CreateCircleScreenState extends State<CreateCircleScreen> {
                               textAlign: TextAlign.center,
                               style: AppTypography.largeHeading,
                             ),
+                            if (widget.onJoinRequested != null)
+                              Align(alignment:Alignment.center,
+                                child:TextButton.icon(
+                                  onPressed:widget.onJoinRequested,
+                                  icon:const Icon(Icons.group_add_outlined,
+                                    size:18,color:Color(0xFF7C3AED)),
+                                  label:const Text('Join with Code',
+                                    style:TextStyle(fontFamily:AppTypography.fontFamily,
+                                      color:Color(0xFF7C3AED))),
+                                )),
                             const SizedBox(height: _headingBottomGap),
                             AppTextField(
                               label: 'Circle Name:',
                               labelKey: CreateCircleKeys.nameLabel,
                               fieldKey: CreateCircleKeys.nameField,
                               controller: _nameController,
+                              onChanged: (_) => _newDraft(),
                               textInputAction: TextInputAction.done,
                               suffixIcon: const Icon(
                                 Icons.favorite_rounded,
@@ -170,6 +199,7 @@ class _CreateCircleScreenState extends State<CreateCircleScreen> {
                               options: _colors,
                               selectedIndex: _selectedColorIndex,
                               onSelected: (index) {
+                                _newDraft();
                                 setState(() => _selectedColorIndex = index);
                               },
                             ),
@@ -184,6 +214,7 @@ class _CreateCircleScreenState extends State<CreateCircleScreen> {
                               icons: _icons,
                               selectedIndex: _selectedIconIndex,
                               onSelected: (index) {
+                                _newDraft();
                                 setState(() => _selectedIconIndex = index);
                               },
                             ),
