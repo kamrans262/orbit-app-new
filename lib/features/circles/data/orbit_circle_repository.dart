@@ -1,4 +1,5 @@
 import '../../auth/data/orbit_identity_client.dart';
+import 'package:uuid/uuid.dart';
 
 /// M5 server-authoritative Circle. The API never provides live presence,
 /// avatars, location, group-chat access or automatic sharing permissions.
@@ -96,8 +97,9 @@ class OrbitCircleRepository {
   final OrbitIdentityClient _identity;
 
   Future<Map<String, dynamic>> _request(String method, String path,
-      {Map<String, Object?>? body}) async {
-    final payload = await _identity.socialRequest(method, path, body: body);
+      {Map<String, Object?>? body, String? idempotencyKey}) async {
+    final payload = await _identity.socialRequest(method, path,
+      body: body, idempotencyKey: idempotencyKey);
     final data = payload['data'];
     if (data is! Map) throw const FormatException('Invalid Circle API payload.');
     return Map<String, dynamic>.from(data);
@@ -122,8 +124,12 @@ class OrbitCircleRepository {
   Future<OrbitCircle> detail(String id) async =>
       OrbitCircle.fromJson(await _request('GET','/circles/${_segment(id)}'));
 
-  Future<OrbitCircle> create(String name, {String? color, String? icon}) async =>
-      OrbitCircle.fromJson(await _request('POST','/circles', body: {
+  /// Reuse the same key across retries of a single user intent to avoid
+  /// duplicated Circle creation after a transport timeout.
+  Future<OrbitCircle> create(String name, {String? color, String? icon,
+    String? idempotencyKey}) async =>
+      OrbitCircle.fromJson(await _request('POST','/circles',
+      idempotencyKey:idempotencyKey ?? const Uuid().v4(), body: {
         'name': name.trim(), if (color != null) 'color_value': color,
         if (icon != null) 'icon_key': icon,
       }));
