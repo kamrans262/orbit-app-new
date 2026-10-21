@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../features/home/presentation/screens/home_screen.dart';
 import '../features/circles/data/orbit_circle_repository.dart';
 import '../features/circles/presentation/screens/orbit_circle_join_screen.dart';
+import '../features/circles/presentation/screens/orbit_live_circle_detail_screen.dart';
 import '../features/circles/presentation/screens/orbit_onboarding_invite_screen.dart';
 import '../features/friends/presentation/screens/orbit_discover_friends_screen.dart';
 
@@ -356,8 +357,19 @@ class _OrbitAppState extends State<OrbitApp> {
                     Navigator.of(context).pushNamedAndRemoveUntil(
                       AppRoutes.home, (_) => false);
                   } else {
-                    Navigator.of(context).pushNamed(
-                      AppRoutes.invitePeople,arguments:createdCircle);
+                    // A committed Circle must open its real roster, never a
+                    // simulated onboarding member list or a duplicate create.
+                    // Home is the root so Back always exits onboarding safely.
+                    final nav=Navigator.of(context);
+                    nav.pushNamedAndRemoveUntil(AppRoutes.home, (_) => false);
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (nav.mounted) {
+                        nav.push<void>(MaterialPageRoute<void>(
+                          builder:(_) => OrbitLiveCircleDetailScreen(
+                            circleId:createdCircle),
+                        ));
+                      }
+                    });
                   }
                 },
                 onSkip: () {
