@@ -318,9 +318,9 @@ class _OrbitAppState extends State<OrbitApp> {
             return MaterialPageRoute<void>(
               settings: settings,
               builder: (context) => CreateCircleScreen(
-                onCreateRequested: (name,color,icon) async {
+                onCreateRequested: (name,color,icon,key) async {
                   final circle=await OrbitCircleRepository()
-                      .create(name,color:color,icon:icon);
+                      .create(name,color:color,icon:icon,idempotencyKey:key);
                   createdCircleId=circle.id;
                 },
                 onNext: () {
