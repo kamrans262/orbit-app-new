@@ -266,6 +266,7 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
       onBack: () => Navigator.of(context).maybePop(),
       // Server does not support favorites; do not fabricate persistent favorite.
       enableFavoriteControls: false,
+      showMemberCounts: !_offline,
       onCreatePressed: _offline || _busy ? () => _notify('Reconnect to create a Circle.') : _create,
       onJoinRequested: _offline || _busy ? (_) => _notify('Reconnect to join a Circle.') : _join,
       onCirclePressed: _offline ? (_) => _notify('Reconnect to view Circle members.')
