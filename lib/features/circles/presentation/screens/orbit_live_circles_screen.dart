@@ -183,9 +183,14 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
   Future<void> _incoming() async {
     if (_offline || _busy) return;
     try {
-      final result = await _repo.incoming();
+      final invitations=<OrbitCircleInvite>[];
+      for (var page=1;page<=20;page++) {
+        final result=await _repo.incoming(page:page);
+        invitations.addAll(result.items);
+        if(!result.hasMore) break;
+      }
       if (!mounted) return;
-      if (result.items.isEmpty) {
+      if (invitations.isEmpty) {
         _notify('You have no pending Circle invitations.');
         return;
       }
@@ -197,7 +202,7 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
           child: ListView(shrinkWrap: true, children: [
             const Text('Circle invitations', style: TextStyle(
               fontFamily: AppTypography.fontFamily, fontWeight: FontWeight.w600, fontSize: 20)),
-            for (final invite in result.items)
+            for (final invite in invitations)
               ListTile(
                 title: Text(invite.circleName ?? 'Circle'),
                 subtitle: const Text('Invitation pending'),
@@ -212,6 +217,20 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
                     }),
                   IconButton(icon: const Icon(Icons.check),
                     tooltip: 'Accept', onPressed: () async {
+                      final confirm=await showDialog<bool>(context:sheet,
+                        builder:(dialog)=>AlertDialog(
+                          backgroundColor:Colors.white,
+                          title:const Text('Accept Circle invitation?'),
+                          content:Text('Join "${invite.circleName ?? 'Circle'}"? '
+                            'No location, presence, Moment or messaging permissions are granted.'),
+                          actions:[
+                            TextButton(onPressed:()=>Navigator.pop(dialog,false),
+                              child:const Text('Cancel')),
+                            TextButton(onPressed:()=>Navigator.pop(dialog,true),
+                              child:const Text('Accept')),
+                          ],
+                        ));
+                      if(confirm != true) return;
                       try {
                         await _repo.answer(invite.id,accept:true);
                         if (sheet.mounted) Navigator.pop(sheet);
