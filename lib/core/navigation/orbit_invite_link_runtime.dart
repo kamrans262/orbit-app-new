@@ -26,7 +26,15 @@ class OrbitInviteLinkRuntime extends NavigatorObserver {
 
   void initialize() {
     if (_links != null) return;
-    _links = AppLinks().uriLinkStream.listen(_received, onError: (_) {});
+    final links = AppLinks();
+    _links = links.uriLinkStream.listen(_received, onError: (_) {});
+    // Cold-start links may arrive before the listener is attached. Always
+    // capture the initial URL as well, then hold it until trusted Home auth.
+    links.getInitialLink().then((uri) {
+      if (uri != null) _received(uri);
+    }).catchError((Object _) {
+      // No link must cause a sign-in or startup failure.
+    });
   }
 
   void _received(Uri url) {
