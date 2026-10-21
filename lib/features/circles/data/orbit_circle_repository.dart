@@ -137,10 +137,11 @@ class OrbitCircleRepository {
         if (icon != null) 'icon_key': icon,
       }));
 
-  Future<OrbitCircle> update(String id, {String? name, String? color}) async =>
+  Future<OrbitCircle> update(String id, {String? name, String? color, String? icon}) async =>
       OrbitCircle.fromJson(await _request('PATCH','/circles/${_segment(id)}', body: {
         if (name != null) 'name': name.trim(),
         if (color != null) 'color_value': color,
+        if (icon != null) 'icon_key': icon,
       }));
 
   Future<OrbitCirclePage<OrbitCircleMember>> members(String id,
