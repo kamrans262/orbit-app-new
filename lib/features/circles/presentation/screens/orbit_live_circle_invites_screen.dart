@@ -16,6 +16,7 @@ class OrbitLiveCircleInvitesScreen extends StatefulWidget {
 class _OrbitLiveCircleInvitesScreenState extends State<OrbitLiveCircleInvitesScreen> {
   late final OrbitCircleRepository _repo=widget.repository ?? OrbitCircleRepository();
   List<CircleInvite> _invites=const [];
+  Set<String> _revocable=const <String>{};
   bool _busy=true;
   String? _error;
 
@@ -25,9 +26,11 @@ class _OrbitLiveCircleInvitesScreenState extends State<OrbitLiveCircleInvitesScr
     if(mounted) setState(() {_busy=true;_error=null;});
     try {
       final result=<CircleInvite>[];
+      final revocable=<String>{};
       for (var p=1;p<=20;p++) {
         final response=await _repo.outgoing(widget.circle.id,page:p);
         for(final invite in response.items){
+          if (invite.canRevoke) revocable.add(invite.id);
           final person=invite.person;
           if(person==null || !const {'pending','accepted','declined'}.contains(invite.status)) continue;
           final status=switch(invite.status){
@@ -42,7 +45,7 @@ class _OrbitLiveCircleInvitesScreenState extends State<OrbitLiveCircleInvitesScr
         }
         if(!response.hasMore) break;
       }
-      if(mounted) setState(() {_invites=result;_busy=false;});
+      if(mounted) setState(() {_invites=result;_revocable=revocable;_busy=false;});
     } catch(_) {
       if(mounted) setState(() {
         _error='Unable to load Circle invitations. Reconnect and retry.';
@@ -69,7 +72,7 @@ class _OrbitLiveCircleInvitesScreenState extends State<OrbitLiveCircleInvitesScr
   }
 
   Future<void> _pressed(CircleInvite invite) async {
-    if(invite.status!=CircleInviteStatus.pending) return;
+    if(invite.status!=CircleInviteStatus.pending || !_revocable.contains(invite.id)) return;
     final agree=await showDialog<bool>(context:context,builder:(d)=>AlertDialog(
       backgroundColor:Colors.white,
       title:const Text('Revoke invitation?'),
