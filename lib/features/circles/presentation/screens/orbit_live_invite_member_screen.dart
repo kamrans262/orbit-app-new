@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
@@ -73,6 +74,10 @@ class _OrbitLiveInviteMemberScreenState extends State<OrbitLiveInviteMemberScree
             ],
           )),
           actions:[
+            TextButton(onPressed:() async {
+              await Share.share('Private Orbit Circle invitation for ${person.name}: $code '
+                '(valid for 7 days; usable by the intended recipient only).');
+            },child:const Text('Share code')),
             TextButton(onPressed:() async {
               await Clipboard.setData(ClipboardData(text:code));
               if(d.mounted) Navigator.pop(d);
