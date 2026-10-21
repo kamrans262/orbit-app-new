@@ -97,9 +97,14 @@ class _OrbitLiveCircleSettingsScreenState extends State<OrbitLiveCircleSettingsS
   Future<void> _manage() async {
     _debounce?.cancel();
     if(!await _persist() || !mounted) return;
-    await Navigator.of(context).push<void>(AppFadeSlidePageRoute<void>(
-      builder:(_)=>OrbitLiveCircleManageScreen(circle:_circle,repository:_repo)));
+    final outcome=await Navigator.of(context).push<String>(
+      AppFadeSlidePageRoute<String>(
+        builder:(_)=>OrbitLiveCircleManageScreen(circle:_circle,repository:_repo)));
     if(!mounted) return;
+    if (outcome == 'left' || outcome == 'archived') {
+      Navigator.of(context).pop('unavailable');
+      return;
+    }
     try {
       final updated=await _repo.detail(_circle.id);
       if(mounted) setState(()=>_circle=updated);
@@ -120,7 +125,7 @@ class _OrbitLiveCircleSettingsScreenState extends State<OrbitLiveCircleSettingsS
     if(!await _persist() || !mounted)return;
     try {
       await _repo.archive(_circle.id);
-      if(mounted) Navigator.of(context).pop();
+      if(mounted) Navigator.of(context).pop('unavailable');
     } catch(e){_error(e);}
   }
 
