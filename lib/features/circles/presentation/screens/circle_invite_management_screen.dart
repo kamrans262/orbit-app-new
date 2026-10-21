@@ -205,7 +205,7 @@ class _CircleInviteManagementScreenState
       separatorBuilder: (context, index) => const SizedBox(height: _tileGap),
       itemBuilder: (context, index) {
         final invite = invites[index];
-        return Center(
+        return LayoutBuilder(builder:(context, constraints)=>Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: _maxContentWidth),
             child: OrbitPersonActionTile(
@@ -222,7 +222,7 @@ class _CircleInviteManagementScreenState
                     key: CircleInviteManagementKeys.status(invite.id),
                     child: InviteStatusBadge(status: invite.status),
                   ),
-                  if (MediaQuery.sizeOf(context).width >= 340) ...<Widget>[
+                  if (constraints.maxWidth >= 300) ...<Widget>[
                     const SizedBox(width: 8),
                     const Icon(
                       Icons.chevron_right_rounded,
@@ -234,7 +234,7 @@ class _CircleInviteManagementScreenState
               ),
             ),
           ),
-        );
+        ));
       },
     );
   }
