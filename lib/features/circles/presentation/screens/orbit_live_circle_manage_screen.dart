@@ -69,6 +69,33 @@ class _OrbitLiveCircleManageScreenState extends State<OrbitLiveCircleManageScree
         ],
       )) ?? false;
 
+  Future<void> _editIcon() async {
+    if(!_circle.can('edit'))return;
+    const icons=<String,IconData>{
+      'home':Icons.home_rounded,'person':Icons.account_circle_outlined,
+      'star':Icons.star_border_rounded,'music':Icons.music_note_rounded,
+      'location':Icons.location_on_outlined,'sunny':Icons.wb_sunny_outlined,
+    };
+    final choice=await showModalBottomSheet<String>(context:context,
+      backgroundColor:AppColors.background,
+      builder:(sheet)=>SafeArea(child:Padding(padding:const EdgeInsets.all(20),
+        child:Wrap(spacing:12,runSpacing:12,children:[
+          for(final entry in icons.entries)
+            ActionChip(
+              avatar:Icon(entry.value,size:18,color:const Color(0xFF7C3AED)),
+              label:Text(entry.key,style:const TextStyle(
+                fontFamily:AppTypography.fontFamily)),
+              onPressed:()=>Navigator.pop(sheet,entry.key),
+            ),
+        ]),
+      )));
+    if(choice==null || choice==_circle.iconKey)return;
+    try {
+      final updated=await _repo.update(_circle.id,icon:choice);
+      if(mounted)setState(()=>_circle=updated);
+    }catch(e){_errorNotice(e);}
+  }
+
   Future<void> _setPrimary() async {
     try {
       await _repo.choosePrimary(_circle.id);
@@ -169,6 +196,9 @@ class _OrbitLiveCircleManageScreenState extends State<OrbitLiveCircleManageScree
           style:const TextStyle(fontFamily:AppTypography.fontFamily,color:Color(0xFF64748B))),
         const SizedBox(height:16),
         _item(Icons.star_outline,'Set as primary Circle',_setPrimary),
+        if(_circle.can('edit'))
+          _item(Icons.palette_outlined,'Change Circle icon',_editIcon,
+            subtitle:'Current: ${_circle.iconKey ?? 'Default'}'),
         if(_circle.can('invite')) ...[
           _item(Icons.person_add_alt_1_outlined,'Invite friends',_invite),
           _item(Icons.mail_outline,'Manage invitations',_invites),
