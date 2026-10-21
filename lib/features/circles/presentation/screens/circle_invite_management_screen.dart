@@ -222,12 +222,14 @@ class _CircleInviteManagementScreenState
                     key: CircleInviteManagementKeys.status(invite.id),
                     child: InviteStatusBadge(status: invite.status),
                   ),
-                  const SizedBox(width: 8),
-                  const Icon(
-                    Icons.chevron_right_rounded,
-                    size: 24,
-                    color: Color(0xFF94A3B8),
-                  ),
+                  if (MediaQuery.sizeOf(context).width >= 340) ...<Widget>[
+                    const SizedBox(width: 8),
+                    const Icon(
+                      Icons.chevron_right_rounded,
+                      size: 24,
+                      color: Color(0xFF94A3B8),
+                    ),
+                  ],
                 ],
               ),
             ),
