@@ -10,6 +10,7 @@ class CircleGroupCard extends StatelessWidget {
     required this.onTap,
     required this.onFavoritePressed,
     this.showFavoriteButton = true,
+    this.showMemberCount = true,
     super.key,
   });
 
@@ -17,6 +18,7 @@ class CircleGroupCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback? onFavoritePressed;
   final bool showFavoriteButton;
+  final bool showMemberCount;
 
   @override
   Widget build(BuildContext context) {
@@ -103,7 +105,7 @@ class CircleGroupCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 3),
-              Text(
+              if(showMemberCount) Text(
                 memberLabel,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
