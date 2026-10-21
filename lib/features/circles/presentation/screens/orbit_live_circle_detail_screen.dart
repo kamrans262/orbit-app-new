@@ -98,6 +98,9 @@ class _OrbitLiveCircleDetailScreenState extends State<OrbitLiveCircleDetailScree
       onBack: () => Navigator.of(context).maybePop(),
       onAddMember: _openInvite,
       liveInviteMode: true,
+      headerTitle:'Circle Details',
+      showGroupSegment:false,
+      showFavoriteActions:false,
       showAddMemberButton: _circle?.can('invite') == true,
       viewState:_loading ? FriendDetailsViewState.loading
         : _error!=null ? FriendDetailsViewState.error
