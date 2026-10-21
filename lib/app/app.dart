@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../features/home/presentation/screens/home_screen.dart';
 import '../features/circles/data/orbit_circle_repository.dart';
 import '../features/circles/presentation/screens/orbit_live_invite_member_screen.dart';
+import '../features/circles/presentation/screens/orbit_circle_join_screen.dart';
+import '../features/circles/presentation/screens/orbit_onboarding_invite_screen.dart';
 import '../features/friends/presentation/screens/orbit_discover_friends_screen.dart';
 
 import '../core/widgets/app_keyboard_dismiss.dart';
@@ -313,11 +315,21 @@ class _OrbitAppState extends State<OrbitApp> {
                 },
               ),
             );
+          case AppRoutes.joinCircle:
+            return MaterialPageRoute<void>(
+              settings: settings,
+              builder:(context)=>OrbitCircleJoinScreen(
+                onJoined:()=>Navigator.of(context).pushNamedAndRemoveUntil(
+                  AppRoutes.home, (_) => false,
+                ),
+              ),
+            );
           case AppRoutes.createCircle:
             String? createdCircleId;
             return MaterialPageRoute<void>(
               settings: settings,
               builder: (context) => CreateCircleScreen(
+                onJoinRequested: () => Navigator.of(context).pushNamed(AppRoutes.joinCircle),
                 onCreateRequested: (name,color,icon,key) async {
                   final circle=await OrbitCircleRepository()
                       .create(name,color:color,icon:icon,idempotencyKey:key);
@@ -360,7 +372,12 @@ class _OrbitAppState extends State<OrbitApp> {
               final circleId=settings.arguments as String;
               return MaterialPageRoute<void>(
                 settings:settings,
-                builder: (_) => OrbitLiveInviteMemberScreen(circleId:circleId),
+                builder:(context)=>OrbitOnboardingInviteScreen(
+                  circleId:circleId,
+                  onCompleted:()=>Navigator.of(context).pushNamedAndRemoveUntil(
+                    AppRoutes.home, (_) => false,
+                  ),
+                ),
               );
             }
             return MaterialPageRoute<void>(
