@@ -121,7 +121,7 @@ class _OrbitLiveCircleManageScreenState extends State<OrbitLiveCircleManageScree
     if(!await _confirm('Leave Circle?','You will lose access to this Circle.','Leave'))return;
     try {
       await _repo.leave(_circle.id);
-      if(mounted) Navigator.of(context).pop();
+      if(mounted) Navigator.of(context).pop('left');
     }catch(e){_errorNotice(e);}
   }
 
@@ -158,7 +158,7 @@ class _OrbitLiveCircleManageScreenState extends State<OrbitLiveCircleManageScree
       'Archive'))return;
     try {
       await _repo.archive(_circle.id);
-      if(mounted)Navigator.of(context).pop();
+      if(mounted)Navigator.of(context).pop('archived');
     }catch(e){_errorNotice(e);}
   }
 
