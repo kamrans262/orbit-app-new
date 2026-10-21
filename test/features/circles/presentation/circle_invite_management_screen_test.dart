@@ -104,7 +104,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(tester.takeException(), isNull);
+    final narrowError = tester.takeException();
+    if (narrowError is FlutterError) {
+      // Temporary diagnostic: locate the RenderFlex before changing UI geometry.
+      debugPrint(narrowError.toStringDeep());
+    }
+    expect(narrowError, isNull);
     expect(
       find.byKey(CircleInviteManagementKeys.tile('long-name')),
       findsOneWidget,
