@@ -91,6 +91,7 @@ class OrbitIdentityClient {
     Map<String, Object?>? body,
     bool protected = false,
     bool allowRetry = true,
+    String? idempotencyKey,
   }) async {
     if (protected && _access == null) await refresh();
     final request = http.Request(method, Uri.parse('$_origin$path'))
@@ -99,6 +100,7 @@ class OrbitIdentityClient {
     if (protected && _access != null) {
       request.headers['Authorization'] = 'Bearer $_access';
     }
+    if (idempotencyKey != null) request.headers['Idempotency-Key'] = idempotencyKey;
     if (body != null) request.body = jsonEncode(body);
     late final http.Response response;
     try {
@@ -111,7 +113,8 @@ class OrbitIdentityClient {
     if (protected && response.statusCode == 401 && allowRetry) {
       _access = null;
       await refresh();
-      return _send(method, path, body: body, protected: true, allowRetry: false);
+      return _send(method, path, body: body, protected: true, allowRetry: false,
+        idempotencyKey: idempotencyKey);
     }
     Map<String, dynamic> json;
     try {
@@ -442,12 +445,13 @@ class OrbitIdentityClient {
       _storage.delete(key: _circlesCacheKey);
 
   Future<Map<String, dynamic>> socialRequest(String method, String path,
-      {Map<String, Object?>? body}) {
+      {Map<String, Object?>? body, String? idempotencyKey}) {
     if (!path.startsWith('/') || path.startsWith('//') ||
         path.contains('..') || path.contains('://')) {
       throw ArgumentError.value(path, 'path', 'Unsafe API path');
     }
-    return _send(method, path, body: body, protected: true);
+    return _send(method, path, body: body, protected: true,
+      idempotencyKey:idempotencyKey);
   }
 
   Future<Map<String, dynamic>> currentUser() =>
