@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../features/home/presentation/screens/home_screen.dart';
 import '../features/circles/data/orbit_circle_repository.dart';
-import '../features/circles/presentation/screens/orbit_live_invite_member_screen.dart';
 import '../features/circles/presentation/screens/orbit_circle_join_screen.dart';
 import '../features/circles/presentation/screens/orbit_onboarding_invite_screen.dart';
 import '../features/friends/presentation/screens/orbit_discover_friends_screen.dart';
