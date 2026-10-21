@@ -264,7 +264,7 @@ class _FriendDetailsScreenState extends State<FriendDetailsScreen> {
             iconColor: Colors.black,
           ),
           const SizedBox(width: 10),
-          const Expanded(
+          Expanded(
             child: Text(
               widget.headerTitle,
               key: FriendDetailsKeys.title,
