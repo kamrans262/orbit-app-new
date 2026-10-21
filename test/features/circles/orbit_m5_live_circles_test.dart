@@ -49,6 +49,6 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Cached Circle'),findsOneWidget);
       expect(find.textContaining('OFFLINE'),findsOneWidget);
-      expect(find.textContaining('0 members'),findsOneWidget);
+      expect(find.textContaining('0 members'),findsNothing);
   });
 }
