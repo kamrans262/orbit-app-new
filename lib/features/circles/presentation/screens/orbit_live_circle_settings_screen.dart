@@ -79,7 +79,8 @@ class _OrbitLiveCircleSettingsScreenState extends State<OrbitLiveCircleSettingsS
     try {
       await task;
     } catch(e) {
-      _pending=next;
+      _pending=null;
+      if (mounted) setState(() {}); // revert to last server-confirmed settings
       _error(e);
       return false;
     } finally {
