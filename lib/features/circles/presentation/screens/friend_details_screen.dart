@@ -34,6 +34,9 @@ class FriendDetailsScreen extends StatefulWidget {
     required this.onAddMember,
     this.liveInviteMode = false,
     this.showAddMemberButton = true,
+    this.showGroupSegment = true,
+    this.showFavoriteActions = true,
+    this.headerTitle = 'Friend Details',
     this.initialSegment = FriendDetailsSegment.circle,
     this.viewState = FriendDetailsViewState.loaded,
     this.errorMessage = 'Something went wrong. Please try again.',
@@ -144,6 +147,9 @@ class FriendDetailsScreen extends StatefulWidget {
   final VoidCallback onAddMember;
   final bool liveInviteMode;
   final bool showAddMemberButton;
+  final bool showGroupSegment;
+  final bool showFavoriteActions;
+  final String headerTitle;
   final FriendDetailsSegment initialSegment;
   final FriendDetailsViewState viewState;
   final String errorMessage;
@@ -208,18 +214,16 @@ class _FriendDetailsScreenState extends State<FriendDetailsScreen> {
               sliver: SliverToBoxAdapter(child: _buildSummary()),
             ),
             const SliverToBoxAdapter(child: SizedBox(height: _sectionGap)),
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: _horizontalPadding,
-              ),
-              sliver: SliverToBoxAdapter(
-                child: CircleGroupSegmentedControl(
-                  value: _segment,
-                  onChanged: _handleSegmentChanged,
+            if (widget.showGroupSegment) ...<Widget>[
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal:_horizontalPadding),
+                sliver: SliverToBoxAdapter(
+                  child: CircleGroupSegmentedControl(
+                    value:_segment,onChanged:_handleSegmentChanged),
                 ),
               ),
-            ),
-            const SliverToBoxAdapter(child: SizedBox(height: _sectionGap)),
+              const SliverToBoxAdapter(child:SizedBox(height:_sectionGap)),
+            ],
             ..._buildDynamicContent(),
             const SliverToBoxAdapter(child: SizedBox(height: 24)),
           ],
@@ -262,7 +266,7 @@ class _FriendDetailsScreenState extends State<FriendDetailsScreen> {
           const SizedBox(width: 10),
           const Expanded(
             child: Text(
-              'Friend Details',
+              widget.headerTitle,
               key: FriendDetailsKeys.title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -407,6 +411,7 @@ class _FriendDetailsScreenState extends State<FriendDetailsScreen> {
                 ),
                 onTap: member.onTap ?? () {},
                 onFavoritePressed: () => _toggleMemberFavorite(memberIndex),
+                showFavoriteAction:widget.showFavoriteActions,
               ),
             );
           }, childCount: childCount),
