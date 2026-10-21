@@ -103,10 +103,16 @@ class _OrbitLiveCircleDetailScreenState extends State<OrbitLiveCircleDetailScree
   Future<void> _openSettings() async {
     final circle=_circle;
     if(circle==null) return;
-    await Navigator.of(context).push<void>(AppFadeSlidePageRoute<void>(
-      builder: (_) => OrbitLiveCircleSettingsScreen(
-        circle:circle,repository:_repo)));
-    if(mounted) await _refresh();
+    final outcome=await Navigator.of(context).push<String>(
+      AppFadeSlidePageRoute<String>(
+        builder: (_) => OrbitLiveCircleSettingsScreen(
+          circle:circle,repository:_repo)));
+    if(!mounted)return;
+    if(outcome=='unavailable') {
+      Navigator.of(context).maybePop();
+      return;
+    }
+    await _refresh();
   }
 
   @override
