@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../app/theme/app_colors.dart';
+import '../../../../app/theme/app_typography.dart';
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../data/orbit_circle_repository.dart';
 import '../../domain/models/friend_details_models.dart';
@@ -67,6 +68,29 @@ class _OrbitLiveCircleDetailScreenState extends State<OrbitLiveCircleDetailScree
     }
   }
 
+  Future<void> _memberPreview(OrbitCircleMember member) async {
+    if(_circle==null) return;
+    await showModalBottomSheet<void>(context:context,
+      backgroundColor:AppColors.background,
+      builder:(context)=>SafeArea(child:Padding(
+        padding:const EdgeInsets.all(20),
+        child:Column(mainAxisSize:MainAxisSize.min,
+          crossAxisAlignment:CrossAxisAlignment.start,
+          children:[
+            const Text('Circle member',style:TextStyle(
+              fontFamily:AppTypography.fontFamily,fontWeight:FontWeight.w600,fontSize:18)),
+            const SizedBox(height:12),
+            Text(member.name),
+            if(member.username.isNotEmpty)Text('@${member.username}'),
+            Text('Role: ${member.role}'),
+            const SizedBox(height:12),
+            const Text('Live presence and location are not shared.',
+              style:TextStyle(color:Color(0xFF64748B),fontSize:12)),
+          ],
+        ),
+      )));
+  }
+
   Future<void> _openInvite() async {
     final circle=_circle;
     if(circle==null || !circle.can('invite')) return;
@@ -93,6 +117,7 @@ class _OrbitLiveCircleDetailScreenState extends State<OrbitLiveCircleDetailScree
         id:p.id,name:p.name,
         status:'${p.username.isEmpty ? p.role : '@${p.username} • ${p.role}'}',
         imagePath:null,
+        onTap:()=>_memberPreview(p),
       )).toList(growable:false),
       groups:const <CircleGroupData>[],
       onBack: () => Navigator.of(context).maybePop(),
