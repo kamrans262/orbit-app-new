@@ -108,6 +108,7 @@ void main() {
     if (narrowError is FlutterError) {
       // Temporary diagnostic: locate the RenderFlex before changing UI geometry.
       debugPrint(narrowError.toStringDeep());
+      debugDumpRenderTree();
     }
     expect(narrowError, isNull);
     expect(
