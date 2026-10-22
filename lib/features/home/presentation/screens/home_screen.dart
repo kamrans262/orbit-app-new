@@ -17,8 +17,6 @@ import '../widgets/promo_banner_card.dart';
 import '../widgets/quick_action_card.dart';
 import '../widgets/upcoming_plan_card.dart';
 
-import '../../../circles/presentation/screens/friend_details_screen.dart';
-import '../../../circles/domain/models/friend_details_models.dart';
 import '../../../friends/presentation/screens/friends_screen.dart';
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../../requests/presentation/screens/request_screen.dart';
@@ -726,16 +724,6 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
     _openMoments();
-  }
-
-  void _openFavoriteCircleDetails() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (routeContext) => FriendDetailsScreen.demo(
-          onBack: () => Navigator.of(routeContext).pop(),
-        ),
-      ),
-    );
   }
 
   Widget _buildMoments() {
