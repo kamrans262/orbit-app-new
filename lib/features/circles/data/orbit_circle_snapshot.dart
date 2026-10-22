@@ -9,7 +9,7 @@ class OrbitCircleSnapshot {
   const OrbitCircleSnapshot(this.circles, this.savedAt);
   final List<OrbitCircle> circles;
   final DateTime savedAt;
-  static const ttl = Duration(minutes: 15);
+  static const ttl = Duration(minutes: 5);
 
   static String encode(String owner, List<OrbitCircle> items, DateTime now) =>
       jsonEncode(<String, Object?>{
