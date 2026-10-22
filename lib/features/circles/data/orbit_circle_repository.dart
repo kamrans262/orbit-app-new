@@ -232,9 +232,10 @@ class OrbitCircleRepository {
       _page(await _request('GET','/circles/archived?page=$page'), OrbitCircle.fromJson);
 
   Future<Map<String, dynamic>> primary() => _request('GET','/me/circles/primary');
-  Future<void> choosePrimary(String? id) async {
-    await _request('PUT','/me/circles/primary', body: {'circle_id': id});
-  }
+  /// The server returns the resolved primary ID and fallback status. Clearing
+  /// a manual preference may select another authorized Circle automatically.
+  Future<Map<String, dynamic>> choosePrimary(String? id) =>
+      _request('PUT','/me/circles/primary', body: {'circle_id': id});
 
   Future<Map<String, dynamic>> permissions(String id) =>
       _request('GET','/circles/${_segment(id)}/permissions');
