@@ -37,6 +37,7 @@ class CircleInviteManagementScreen extends StatefulWidget {
     this.initialTab = CircleInviteTab.sent,
     this.onBack,
     this.onInvitePressed,
+    this.canOpenInvite,
     this.onRetry,
     super.key,
   });
@@ -60,6 +61,8 @@ class CircleInviteManagementScreen extends StatefulWidget {
   final CircleInviteTab initialTab;
   final VoidCallback? onBack;
   final CircleInviteTap? onInvitePressed;
+  /// Hide actions for historical or server-denied invitations.
+  final bool Function(CircleInvite invite)? canOpenInvite;
   final ValueChanged<CircleInviteTab>? onRetry;
 
   @override
