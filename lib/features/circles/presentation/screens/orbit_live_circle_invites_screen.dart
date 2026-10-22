@@ -32,10 +32,12 @@ class _OrbitLiveCircleInvitesScreenState extends State<OrbitLiveCircleInvitesScr
         for(final invite in response.items){
           if (invite.canRevoke) revocable.add(invite.id);
           final person=invite.person;
-          if(person==null || !const {'pending','accepted','declined'}.contains(invite.status)) continue;
+          if(person==null || !const {'pending','accepted','declined','revoked','expired'}.contains(invite.status)) continue;
           final status=switch(invite.status){
             'accepted'=>CircleInviteStatus.accepted,
             'declined'=>CircleInviteStatus.declined,
+            'revoked'=>CircleInviteStatus.revoked,
+            'expired'=>CircleInviteStatus.expired,
             _=>CircleInviteStatus.pending,
           };
           result.add(CircleInvite(
