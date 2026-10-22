@@ -26,6 +26,8 @@ class _OrbitLiveCircleManageScreenState extends State<OrbitLiveCircleManageScree
   List<OrbitCircleMember> _members=const [];
   bool _busy=true;
   String? _error;
+  String? _primaryCircleId;
+  bool _primaryFallback = false;
   int _version=0;
 
   @override
@@ -44,8 +46,13 @@ class _OrbitLiveCircleManageScreenState extends State<OrbitLiveCircleManageScree
         members.addAll(response.items);
         if(!response.hasMore) break;
       }
+      final primary=await _repo.primary();
       if(!mounted || epoch!=_version)return;
-      setState(() {_circle=circle;_members=members;_busy=false;});
+      setState(() {
+        _circle=circle;_members=members;_busy=false;
+        _primaryCircleId=primary['circle_id'] as String?;
+        _primaryFallback=primary['fallback']==true;
+      });
     } catch(_){
       if(!mounted || epoch!=_version)return;
       setState(() {_error='Circle permissions could not be verified.';
@@ -98,10 +105,28 @@ class _OrbitLiveCircleManageScreenState extends State<OrbitLiveCircleManageScree
 
   Future<void> _setPrimary() async {
     try {
+      final primary=await _repo.primary();
+      if(primary['circle_id']==_circle.id && primary['fallback']!=true) return;
       await _repo.choosePrimary(_circle.id);
-      if(mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content:Text('Primary Circle updated.')));
+      if(mounted) {
+        setState(() {_primaryCircleId=_circle.id;_primaryFallback=false;});
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content:Text('Primary Circle updated.')));
+      }
     } catch(e){_errorNotice(e);}
+  }
+
+  Future<void> _clearPrimary() async {
+    try {
+      final resolved=await _repo.choosePrimary(null);
+      if(!mounted)return;
+      setState((){
+        _primaryCircleId=resolved['circle_id'] as String?;
+        _primaryFallback=resolved['fallback']==true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content:Text('Manual primary selection cleared. Default Circle restored.')));
+    }catch(e){_errorNotice(e);}
   }
 
   Future<void> _invite() async {
@@ -195,7 +220,14 @@ class _OrbitLiveCircleManageScreenState extends State<OrbitLiveCircleManageScree
         Text('Your role: ${_circle.role.toUpperCase()}',
           style:const TextStyle(fontFamily:AppTypography.fontFamily,color:Color(0xFF64748B))),
         const SizedBox(height:16),
-        _item(Icons.star_outline,'Set as primary Circle',_setPrimary),
+        _item(Icons.star_outline,
+          _primaryCircleId==_circle.id
+            ? (_primaryFallback ? 'Default Circle' : 'Primary Circle')
+            : 'Set as primary Circle',
+          _primaryCircleId==_circle.id && !_primaryFallback ? null : _setPrimary),
+        if(_primaryCircleId==_circle.id && !_primaryFallback)
+          _item(Icons.star_border_outlined,'Clear primary selection',_clearPrimary,
+            subtitle:'Orbit will use a safe default among your Circles.'),
         if(_circle.can('edit'))
           _item(Icons.palette_outlined,'Change Circle icon',_editIcon,
             subtitle:'Current: ${_circle.iconKey ?? 'Default'}'),
