@@ -21,17 +21,17 @@ void main() {
   testWidgets('Historical and non-issuer invitations are not tappable',
     (tester) async {
       var tapped=0;
-      const denied = CircleInvite(
+      final denied = CircleInvite(
         id:'revoked', userId:'user-1',userName:'A',
         avatarUrl:'',status:CircleInviteStatus.revoked,
         createdAt:DateTime(2026,10,1),
       );
       await tester.pumpWidget(MaterialApp(home:CircleInviteManagementScreen(
-        sent:const CircleInviteTabData(invites:[denied]),
+        sent:CircleInviteTabData(invites:[denied]),
         pending:const CircleInviteTabData(invites:[]),
         accepted:const CircleInviteTabData(invites:[]),
         onBack:(){},
-        onInvitePressed:(_)=>tapped++,
+        onInvitePressed:(_){tapped++;},
         canOpenInvite:(invite)=>invite.status==CircleInviteStatus.pending,
       )));
       await tester.pumpAndSettle();
