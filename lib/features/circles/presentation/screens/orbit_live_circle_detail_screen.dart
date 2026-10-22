@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../../app/theme/app_colors.dart';
@@ -25,17 +27,26 @@ class _OrbitLiveCircleDetailScreenState extends State<OrbitLiveCircleDetailScree
   bool _loading = true;
   String? _error;
   int _epoch = 0;
+  Timer? _authorizationRefresh;
+  bool _revalidating = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _authorizationRefresh=Timer.periodic(const Duration(seconds:25),(_){
+      if(!mounted || _loading || _revalidating ||
+        WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed ||
+        ModalRoute.of(context)?.isCurrent != true) return;
+      _refresh(silent:true);
+    });
     _refresh();
   }
 
   @override
   void dispose() {
     _epoch++;
+    _authorizationRefresh?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -45,9 +56,11 @@ class _OrbitLiveCircleDetailScreenState extends State<OrbitLiveCircleDetailScree
     if(state == AppLifecycleState.resumed) _refresh();
   }
 
-  Future<void> _refresh() async {
+  Future<void> _refresh({bool silent = false}) async {
+    if(silent && _revalidating)return;
+    if(silent) _revalidating=true;
     final epoch=++_epoch;
-    if(mounted) setState(() {_loading=true;_error=null;});
+    if(!silent && mounted) setState(() {_loading=true;_error=null;});
     try {
       final circle=await _repo.detail(widget.circleId);
       final members=<OrbitCircleMember>[];
@@ -65,6 +78,8 @@ class _OrbitLiveCircleDetailScreenState extends State<OrbitLiveCircleDetailScree
         _error='Circle access could not be verified. Reconnect or return to My Circles.';
         _loading=false;
       });
+    } finally {
+      if(silent) _revalidating=false;
     }
   }
 
