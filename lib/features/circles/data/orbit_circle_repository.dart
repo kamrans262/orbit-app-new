@@ -127,6 +127,8 @@ class OrbitCircleRepository {
     );
   }
 
+  Future<Map<String, dynamic>> features() => _request('GET','/circles/features');
+
   Future<OrbitCirclePage<OrbitCircle>> list({int page = 1}) async =>
       _page(await _request('GET','/circles?page=$page'), OrbitCircle.fromJson);
 
