@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../../app/theme/app_colors.dart';
@@ -34,11 +36,19 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
   bool _busy = true, _offline = false, _archiveEnabled = false;
   String? _error;
   int _serial = 0;
+  Timer? _membershipRefresh;
+  bool _revalidating = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _membershipRefresh=Timer.periodic(const Duration(seconds:25),(_){
+      if(!mounted || _busy || _revalidating ||
+          WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed ||
+          ModalRoute.of(context)?.isCurrent != true) return;
+      _load(silent:true);
+    });
     _load().then((_) {
       if (!mounted || widget.initialInviteCode == null) return;
       if (!_offline && !_busy && _error == null) {
@@ -50,6 +60,7 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
   @override
   void dispose() {
     _serial++;
+    _membershipRefresh?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -63,9 +74,11 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
       e is OrbitIdentityException &&
       (e.statusCode == null || e.statusCode! >= 500);
 
-  Future<void> _load() async {
+  Future<void> _load({bool silent = false}) async {
+    if(silent && _revalidating) return;
+    if(silent) _revalidating=true;
     final current = ++_serial;
-    if (mounted) setState(() {_busy = true; _error = null;});
+    if (!silent && mounted) setState(() {_busy = true; _error = null;});
     try {
       final items = <OrbitCircle>[];
       for (var page = 1; page <= 20; page++) {
@@ -117,6 +130,8 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
           _busy = false;
         });
       }
+    } finally {
+      if(silent) _revalidating=false;
     }
   }
 
