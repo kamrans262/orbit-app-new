@@ -31,7 +31,7 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
   late final OrbitCircleRepository _repo = widget.repository ?? OrbitCircleRepository();
   late final OrbitCircleSnapshotStore _store = widget.store ?? OrbitCircleSnapshotStore();
   List<OrbitCircle> _circles = const [];
-  bool _busy = true, _offline = false;
+  bool _busy = true, _offline = false, _archiveEnabled = false;
   String? _error;
   int _serial = 0;
 
@@ -73,8 +73,18 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
         items.addAll(result.items);
         if (!result.hasMore) break;
       }
+      // Archive is an independently gated backend capability. A disabled
+      // route must not leave an unusable Archived button in the interface.
+      var canArchive=false;
+      try {
+        await _repo.archived(page:1);
+        canArchive=true;
+      } catch (_) {
+        canArchive=false;
+      }
       if (!mounted || current != _serial) return;
       setState(() {
+        _archiveEnabled=canArchive;
         _circles = items;
         _offline = false;
         _busy = false;
@@ -89,6 +99,7 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
         setState(() {
           _circles = cached?.circles ?? const [];
           _offline = cached != null;
+          _archiveEnabled=false;
           _error = cached == null
             ? 'Unable to verify Circles. Reconnect and try again.' : null;
           _busy = false;
@@ -99,6 +110,7 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
         setState(() {
           _circles = const [];
           _offline = false;
+          _archiveEnabled=false;
           _error = error is OrbitIdentityException && error.statusCode == 404
             ? 'Circles are not enabled on the server yet.'
             : 'Circle access could not be verified. Sign in again or retry.';
@@ -268,8 +280,9 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
             icon:const Icon(Icons.qr_code_scanner),label:const Text('Scan QR')),
           TextButton.icon(onPressed:_incoming,
             icon:const Icon(Icons.mail_outline),label:const Text('Invitations')),
-          TextButton.icon(onPressed:_archived,
-            icon:const Icon(Icons.archive_outlined),label:const Text('Archived')),
+          if(_archiveEnabled)
+            TextButton.icon(onPressed:_archived,
+              icon:const Icon(Icons.archive_outlined),label:const Text('Archived')),
         ]),
       ),
     Expanded(child: CircleListScreen(
