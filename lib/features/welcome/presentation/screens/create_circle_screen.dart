@@ -25,6 +25,7 @@ class CreateCircleScreen extends StatefulWidget {
     required this.onNext,
     this.onCreateRequested,
     this.onJoinRequested,
+    this.enableTemporary = false,
     this.onSkip,
     super.key,
   });
@@ -32,6 +33,7 @@ class CreateCircleScreen extends StatefulWidget {
   final VoidCallback onNext;
   final Future<void> Function(String name, String color, String icon, String key, String? expiresAt)? onCreateRequested;
   final VoidCallback? onJoinRequested;
+  final bool enableTemporary;
   final VoidCallback? onSkip;
 
   @override
@@ -240,7 +242,7 @@ class _CreateCircleScreenState extends State<CreateCircleScreen> {
                                 setState(() => _selectedIconIndex = index);
                               },
                             ),
-                            if(widget.onCreateRequested != null) ...<Widget>[
+                            if(widget.onCreateRequested != null && widget.enableTemporary) ...<Widget>[
                               const SizedBox(height:_sectionGap),
                               Row(children:[
                                 Expanded(child:Text(
