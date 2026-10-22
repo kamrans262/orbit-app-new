@@ -18,6 +18,8 @@ import '../widgets/quick_action_card.dart';
 import '../widgets/upcoming_plan_card.dart';
 
 import '../../../friends/presentation/screens/friends_screen.dart';
+import '../../../circles/presentation/screens/friend_details_screen.dart';
+import '../../../circles/domain/models/friend_details_models.dart';
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../../requests/presentation/screens/request_screen.dart';
 import '../../../../core/widgets/app_emoji_safe_text.dart';
@@ -53,12 +55,14 @@ class HomeScreen extends StatefulWidget {
     this.onSeeAllMomentsPressed,
     this.selectedBottomIndex = 0,
     this.isLoading = false,
+    this.enableDemoCircleNavigation = false,
     super.key,
   });
 
   factory HomeScreen.demo({
     ValueChanged<int>? onTabSelected,
     VoidCallback? onAddPressed,
+    bool enableDemoCircleNavigation = true,
   }) {
     const participants = <ParticipantData>[
       ParticipantData(id: 'emma', name: 'Emma', imagePath: 'assets/Emma.png'),
@@ -180,6 +184,7 @@ class HomeScreen extends StatefulWidget {
       onMomentPressed: (moment) {},
       onTabSelected: onTabSelected ?? (index) {},
       onAddPressed: onAddPressed ?? () {},
+      enableDemoCircleNavigation:enableDemoCircleNavigation,
     );
   }
 
@@ -205,6 +210,9 @@ class HomeScreen extends StatefulWidget {
   final VoidCallback onAddPressed;
   final int selectedBottomIndex;
   final bool isLoading;
+  /// Preserves approved design-preview fixture behavior but never opens
+  /// fabricated Circle rosters in authenticated production navigation.
+  final bool enableDemoCircleNavigation;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -724,6 +732,16 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
     _openMoments();
+  }
+
+  void _openFavoriteCircleDetails() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (routeContext) => FriendDetailsScreen.demo(
+          onBack: () => Navigator.of(routeContext).pop(),
+        ),
+      ),
+    );
   }
 
   Widget _buildMoments() {
