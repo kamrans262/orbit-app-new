@@ -41,11 +41,11 @@ void main() {
     expect(encoded, isNot(contains('invite')));
     expect(encoded, isNot(contains('ownerId')));
     final snapshot=OrbitCircleSnapshot.decode(
-      encoded,'alice',now.add(const Duration(minutes:10)));
+      encoded,'alice',now.add(const Duration(minutes:4)));
     expect(snapshot?.circles.single.name,'Family');
     expect(snapshot?.circles.single.memberCount,0);
     expect(OrbitCircleSnapshot.decode(encoded,'bob',now),isNull);
     expect(OrbitCircleSnapshot.decode(
-      encoded,'alice',now.add(const Duration(minutes:16))),isNull);
+      encoded,'alice',now.add(const Duration(minutes:6))),isNull);
   });
 }
