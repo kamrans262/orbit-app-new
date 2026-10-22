@@ -30,7 +30,7 @@ class CreateCircleScreen extends StatefulWidget {
   });
 
   final VoidCallback onNext;
-  final Future<void> Function(String name, String color, String icon, String key)? onCreateRequested;
+  final Future<void> Function(String name, String color, String icon, String key, String? expiresAt)? onCreateRequested;
   final VoidCallback? onJoinRequested;
   final VoidCallback? onSkip;
 
@@ -48,6 +48,7 @@ class _CreateCircleScreenState extends State<CreateCircleScreen> {
   int _selectedColorIndex = 0;
   int _selectedIconIndex = 0;
   bool _saving = false;
+  DateTime? _expiresAt;
   String _idempotencyKey = const Uuid().v4();
   void _newDraft() { if (!_saving) _idempotencyKey = const Uuid().v4(); }
 
@@ -82,6 +83,26 @@ class _CreateCircleScreenState extends State<CreateCircleScreen> {
     super.dispose();
   }
 
+  Future<void> _chooseExpiry() async {
+    if (_saving) return;
+    final today=DateTime.now();
+    final date=await showDatePicker(context:context,
+      initialDate:today.add(const Duration(days:1)), firstDate:today,
+      lastDate:today.add(const Duration(days:365)));
+    if(date==null || !mounted)return;
+    final time=await showTimePicker(context:context,
+      initialTime:const TimeOfDay(hour:18,minute:0));
+    if(time==null || !mounted)return;
+    final selected=DateTime(date.year,date.month,date.day,time.hour,time.minute);
+    if(!selected.isAfter(DateTime.now())) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content:Text('Choose a future Circle expiry time.')));
+      return;
+    }
+    _newDraft();
+    setState(()=>_expiresAt=selected);
+  }
+
   Future<void> _submit() async {
     final name = _nameController.text.trim();
     if (_saving) return;
@@ -110,7 +131,8 @@ class _CreateCircleScreenState extends State<CreateCircleScreen> {
       final color = _colors[_selectedColorIndex].fill;
       final hex = '#${(color.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}';
       const keys = <String>['home','person','star','music','location','sunny'];
-      await save(name,hex,keys[_selectedIconIndex],_idempotencyKey);
+      await save(name,hex,keys[_selectedIconIndex],_idempotencyKey,
+        _expiresAt?.toUtc().toIso8601String());
       if (mounted) widget.onNext();
     } catch (error) {
       if (!mounted) return;
@@ -218,6 +240,33 @@ class _CreateCircleScreenState extends State<CreateCircleScreen> {
                                 setState(() => _selectedIconIndex = index);
                               },
                             ),
+                            if(widget.onCreateRequested != null) ...<Widget>[
+                              const SizedBox(height:_sectionGap),
+                              Row(children:[
+                                Expanded(child:Text(
+                                  _expiresAt == null
+                                    ? 'Permanent Circle'
+                                    : 'Temporary until ${_expiresAt!.toLocal().toString().substring(0,16)}',
+                                  style:const TextStyle(
+                                    fontFamily:AppTypography.fontFamily,
+                                    color:Color(0xFF64748B),fontSize:13),
+                                )),
+                                TextButton(onPressed:_chooseExpiry,
+                                  child:const Text('Set expiry')),
+                                if(_expiresAt != null)
+                                  IconButton(
+                                    tooltip:'Clear expiry',
+                                    onPressed:(){
+                                      _newDraft();setState(()=>_expiresAt=null);
+                                    },icon:const Icon(Icons.close,size:18)),
+                              ]),
+                              if(_expiresAt != null)
+                                const Text('Read-only for 72 hours after expiry, '
+                                  'then archived without automatic deletion.',
+                                  style:TextStyle(
+                                    fontFamily:AppTypography.fontFamily,
+                                    fontSize:12,color:Color(0xFF64748B))),
+                            ],
                           ],
                         ),
                       ),
