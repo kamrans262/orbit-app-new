@@ -416,6 +416,7 @@ class _OrbitAppState extends State<OrbitApp> {
               settings: settings,
               builder: (context) => OrbitProtectedHome(
                 home: HomeScreen.demo(
+                  enableDemoCircleNavigation:false,
                   onTabSelected: (index) {},
                   onAddPressed: () {},
                 ),
