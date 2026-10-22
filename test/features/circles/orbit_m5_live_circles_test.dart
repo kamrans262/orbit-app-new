@@ -25,6 +25,23 @@ class _FakeCircles extends OrbitCircleRepository {
     ],1,false);
   }
 }
+class _MutableCircles extends OrbitCircleRepository {
+  bool revoked = false;
+  int calls = 0;
+  @override
+  Future<OrbitCirclePage<OrbitCircle>> list({int page=1}) async {
+    calls++;
+    return OrbitCirclePage<OrbitCircle>(
+      revoked ? const [] : const [
+        OrbitCircle(id:'revoke1',name:'Revocable Circle',
+          ownerId:'owner',role:'member',memberCount:2,revision:1),
+      ],1,false);
+  }
+  @override
+  Future<OrbitCirclePage<OrbitCircle>> archived({int page=1}) async =>
+      const OrbitCirclePage<OrbitCircle>([],1,false);
+}
+
 class _FakeStore extends OrbitCircleSnapshotStore {
   @override
   Future<void> save(List<OrbitCircle> circles) async {}
@@ -56,6 +73,22 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Archived'),findsOneWidget);
   });
+  testWidgets('foreground revalidation clears a revoked Circle without navigation',
+    (tester) async {
+      final repo=_MutableCircles();
+      await tester.pumpWidget(MaterialApp(home:OrbitLiveCirclesScreen(
+        repository:repo,store:_FakeStore())));
+      await tester.pumpAndSettle();
+      expect(find.text('Revocable Circle'),findsOneWidget);
+      repo.revoked=true;
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump(const Duration(seconds:26));
+      await tester.pumpAndSettle();
+      expect(repo.calls,greaterThan(1));
+      expect(find.text('Revocable Circle'),findsNothing);
+      await tester.pumpWidget(const SizedBox());
+    });
+
   testWidgets('offline fallback is clearly read-only and never simulates roster',
     (tester) async {
       await tester.pumpWidget(MaterialApp(home:OrbitLiveCirclesScreen(
