@@ -326,9 +326,13 @@ class _OrbitAppState extends State<OrbitApp> {
             );
           case AppRoutes.createCircle:
             String? createdCircleId;
+            final circleFeatures=OrbitCircleRepository().features();
             return MaterialPageRoute<void>(
               settings: settings,
-              builder: (context) => CreateCircleScreen(
+              builder: (context) => FutureBuilder<Map<String,dynamic>>(
+                future:circleFeatures,
+                builder:(context,featureState)=>CreateCircleScreen(
+                enableTemporary:featureState.data?['temporary_circles']==true,
                 onJoinRequested: () => Navigator.of(context).pushNamed(AppRoutes.joinCircle),
                 onCreateRequested: (name,color,icon,key,expiresAt) async {
                   final circle=await OrbitCircleRepository()
@@ -343,6 +347,7 @@ class _OrbitAppState extends State<OrbitApp> {
                 },
                 onSkip: () => Navigator.of(context)
                   .pushNamedAndRemoveUntil(AppRoutes.home, (_) => false),
+                ),
               ),
             );
           case AppRoutes.circlePermission:
