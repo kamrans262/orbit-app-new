@@ -330,9 +330,10 @@ class _OrbitAppState extends State<OrbitApp> {
               settings: settings,
               builder: (context) => CreateCircleScreen(
                 onJoinRequested: () => Navigator.of(context).pushNamed(AppRoutes.joinCircle),
-                onCreateRequested: (name,color,icon,key) async {
+                onCreateRequested: (name,color,icon,key,expiresAt) async {
                   final circle=await OrbitCircleRepository()
-                      .create(name,color:color,icon:icon,idempotencyKey:key);
+                      .create(name,color:color,icon:icon,idempotencyKey:key,
+                        expiresAt:expiresAt);
                   createdCircleId=circle.id;
                 },
                 onNext: () {
