@@ -37,6 +37,7 @@ class FriendDetailsScreen extends StatefulWidget {
     this.showGroupSegment = true,
     this.showFavoriteActions = true,
     this.headerTitle = 'Friend Details',
+    this.lifecycleNotice,
     this.initialSegment = FriendDetailsSegment.circle,
     this.viewState = FriendDetailsViewState.loaded,
     this.errorMessage = 'Something went wrong. Please try again.',
@@ -150,6 +151,7 @@ class FriendDetailsScreen extends StatefulWidget {
   final bool showGroupSegment;
   final bool showFavoriteActions;
   final String headerTitle;
+  final String? lifecycleNotice;
   final FriendDetailsSegment initialSegment;
   final FriendDetailsViewState viewState;
   final String errorMessage;
@@ -214,6 +216,20 @@ class _FriendDetailsScreenState extends State<FriendDetailsScreen> {
               sliver: SliverToBoxAdapter(child: _buildSummary()),
             ),
             const SliverToBoxAdapter(child: SizedBox(height: _sectionGap)),
+            if(widget.lifecycleNotice != null) ...<Widget>[
+              SliverPadding(
+                padding:const EdgeInsets.symmetric(horizontal:_horizontalPadding),
+                sliver:SliverToBoxAdapter(child:Container(
+                  padding:const EdgeInsets.all(12),
+                  decoration:BoxDecoration(color:const Color(0xFFFFF0E7),
+                    borderRadius:BorderRadius.circular(10)),
+                  child:Text(widget.lifecycleNotice!,
+                    style:const TextStyle(fontFamily:AppTypography.fontFamily,
+                      fontSize:12,color:Color(0xFF7C2D12))),
+                )),
+              ),
+              const SliverToBoxAdapter(child:SizedBox(height:_sectionGap)),
+            ],
             if (widget.showGroupSegment) ...<Widget>[
               SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal:_horizontalPadding),
