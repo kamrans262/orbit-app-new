@@ -51,6 +51,18 @@ class InviteStatusBadge extends StatelessWidget {
           foreground: Color(0xFF5ACDAE),
           background: Color(0xFFDFF7F1),
         );
+      case CircleInviteStatus.revoked:
+        return const _InviteStatusPalette(
+          label: 'Revoked',
+          foreground: Color(0xFF64748B),
+          background: Color(0xFFF1F5F9),
+        );
+      case CircleInviteStatus.expired:
+        return const _InviteStatusPalette(
+          label: 'Expired',
+          foreground: Color(0xFF64748B),
+          background: Color(0xFFF1F5F9),
+        );
       case CircleInviteStatus.declined:
         return const _InviteStatusPalette(
           label: 'Declined',
