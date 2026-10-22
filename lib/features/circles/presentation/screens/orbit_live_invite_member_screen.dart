@@ -41,8 +41,29 @@ class _OrbitLiveInviteMemberScreenState extends State<OrbitLiveInviteMemberScree
         people.addAll(result.items);
         if(!result.hasMore) break;
       }
+      // Filter out existing members and recipients with pending invitations.
+      // The backend enforces these rules too; this prevents misleading
+      // controls, not a client-side authorization bypass.
+      final excluded=<String>{};
+      for(var page=1;page<=20;page++){
+        final result=await _circles.members(widget.circleId,page:page);
+        excluded.addAll(result.items.map((member)=>member.id));
+        if(!result.hasMore) break;
+      }
+      for(var page=1;page<=20;page++){
+        final result=await _circles.outgoing(widget.circleId,page:page);
+        for(final invite in result.items) {
+          if(invite.status=='pending' && invite.person!=null) {
+            excluded.add(invite.person!.id);
+          }
+        }
+        if(!result.hasMore) break;
+      }
       if(!mounted) return;
-      setState(() {_people=people;_loading=false;});
+      setState(() {
+        _people=people.where((p)=>!excluded.contains(p.id)).toList(growable:false);
+        _loading=false;
+      });
     } catch (_) {
       if(mounted) setState(() {
         _error='Unable to verify your friends. Reconnect and retry.';
@@ -111,7 +132,7 @@ class _OrbitLiveInviteMemberScreenState extends State<OrbitLiveInviteMemberScree
             Text(_error!,textAlign:TextAlign.center),
             TextButton(onPressed:_load,child:const Text('Try again')),
           ]))
-      : _people.isEmpty ? const Center(child:Text('No friends available to invite.'))
+      : _people.isEmpty ? const Center(child:Text('No eligible friends to invite. Existing members and pending invitations are excluded.'))
       : ListView.builder(
         keyboardDismissBehavior:ScrollViewKeyboardDismissBehavior.onDrag,
         padding:const EdgeInsets.all(20),
