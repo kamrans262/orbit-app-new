@@ -104,5 +104,7 @@ class _OrbitLiveCircleInvitesScreenState extends State<OrbitLiveCircleInvitesScr
     onBack:()=>Navigator.of(context).maybePop(),
     onRetry:(_)=>_load(),
     onInvitePressed:_pressed,
+    canOpenInvite:(invite)=>invite.status==CircleInviteStatus.pending &&
+      _revocable.contains(invite.id),
   );
 }
