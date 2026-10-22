@@ -83,6 +83,22 @@ class _OrbitLiveCircleDetailScreenState extends State<OrbitLiveCircleDetailScree
     }
   }
 
+  String? _temporaryNotice() {
+    final circle=_circle;
+    if(circle==null || circle.expiresAt==null)return null;
+    if(circle.lifecycleState=='read_only') {
+      return 'This temporary Circle has expired. '
+        'It stays read-only for 72 hours, then moves to archive without deleting data.';
+    }
+    final remaining=circle.expiresAt!.difference(DateTime.now());
+    if(remaining.isNegative)return 'Temporary Circle expiry is being verified.';
+    if(remaining<=const Duration(hours:24)) {
+      return 'This Circle expires within 24 hours. '
+        'It becomes read-only at its expiry time.';
+    }
+    return null;
+  }
+
   Future<void> _memberPreview(OrbitCircleMember member) async {
     if(_circle==null) return;
     await showModalBottomSheet<void>(context:context,
@@ -145,6 +161,7 @@ class _OrbitLiveCircleDetailScreenState extends State<OrbitLiveCircleDetailScree
       onAddMember: _openInvite,
       liveInviteMode: true,
       headerTitle:'Circle Details',
+      lifecycleNotice:_temporaryNotice(),
       showGroupSegment:false,
       showFavoriteActions:false,
       showAddMemberButton: _circle?.can('invite') == true,
