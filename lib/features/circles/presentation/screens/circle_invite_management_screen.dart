@@ -216,8 +216,11 @@ class _CircleInviteManagementScreenState
               avatarKey: CircleInviteManagementKeys.avatar(invite.id),
               name: invite.userName,
               avatarSource: invite.avatarUrl,
-              semanticLabel: 'Open ${invite.userName} invite details',
-              onTap: () => _openInvite(invite),
+              semanticLabel: widget.canOpenInvite?.call(invite) == false
+                  ? '${invite.userName} invitation status'
+                  : 'Open ${invite.userName} invite details',
+              onTap: widget.canOpenInvite?.call(invite) == false
+                  ? null : () => _openInvite(invite),
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
