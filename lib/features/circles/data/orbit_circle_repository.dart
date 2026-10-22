@@ -13,6 +13,8 @@ class OrbitCircle {
     required this.revision,
     this.iconKey,
     this.colorValue,
+    this.expiresAt,
+    this.lifecycleState = 'active',
     this.capabilities = const <String, bool>{},
   });
   final String id;
@@ -23,6 +25,8 @@ class OrbitCircle {
   final int revision;
   final String? iconKey;
   final String? colorValue;
+  final DateTime? expiresAt;
+  final String lifecycleState;
   final Map<String, bool> capabilities;
 
   bool can(String key) => capabilities[key] == true;
@@ -38,6 +42,8 @@ class OrbitCircle {
       memberCount: (data['member_count'] as num?)?.toInt() ?? 0,
       revision: (data['revision'] as num?)?.toInt() ?? 0,
       iconKey: data['icon_key'] as String?, colorValue: data['color_value'] as String?,
+      expiresAt:DateTime.tryParse(data['expires_at'] as String? ?? ''),
+      lifecycleState:data['lifecycle_state'] as String? ?? 'active',
       capabilities: rawCaps is Map ? rawCaps.map((k, v) =>
         MapEntry(k.toString(), v == true)) : const <String, bool>{},
     );
@@ -130,11 +136,12 @@ class OrbitCircleRepository {
   /// Reuse the same key across retries of a single user intent to avoid
   /// duplicated Circle creation after a transport timeout.
   Future<OrbitCircle> create(String name, {String? color, String? icon,
-    String? idempotencyKey}) async =>
+    String? idempotencyKey, String? expiresAt}) async =>
       OrbitCircle.fromJson(await _request('POST','/circles',
       idempotencyKey:idempotencyKey ?? const Uuid().v4(), body: {
         'name': name.trim(), if (color != null) 'color_value': color,
         if (icon != null) 'icon_key': icon,
+        if (expiresAt != null) 'expires_at': expiresAt,
       }));
 
   Future<OrbitCircle> update(String id, {String? name, String? color, String? icon}) async =>
