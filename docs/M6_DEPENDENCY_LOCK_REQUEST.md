@@ -1,3 +1,3 @@
-# M6 dependency lock
+# M6 dependency lock — latest branch reconcile
 
-Regenerate pubspec.lock on the existing Flutter M6 branch using Flutter 3.47.7 and commit only the lockfile. Do not create a branch, activate Firebase, deploy, or merge.
+Run Flutter 3.47.7 dependency resolution for compress_video 1.0.0, rebase the generated lockfile commit onto the current existing M6 Flutter branch and push only to that branch. No new branches or Firebase activation.

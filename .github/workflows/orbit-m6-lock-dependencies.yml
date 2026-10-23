@@ -24,5 +24,7 @@ jobs:
           git add pubspec.lock
           if ! git diff --cached --quiet; then
             git commit -m "M6 Flutter: lock native media codec dependencies"
+            git fetch origin feature/m6-media-flutter-integration
+            git rebase origin/feature/m6-media-flutter-integration
             git push origin HEAD:feature/m6-media-flutter-integration
           fi
