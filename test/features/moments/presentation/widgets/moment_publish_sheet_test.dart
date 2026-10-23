@@ -112,7 +112,7 @@ void main() {
     await tester.ensureVisible(find.text('Preview publishing flow'));
     // The preview action sits below the short 320x568 test window; the
     // approved Orbit sheet is scrollable, not a new popup component.
-    await tester.drag(find.byType(SingleChildScrollView).last,
+    await tester.drag(find.byKey(MomentPublishKeys.review),
       const Offset(0, -210));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Preview publishing flow'));

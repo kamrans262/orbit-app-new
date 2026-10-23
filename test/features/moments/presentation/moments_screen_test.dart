@@ -146,6 +146,10 @@ void main() {
       final like = find.bySemanticsLabel('Like moment');
       // The engagement row is below the image fold on compact devices.
       // Scroll the existing feed to it before querying lazy sliver semantics.
+      final feedScroll = find.descendant(
+        of: find.byKey(MomentsKeys.feed),
+        matching: find.byType(Scrollable),
+      ).first;
       await tester.drag(feedScroll, const Offset(0, -320));
       await tester.pumpAndSettle();
       expect(like, findsOneWidget);
