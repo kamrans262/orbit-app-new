@@ -44,7 +44,7 @@ void main() {
     expect(resumed.sha256,sealed.sha256);
     expect(resumed.key,sealed.key);
     final c=await resumed.file.readAsBytes();
-    expect(c, isNot(Uint8List.fromList([4,5,6])));
+    expect(c, isNot(orderedEquals([4,5,6])));
     await outbox.discard(item);
     expect((await outbox.pending('owner-a')),isEmpty);
     expect(await resumed.file.exists(),isFalse);
