@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 
 import 'orbit_offline_profile_snapshot.dart';
+import '../../circles/data/orbit_m5_firebase_change_source.dart';
 
 enum OrbitRestoreState { signedOut, authenticated, deviceRegistration, deletionPending, offlineProfile }
 
@@ -174,6 +175,7 @@ class OrbitIdentityClient {
       final nextUser = user['id'] as String;
       final lastUser = await _storage.read(key: _userIdKey);
       if (lastUser != nextUser) {
+        await OrbitM5FirebaseChangeSource.instance.stop();
         await _storage.delete(key: _profileCacheKey);
         await _storage.delete(key: _friendsCacheKey);
     await _storage.delete(key: _circlesCacheKey);
@@ -281,12 +283,14 @@ class OrbitIdentityClient {
   }
 
   Future<void> clearSession() async {
+    await OrbitM5FirebaseChangeSource.instance.stop();
     abandonStandardSignup();
     _access = null;
     await _storage.delete(key: _refreshKey);
     await _storage.delete(key: _userIdKey);
     await _storage.delete(key: _profileCacheKey);
     await _storage.delete(key: _friendsCacheKey);
+    await _storage.delete(key: _circlesCacheKey);
   }
 
   Future<void> signOut() async {
