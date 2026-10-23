@@ -132,7 +132,7 @@ class OrbitEncryptedClipStager {
       mime:'video/mp4',width:prepared.width,height:prepared.height,
       durationMs:prepared.durationMs);
     var second=await _outbox.enqueue(poster,kind:'image',
-      mime:'image/jpeg');
+      mime:'image/jpeg',parentTransferId:videoId);
     try {
       if(await prepared.file.exists() &&
           prepared.file.path!=original.path)await prepared.file.delete();
@@ -151,14 +151,14 @@ class OrbitEncryptedClipStager {
       final grants=await _media.createGrants(receipt.mediaId,
         audience:'only_me',recipients:const [],
         idempotencyKey:videoId,
-        keyEnvelopes:[
+        keyEnvelopes:await _outbox.grantEnvelopeOnce(owner,videoId,() async => [
           {'device_id':device.id,'variant':'original','key_version':'v1',
             'algorithm':OrbitMediaFormat.envelopeAlgorithm,
             'wrapped_key_ciphertext':await _crypto.wrapKey(video,device.publicKey)},
           {'device_id':device.id,'variant':'poster','key_version':'v1',
             'algorithm':OrbitMediaFormat.envelopeAlgorithm,
             'wrapped_key_ciphertext':await _crypto.wrapKey(poster,device.publicKey)},
-        ]);
+        ]));
       if(grants.isEmpty)throw StateError('Device grants not confirmed.');
       await _outbox.discard(first);
       await _outbox.discard(second);
@@ -198,11 +198,11 @@ class OrbitEncryptedClipStager {
       if(!uploaded.ready)throw StateError('Voice upload is still verifying.');
       final grants=await _media.createGrants(uploaded.mediaId,
         audience:'only_me',recipients:const [],
-        idempotencyKey:id,keyEnvelopes:[
+        idempotencyKey:id,keyEnvelopes:await _outbox.grantEnvelopeOnce(owner,id,() async => [
           {'device_id':device.id,'variant':'original','key_version':'v1',
             'algorithm':OrbitMediaFormat.envelopeAlgorithm,
             'wrapped_key_ciphertext':await _crypto.wrapKey(sealed,device.publicKey)},
-        ]);
+        ]));
       if(grants.isEmpty)throw StateError('Voice key grant not confirmed.');
       await _outbox.discard(draft);
       return OrbitStagedClip(mediaId:uploaded.mediaId,

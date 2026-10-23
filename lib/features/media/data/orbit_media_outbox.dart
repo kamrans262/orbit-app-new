@@ -36,13 +36,13 @@ class OrbitQueuedMedia {
     required this.kind, required this.mime, required this.variant,
     required this.fileName, required this.cipherSha256,
     required this.cipherBytes, required this.plainBytes,
-    required this.noncePrefix, this.parentMediaId,
+    required this.noncePrefix, this.parentMediaId, this.parentTransferId,
     this.width, this.height, this.durationMs,
   });
   final String owner, transfer, purpose, kind, mime, variant;
   final String fileName, cipherSha256, noncePrefix;
   final int cipherBytes, plainBytes;
-  final String? parentMediaId;
+  final String? parentMediaId, parentTransferId;
   final int? width, height, durationMs;
   Map<String, Object?> toJson() => {
     'owner':owner,'transfer':transfer,'purpose':purpose,
@@ -50,6 +50,7 @@ class OrbitQueuedMedia {
     'file_name':fileName,'cipher_sha256':cipherSha256,
     'cipher_bytes':cipherBytes,'plain_bytes':plainBytes,
     'nonce_prefix':noncePrefix,'parent_media_id':parentMediaId,
+    'parent_transfer_id':parentTransferId,
     'width':width,'height':height,'duration_ms':durationMs,
   };
   factory OrbitQueuedMedia.fromJson(Map<String, dynamic> j) => OrbitQueuedMedia(
@@ -62,6 +63,7 @@ class OrbitQueuedMedia {
     plainBytes:(j['plain_bytes'] as num).toInt(),
     noncePrefix:j['nonce_prefix'] as String,
     parentMediaId:j['parent_media_id'] as String?,
+    parentTransferId:j['parent_transfer_id'] as String?,
     width:(j['width'] as num?)?.toInt(),
     height:(j['height'] as num?)?.toInt(),
     durationMs:(j['duration_ms'] as num?)?.toInt(),
@@ -126,6 +128,7 @@ class OrbitMediaOutbox {
   /// storage. [sealed.file] may be a temporary file outside this directory.
   Future<OrbitQueuedMedia> enqueue(OrbitSealedMedia sealed, {
     required String kind, required String mime, String? parentMediaId,
+    String? parentTransferId,
     int? width, int? height, int? durationMs,
   }) async {
     await _requireOwner(sealed.ownerId);
@@ -152,7 +155,8 @@ class OrbitMediaOutbox {
       fileName:name,cipherSha256:sealed.sha256,
       cipherBytes:sealed.bytes,plainBytes:sealed.plainBytes,
       noncePrefix:base64Encode(sealed.noncePrefix),
-      parentMediaId:parentMediaId,width:width,height:height,
+      parentMediaId:parentMediaId,parentTransferId:parentTransferId,
+      width:width,height:height,
       durationMs:durationMs);
     final entries=await _load(sealed.ownerId);
     entries.removeWhere((d)=>d.transfer==item.transfer);
@@ -207,11 +211,35 @@ class OrbitMediaOutbox {
       fileName:item.fileName,cipherSha256:item.cipherSha256,
       cipherBytes:item.cipherBytes,plainBytes:item.plainBytes,
       noncePrefix:item.noncePrefix,parentMediaId:parentMediaId,
+      parentTransferId:item.parentTransferId,
       width:item.width,height:item.height,durationMs:item.durationMs,
     );
     drafts[index]=updated;
     await _save(item.owner,drafts);
     return updated;
+  }
+
+
+  String _grantKey(String owner,String transfer) =>
+      'orbit.m6.grant.' + owner + '.' + transfer;
+
+  /// Reusing one idempotency key is insufficient if X25519 wraps generate
+  /// new random ephemeral keys at retry. Persist the EXACT grant request in
+  /// secure storage before network use; then every retry has identical bytes.
+  Future<List<Map<String,Object?>>> grantEnvelopeOnce(String owner,
+      String rootTransfer,
+      Future<List<Map<String,Object?>>> Function() generate) async {
+    await _requireOwner(owner);
+    final old=await _vault.read(_grantKey(owner,rootTransfer));
+    if(old!=null) {
+      final decoded=jsonDecode(old);
+      if(decoded is! List)throw const FormatException('Invalid grant draft.');
+      return decoded.map((e)=>Map<String,Object?>.from(e as Map)).toList();
+    }
+    final fresh=await generate();
+    if(fresh.isEmpty)throw StateError('No encrypted device grants.');
+    await _vault.write(_grantKey(owner,rootTransfer),jsonEncode(fresh));
+    return fresh;
   }
 
   Future<void> discard(OrbitQueuedMedia item) async {
@@ -220,6 +248,7 @@ class OrbitMediaOutbox {
     entries.removeWhere((d)=>d.transfer==item.transfer);
     await _save(item.owner,entries);
     await _vault.delete(_keyName(item.owner,item.transfer));
+    if(item.variant=='original')await _vault.delete(_grantKey(item.owner,item.transfer));
     final root=await _root(item.owner);
     final file=File(root.path + '/' + item.fileName);
     if (await file.exists()) await file.delete();
@@ -231,6 +260,7 @@ class OrbitMediaOutbox {
     final entries=await _load(owner);
     for(final item in entries) {
       await _vault.delete(_keyName(owner,item.transfer));
+      if(item.variant=='original')await _vault.delete(_grantKey(owner,item.transfer));
     }
     await _vault.delete(_indexKey(owner));
     final root=await _root(owner);

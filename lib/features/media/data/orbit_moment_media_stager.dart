@@ -66,7 +66,7 @@ class OrbitMomentMediaStager {
     final originalDraft=await _outbox.enqueue(original,kind:'image',
       mime:'image/jpeg',width:prepared.width,height:prepared.height);
     var thumbDraft=await _outbox.enqueue(thumb,kind:'image',
-      mime:'image/jpeg',width:320,
+      mime:'image/jpeg',parentTransferId:originalId,width:320,
       height:(prepared.height*320/prepared.width).round());
     try {
       if(await original.file.exists())await original.file.delete();
@@ -92,15 +92,15 @@ class OrbitMomentMediaStager {
       // M7 consent and recipient-key flow; do not silently over-share.
       final grantIds=await _repo.createGrants(readyOriginal.mediaId,
         audience:'only_me',recipients:const [],
-        idempotencyKey:const Uuid().v4(),
-        keyEnvelopes:[
+        idempotencyKey:originalId,
+        keyEnvelopes:await _outbox.grantEnvelopeOnce(owner,originalId,() async => [
           {'device_id':device.id,'variant':'original','key_version':'v1',
             'algorithm':OrbitMediaFormat.envelopeAlgorithm,
             'wrapped_key_ciphertext':await _crypto.wrapKey(original,device.publicKey)},
           {'device_id':device.id,'variant':'thumbnail','key_version':'v1',
             'algorithm':OrbitMediaFormat.envelopeAlgorithm,
             'wrapped_key_ciphertext':await _crypto.wrapKey(thumb,device.publicKey)},
-        ]);
+        ]));
       if(grantIds.isEmpty)throw StateError('Private media grant not confirmed.');
       onProgress?.call(1);
       await _outbox.discard(originalDraft);
@@ -113,8 +113,8 @@ class OrbitMomentMediaStager {
     }
   }
 
-  /// User-initiated resume after reconnecting. It never sends while the
-  /// account is missing or changed, nor confirms an M7 post.
+  /// Resume originals first, then matching thumbnails and private grants.
+  /// Uploading bytes is never equivalent to publishing an M7 Moment.
   Future<List<OrbitMediaReceipt>> retryPending({
     void Function(double fraction)? onProgress,
   }) async {
@@ -122,15 +122,59 @@ class OrbitMomentMediaStager {
     if(owner==null)return [];
     final results=<OrbitMediaReceipt>[];
     final drafts=await _outbox.pending(owner);
-    for(final draft in drafts) {
-      if(draft.variant!='original' && draft.parentMediaId==null)continue;
-      final sealed=await _outbox.restore(draft);
-      final receipt=await _repo.upload(sealed,kind:draft.kind,mime:draft.mime,
-        width:draft.width,height:draft.height,durationMs:draft.durationMs,
-        parentMediaId:draft.parentMediaId,onProgress:onProgress);
-      results.add(receipt);
-      // Do not discard a key before verified variant grants are available.
+    for(final parent in drafts.where((x)=>x.variant=='original')) {
+      final sealed=await _outbox.restore(parent);
+      final main=await _repo.upload(sealed,kind:parent.kind,mime:parent.mime,
+        width:parent.width,height:parent.height,durationMs:parent.durationMs,
+        onProgress:onProgress);
+      results.add(main);
+      if(!main.ready)continue;
+      final allEnvelopes=<Map<String,Object?>>[];
+      final children=drafts.where((x)=>x.parentTransferId==parent.transfer)
+          .toList();
+      final refreshedChildren=<OrbitQueuedMedia>[];
+      var complete=true;
+      for(var child in children) {
+        if(child.parentMediaId==null) {
+          child=await _outbox.bindVariantParent(child,main.mediaId);
+        }
+        final sent=await _repo.upload(await _outbox.restore(child),
+          kind:child.kind,mime:child.mime,parentMediaId:main.mediaId,
+          onProgress:onProgress);
+        results.add(sent);
+        if(!sent.ready){complete=false;break;}
+        refreshedChildren.add(child);
+      }
+      if(!complete)continue;
+      final device=await _identity.trustedMediaDevice();
+      final grantDraft=await _outbox.grantEnvelopeOnce(owner,parent.transfer,
+        () async {
+          final envelopes=<Map<String,Object?>>[
+            {'device_id':device.id,'variant':'original','key_version':'v1',
+              'algorithm':OrbitMediaFormat.envelopeAlgorithm,
+              'wrapped_key_ciphertext':await _crypto.wrapKey(
+                sealed,device.publicKey)},
+          ];
+          for(final child in refreshedChildren) {
+            final saved=await _outbox.restore(child);
+            envelopes.add({
+              'device_id':device.id,'variant':child.variant,
+              'key_version':'v1','algorithm':OrbitMediaFormat.envelopeAlgorithm,
+              'wrapped_key_ciphertext':await _crypto.wrapKey(
+                saved,device.publicKey),
+            });
+          }
+          return envelopes;
+        });
+      allEnvelopes.addAll(grantDraft);
+      final granted=await _repo.createGrants(main.mediaId,
+        audience:'only_me',recipients:const [],
+        keyEnvelopes:allEnvelopes,idempotencyKey:parent.transfer);
+      if(granted.isEmpty)throw StateError('Encrypted media grant not confirmed.');
+      for(final child in refreshedChildren){await _outbox.discard(child);}
+      await _outbox.discard(parent);
     }
     return results;
   }
+
 }
