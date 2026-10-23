@@ -136,53 +136,14 @@ class _DevicesScreenState extends State<DevicesScreen> {
       _message('Renaming will be available after your account is connected.');
       return;
     }
-    final controller = TextEditingController(text: device.name);
-    String? newName;
-    try {
-      newName = await showOrbitPopupModal<String>(
-        context: context,
-        popupId: 'rename_device',
-        builder: (dialogContext) => Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.viewInsetsOf(dialogContext).bottom,
-          ),
-          child: OrbitPopupModal(
-            title: 'Rename device',
-            showCloseButton: true,
-            onClose: () => Navigator.of(dialogContext).pop(),
-            content: AppTextField(
-              label: 'Device name',
-              fieldKey: DevicesKeys.renameField,
-              controller: controller,
-              textCapitalization: TextCapitalization.sentences,
-              textInputAction: TextInputAction.done,
-              inputFormatters: <TextInputFormatter>[
-                LengthLimitingTextInputFormatter(48),
-              ],
-            ),
-            primaryAction: ValueListenableBuilder<TextEditingValue>(
-              valueListenable: controller,
-              builder: (context, value, _) {
-                final name = value.text.trim();
-                return OrbitPopupPrimaryButton(
-                  label: 'Save',
-                  enabled: name.isNotEmpty &&
-                      name.length <= 48 &&
-                      name != device.name,
-                  onPressed: () => Navigator.of(dialogContext).pop(name),
-                );
-              },
-            ),
-            secondaryAction: OrbitPopupTextButton(
-              label: 'Cancel',
-              onPressed: () => Navigator.of(dialogContext).pop(),
-            ),
-          ),
-        ),
-      );
-    } finally {
-      controller.dispose();
-    }
+    // Let the dialog widget own its controller until the popup exit animation
+    // finishes. The showGeneralDialog future resolves at pop(), while the
+    // outgoing route may still render for several frames.
+    final newName = await showOrbitPopupModal<String>(
+      context: context,
+      popupId: 'rename_device',
+      builder: (_) => _RenameDevicePopup(deviceName: device.name),
+    );
     if (!mounted || newName == null || newName == device.name) return;
     await _runAction(
       device.id,
@@ -660,4 +621,69 @@ class _DevicePill extends StatelessWidget {
       ),
     );
   }
+}
+
+ 
+/// Controller lifetime is tied to the dialog route, never to the Future
+/// returned by showGeneralDialog, which resolves before its exit transition.
+class _RenameDevicePopup extends StatefulWidget {
+  const _RenameDevicePopup({required this.deviceName});
+
+  final String deviceName;
+
+  @override
+  State<_RenameDevicePopup> createState() => _RenameDevicePopupState();
+}
+
+class _RenameDevicePopupState extends State<_RenameDevicePopup> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.deviceName);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+    child: OrbitPopupModal(
+      title: 'Rename device',
+      showCloseButton: true,
+      onClose: () => Navigator.of(context).pop(),
+      content: AppTextField(
+        label: 'Device name',
+        fieldKey: DevicesKeys.renameField,
+        controller: _controller,
+        textCapitalization: TextCapitalization.sentences,
+        textInputAction: TextInputAction.done,
+        inputFormatters: <TextInputFormatter>[
+          LengthLimitingTextInputFormatter(48),
+        ],
+      ),
+      primaryAction: ValueListenableBuilder<TextEditingValue>(
+        valueListenable: _controller,
+        builder: (context, value, _) {
+          final name = value.text.trim();
+          return OrbitPopupPrimaryButton(
+            label: 'Save',
+            enabled: name.isNotEmpty &&
+                name.length <= 48 &&
+                name != widget.deviceName,
+            onPressed: () => Navigator.of(context).pop(name),
+          );
+        },
+      ),
+      secondaryAction: OrbitPopupTextButton(
+        label: 'Cancel',
+        onPressed: () => Navigator.of(context).pop(),
+      ),
+    ),
+  );
 }
