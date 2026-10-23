@@ -6,6 +6,9 @@ on:
     branches: [feature/m5-circles-flutter-integration]
 permissions:
   contents: read
+concurrency:
+  group: orbit-m6-flutter-branch
+  cancel-in-progress: true
 jobs:
   media:
     runs-on: ubuntu-latest
@@ -20,7 +23,7 @@ jobs:
       - name: Resolve dependencies
         run: flutter pub get
       - name: Analyze M6 implementation
-        run: dart analyze lib/features/media test/features/media
+        run: dart analyze lib/features/media test/features/media lib/features/moments/presentation/orbit_moment_camera_launcher.dart
       - name: Test M6 crypto and uploads
         run: flutter test test/features/media
       - name: Regression existing Moment widgets
