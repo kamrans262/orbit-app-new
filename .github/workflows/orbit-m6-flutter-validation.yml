@@ -1,0 +1,27 @@
+name: Orbit M6 Flutter media validation
+on:
+  push:
+    branches: [feature/m6-media-flutter-integration]
+  pull_request:
+    branches: [feature/m5-circles-flutter-integration]
+permissions:
+  contents: read
+jobs:
+  media:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - name: Resolve dependencies
+        run: flutter pub get
+      - name: Analyze M6 implementation
+        run: dart analyze lib/features/media test/features/media
+      - name: Test M6 crypto and uploads
+        run: flutter test test/features/media
+      - name: Regression existing Moment widgets
+        run: flutter test test/features/moments
