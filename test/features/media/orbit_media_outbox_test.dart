@@ -84,4 +84,51 @@ void main() {
     expect(await saved.file.exists(),isFalse);
     expect(vault.values,isEmpty);
   });
+
+  test('Offline original and thumbnail keep their relationship on restore', () async {
+    final original=await OrbitMediaCrypto().sealBytes(
+      Uint8List.fromList([1,2,3]),
+      destination:File(temp.path+'/original.enc'),ownerId:'owner-a',
+      transferId:'55555555-5555-4555-8555-555555555555',purpose:'moment');
+    final poster=await OrbitMediaCrypto().sealBytes(
+      Uint8List.fromList([4,5]),
+      destination:File(temp.path+'/poster.enc'),ownerId:'owner-a',
+      transferId:'66666666-6666-4666-8666-666666666666',purpose:'moment',
+      variant:'thumbnail');
+    await outbox.enqueue(original,kind:'image',mime:'image/jpeg');
+    var child=await outbox.enqueue(poster,kind:'image',mime:'image/jpeg',
+      parentTransferId:original.transferId);
+    child=await outbox.bindVariantParent(child,
+      '77777777-7777-4777-8777-777777777777');
+    final restored=(await outbox.pending('owner-a')).firstWhere(
+        (d)=>d.variant=='thumbnail');
+    expect(restored.parentTransferId,original.transferId);
+    expect(restored.parentMediaId,'77777777-7777-4777-8777-777777777777');
+    expect((await outbox.restore(child)).key,poster.key);
+  });
+
+  test('Offline grant ciphertext request is stable across retry', () async {
+    final original=await OrbitMediaCrypto().sealBytes(
+      Uint8List.fromList([1,2,3]),
+      destination:File(temp.path+'/grant.enc'),ownerId:'owner-a',
+      transferId:'88888888-8888-4888-8888-888888888888',purpose:'moment');
+    final stored=await outbox.enqueue(original,kind:'image',mime:'image/jpeg');
+    var calls=0;
+    final first=await outbox.grantEnvelopeOnce('owner-a',stored.transfer,() async {
+      calls++;
+      return [{'device_id':'device','cipher':'random-payload'}];
+    });
+    final afterRestart=OrbitMediaOutbox(vault:vault,
+      signedInOwner:()async=>currentOwner,
+      supportDirectory:()async=>temp);
+    final second=await afterRestart.grantEnvelopeOnce('owner-a',stored.transfer,() async {
+      calls++;
+      return [{'device_id':'device','cipher':'should-never-use'}];
+    });
+    expect(calls,1);
+    expect(first,second);
+    await afterRestart.discard(stored);
+    expect(vault.values.keys.any((k)=>k.contains('orbit.m6.grant.')),isFalse);
+  });
+
 }
