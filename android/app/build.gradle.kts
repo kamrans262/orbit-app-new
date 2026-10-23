@@ -76,7 +76,7 @@ tasks.matching {
 }.configureEach {
     doFirst {
         if (orbitAndroidId == "com.example.orbit_ui" || !orbitHasSigning ||
-            !java.io.File(orbitStore!!).isFile) {
+            !file(orbitStore!!).isFile) {
             throw org.gradle.api.GradleException(
                 "Orbit release blocked: set verified ORBIT_ANDROID_APPLICATION_ID and " +
                 "ORBIT_ANDROID_KEYSTORE_PATH/PASSWORD/KEY_ALIAS/KEY_PASSWORD."
