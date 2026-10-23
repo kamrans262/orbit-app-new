@@ -6,15 +6,17 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../data/orbit_circle_repository.dart';
+import '../../data/orbit_circle_change_source.dart';
 import '../../domain/models/friend_details_models.dart';
 import 'friend_details_screen.dart';
 import 'orbit_live_circle_settings_screen.dart';
 import 'orbit_live_invite_member_screen.dart';
 
 class OrbitLiveCircleDetailScreen extends StatefulWidget {
-  const OrbitLiveCircleDetailScreen({required this.circleId,super.key,this.repository});
+  const OrbitLiveCircleDetailScreen({required this.circleId,super.key,this.repository,this.changeSource});
   final String circleId;
   final OrbitCircleRepository? repository;
+  final OrbitCircleChangeSource? changeSource;
   @override
   State<OrbitLiveCircleDetailScreen> createState() => _OrbitLiveCircleDetailScreenState();
 }
@@ -28,12 +30,18 @@ class _OrbitLiveCircleDetailScreenState extends State<OrbitLiveCircleDetailScree
   String? _error;
   int _epoch = 0;
   Timer? _authorizationRefresh;
+  StreamSubscription<OrbitCircleInvalidation>? _invalidationSubscription;
   bool _revalidating = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _invalidationSubscription=(widget.changeSource ??
+        OrbitCircleChangeSource.disabled).invalidations.listen((event) {
+      if(event.circleId==widget.circleId && mounted &&
+          !_loading && !_revalidating) _refresh(silent:true);
+    });
     _authorizationRefresh=Timer.periodic(const Duration(seconds:25),(_){
       if(!mounted || _loading || _revalidating ||
         WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed ||
@@ -47,6 +55,7 @@ class _OrbitLiveCircleDetailScreenState extends State<OrbitLiveCircleDetailScree
   void dispose() {
     _epoch++;
     _authorizationRefresh?.cancel();
+    _invalidationSubscription?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
