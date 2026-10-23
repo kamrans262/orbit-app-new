@@ -5,6 +5,7 @@ on:
     branches:
       - feature/m4-social-graph-flutter
       - feature/m5-circles-flutter-integration
+      - feature/m6-media-flutter-integration
   pull_request:
     branches:
       - feature/m3-completion-offline
@@ -60,7 +61,7 @@ jobs:
             if [ "${attempt}" -eq 3 ]; then exit 1; fi
             sleep 6
           done
-      - name: Android debug build with native M4 plugins
+      - name: Android debug build with native M4-M6 plugins
         run: flutter build apk --debug
       - name: Save Android debug build for M4 device acceptance
         uses: actions/upload-artifact@v4
