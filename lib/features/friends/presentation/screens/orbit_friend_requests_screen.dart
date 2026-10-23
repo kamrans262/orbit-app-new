@@ -5,6 +5,13 @@ import '../../../../core/widgets/app_screen_header.dart';
 import '../../../home/domain/models/home_models.dart';
 import '../../../home/presentation/widgets/favorite_person_tile.dart';
 import '../../data/orbit_social_repository.dart';
+import '../widgets/friend_request_segmented_control.dart';
+
+abstract final class OrbitFriendRequestsKeys {
+  static const backButton = Key('friend_requests_header_back');
+  static const title = Key('friend_requests_header_title');
+  static const segmentedControl = Key('friend_requests_segmented_control');
+}
 
 class OrbitFriendRequestsScreen extends StatefulWidget {
   const OrbitFriendRequestsScreen({super.key, this.repository, this.initialDirection = 'incoming'})
@@ -89,17 +96,25 @@ class _OrbitFriendRequestsScreenState extends State<OrbitFriendRequestsScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(child: Column(children: [
-        Padding(padding: const EdgeInsets.all(20),
-          child: AppScreenHeader(title:'Friend Requests')),
-        Padding(padding: const EdgeInsets.symmetric(horizontal:20),
-          child: SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value:'incoming', label:Text('Received')),
-              ButtonSegment(value:'outgoing', label:Text('Sent')),
-            ],
-            selected: {_direction},
-            onSelectionChanged: (items) => _select(items.first))),
-        const SizedBox(height:16),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+          child: const AppScreenHeader(
+            title: 'Friend Requests',
+            prominent: true,
+            backButtonKey: OrbitFriendRequestsKeys.backButton,
+            titleKey: OrbitFriendRequestsKeys.title,
+          ),
+        ),
+        const SizedBox(height: 20),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: FriendRequestSegmentedControl(
+            key: OrbitFriendRequestsKeys.segmentedControl,
+            value: _direction,
+            onChanged: _select,
+          ),
+        ),
+        const SizedBox(height: 16),
         Expanded(child: ListView(
           padding: const EdgeInsets.symmetric(horizontal:20,vertical:8),
           children: [
