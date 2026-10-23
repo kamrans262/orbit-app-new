@@ -144,12 +144,11 @@ void main() {
       );
       await tester.pumpAndSettle();
       final like = find.bySemanticsLabel('Like moment');
-      await tester.scrollUntilVisible(like, 70,
-        scrollable: find.descendant(
-          of: find.byKey(MomentsKeys.feed),
-          matching: find.byType(Scrollable),
-        ).first,
-      );
+      // The engagement row is below the image fold on compact devices.
+      // Scroll the existing feed to it before querying lazy sliver semantics.
+      await tester.drag(feedScroll, const Offset(0, -320));
+      await tester.pumpAndSettle();
+      expect(like, findsOneWidget);
       await tester.ensureVisible(like);
       await tester.pumpAndSettle();
       expect(like, findsOneWidget);
@@ -159,12 +158,7 @@ void main() {
       expect(find.bySemanticsLabel('Unlike moment'), findsOneWidget);
 
       final bookmark = find.bySemanticsLabel('Bookmark moment');
-      await tester.scrollUntilVisible(bookmark, 70,
-        scrollable: find.descendant(
-          of: find.byKey(MomentsKeys.feed),
-          matching: find.byType(Scrollable),
-        ).first,
-      );
+      expect(bookmark, findsOneWidget);
       await tester.ensureVisible(bookmark);
       await tester.pumpAndSettle();
       await tester.tap(bookmark);

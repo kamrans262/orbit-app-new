@@ -1029,7 +1029,7 @@ class _SendToButton extends StatelessWidget {
               constraints: const BoxConstraints(minWidth: 108, minHeight: 46),
               child: Padding(
                 padding: EdgeInsets.symmetric(
-                  horizontal: compact ? 4 : 18,
+                  horizontal: compact ? 1 : 18,
                   vertical: 13,
                 ),
                 child: Row(
