@@ -7,6 +7,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../data/orbit_circle_repository.dart';
 import '../../data/orbit_circle_change_source.dart';
+import '../../data/orbit_m5_firebase_change_source.dart';
 import '../../domain/models/friend_details_models.dart';
 import 'friend_details_screen.dart';
 import 'orbit_live_circle_settings_screen.dart';
@@ -37,8 +38,11 @@ class _OrbitLiveCircleDetailScreenState extends State<OrbitLiveCircleDetailScree
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    if (widget.changeSource == null) {
+      OrbitM5FirebaseChangeSource.instance.setBootstrap(_repo.realtimeBootstrap);
+    }
     _invalidationSubscription=(widget.changeSource ??
-        OrbitCircleChangeSource.disabled).invalidations.listen((event) {
+        OrbitM5FirebaseChangeSource.instance).invalidations.listen((event) {
       if(event.circleId==widget.circleId && mounted &&
           !_loading && !_revalidating) _refresh(silent:true);
     });
@@ -48,6 +52,11 @@ class _OrbitLiveCircleDetailScreenState extends State<OrbitLiveCircleDetailScree
         ModalRoute.of(context)?.isCurrent != true) return;
       _refresh(silent:true);
     });
+    if (widget.changeSource == null) {
+      unawaited(OrbitM5FirebaseChangeSource.instance.watchCircles(
+        [widget.circleId],
+      ));
+    }
     _refresh();
   }
 
