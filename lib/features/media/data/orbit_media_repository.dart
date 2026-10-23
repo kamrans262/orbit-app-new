@@ -6,7 +6,6 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' as digest;
 import 'package:http/http.dart' as http;
-import 'package:uuid/uuid.dart';
 
 import '../../auth/data/orbit_identity_client.dart';
 import 'orbit_media_crypto.dart';
@@ -66,13 +65,15 @@ class OrbitMediaRepository {
     }
     final path = '/media/uploads/' + Uri.encodeComponent(upload);
     final mode = init['storage_mode'];
-    if (mode != 'multipart' && init['state'] != 'ready') {
+    if (!['multipart','local_chunked'].contains(mode) && init['state'] != 'ready') {
       // Hostinger local_chunked must have its own backend transport before
       // this client can use it; never assume storage/app/public is private.
       throw StateError('Private media transport is not configured.');
     }
     final partBytes = init['part_size_bytes'];
-    if (init['state'] != 'ready' && partBytes != OrbitMediaFormat.partBytes) {
+    if (init['state'] != 'ready' &&
+        (partBytes is! int || partBytes<=0 || partBytes>OrbitMediaFormat.partBytes ||
+         (mode=='multipart' && partBytes!=OrbitMediaFormat.partBytes))) {
       throw StateError('Backend multipart size differs from AEAD framing.');
     }
     if (init['state'] == 'ready') {
@@ -98,15 +99,27 @@ class OrbitMediaRepository {
     var offset = 0;
     final file = await media.file.open();
     try {
-      final count = (media.bytes / OrbitMediaFormat.partBytes).ceil();
+      final count = (media.bytes / partBytes).ceil();
       for (var index = 1; index <= count; index++) {
-        final size = min(OrbitMediaFormat.partBytes, media.bytes - offset);
+        final size = min(partBytes, media.bytes - offset);
         final bytes = await file.read(size);
         if (bytes.length != size) throw const FileSystemException(
             'Ciphertext file changed during transfer.');
         var etag = uploaded[index];
         if (etag == null) {
           final checksumBytes = digest.sha256.convert(bytes).bytes;
+          if (mode=='local_chunked') {
+            final raw=await _identity.mediaBinaryRequest('PUT',
+              path+'/chunks/$index',body:Uint8List.fromList(bytes),
+              headers:{'X-Orbit-Cipher-SHA256':digest.sha256.convert(bytes).toString()},
+              maxResponseBytes:4096);
+            final decoded=jsonDecode(utf8.decode(raw));
+            if(decoded is! Map || decoded['data'] is! Map ||
+               (decoded['data'] as Map)['etag'] is! String) {
+              throw const FormatException('Private chunk receipt invalid.');
+            }
+            etag=(decoded['data'] as Map)['etag'] as String;
+          } else {
           final signed = await control('POST', path + '/parts', body: {
             'part_number':index,'checksum_sha256':digest.sha256.convert(bytes).toString(),
             'content_length':size,
@@ -144,6 +157,7 @@ class OrbitMediaRepository {
           if (etag == null || etag.isEmpty) {
             throw StateError('Storage server did not acknowledge ciphertext.');
           }
+          }
         }
         pieces.add({'part_number':index,'etag':etag});
         offset += size;
@@ -153,7 +167,7 @@ class OrbitMediaRepository {
       await file.close();
     }
     final completed = await control('POST',path + '/complete',
-      idempotencyKey:const Uuid().v4(),
+      idempotencyKey:media.transferId,
       body: {'total_cipher_bytes':media.bytes,
         'cipher_sha256':media.sha256,'parts':pieces});
     if (completed['state'] == 'ready') {
@@ -205,24 +219,35 @@ class OrbitMediaRepository {
         body:{'variant':variant,'device_id':deviceId});
     final envelope=await control('GET',scope+'/key-envelope?device_id='+
         Uri.encodeComponent(deviceId)+'&variant='+Uri.encodeComponent(variant));
-    final raw=access['ciphertext_url'];
-    final url=raw is String ? Uri.tryParse(raw):null;
-    if(url==null || url.scheme!='https' || url.userInfo.isNotEmpty) {
-      throw const FormatException('Invalid signed media read URL.');
+    late final Uint8List ciphertext;
+    if(access['download_mode']=='authenticated') {
+      final path=access['download_path'];
+      if(path is! String || !path.startsWith('/media/')) {
+        throw const FormatException('Invalid private ciphertext path.');
+      }
+      ciphertext=await _identity.mediaBinaryRequest('GET',path,
+          maxResponseBytes:OrbitMediaFormat.imageLimit+2048);
+    } else {
+      final raw=access['ciphertext_url'];
+      final url=raw is String ? Uri.tryParse(raw):null;
+      if(url==null || url.scheme!='https' || url.userInfo.isNotEmpty) {
+        throw const FormatException('Invalid signed media read URL.');
+      }
+      final response=await _http.get(url).timeout(const Duration(seconds:60));
+      if(response.statusCode!=200 ||
+         response.bodyBytes.length>OrbitMediaFormat.imageLimit+2048) {
+        throw StateError('Private media cannot be downloaded.');
+      }
+      ciphertext=response.bodyBytes;
     }
-    final response=await _http.get(url).timeout(const Duration(seconds:60));
-    if(response.statusCode!=200 ||
-       response.bodyBytes.length>OrbitMediaFormat.imageLimit+2048) {
-      throw StateError('Private media cannot be downloaded.');
-    }
-    if(digest.sha256.convert(response.bodyBytes).toString()!=access['sha256_ciphertext']) {
+    if(digest.sha256.convert(ciphertext).toString()!=access['sha256_ciphertext']) {
       throw StateError('Ciphertext checksum mismatch.');
     }
     final processor=crypto??OrbitMediaCrypto();
     final material=await processor.unwrapKey(
       envelope['wrapped_key_ciphertext'] as String,
       privateKey:privateKey,publicKey:publicKey);
-    return processor.openInMemory(response.bodyBytes,
+    return processor.openInMemory(ciphertext,
       key:material.key,noncePrefix:material.prefix,
       ownerId:material.owner,transferId:material.transfer,
       purpose:material.purpose,variant:material.variant);

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -494,6 +495,62 @@ class OrbitIdentityClient {
 
   Future<void> clearCirclesSnapshot() =>
       _storage.delete(key: _circlesCacheKey);
+
+
+  /// Fetch/submit *only* binary ciphertext through the authenticated Orbit
+  /// API. No refresh token, access token or media key is sent to an external
+  /// storage URL. Bound to a maximum response to avoid device memory attacks.
+  Future<Uint8List> mediaBinaryRequest(String method,String path,{
+    Uint8List? body, Map<String,String> headers=const {},
+    int maxResponseBytes=27*1024*1024, bool retry=true,
+  }) async {
+    if(!path.startsWith('/media/') || path.startsWith('//') ||
+       path.contains('..') || path.contains('://') ||
+       !['GET','PUT'].contains(method)) {
+      throw ArgumentError.value(path,'path','Unsafe private-media API route');
+    }
+    if(_access==null)await refresh();
+    final request=http.Request(method,Uri.parse('$_origin$path'));
+    request.headers['Accept']='application/octet-stream';
+    if(_access!=null)request.headers['Authorization']='Bearer $_access';
+    request.headers.addAll(headers);
+    if(body!=null) {
+      if(body.length>1024*1024)throw ArgumentError('Private media chunk too large.');
+      request.headers['Content-Type']='application/octet-stream';
+      request.bodyBytes=body;
+    }
+    late final http.StreamedResponse response;
+    try {
+      response=await _http.send(request).timeout(const Duration(seconds:90));
+    } catch (_) {
+      throw OrbitIdentityException('Unable to transfer encrypted media.');
+    }
+    if(response.statusCode==401 && retry) {
+      await response.stream.drain<void>();
+      _access=null;
+      await refresh();
+      return mediaBinaryRequest(method,path,body:body,headers:headers,
+          maxResponseBytes:maxResponseBytes,retry:false);
+    }
+    final buffered=BytesBuilder(copy:false);
+    var total=0;
+    try {
+      await for(final chunk in response.stream.timeout(
+          const Duration(seconds:90))) {
+        total+=chunk.length;
+        if(total>maxResponseBytes)throw OrbitIdentityException(
+            'Encrypted media response exceeded safe limits.',413);
+        buffered.add(chunk);
+      }
+    } catch (_) {
+      throw OrbitIdentityException('Encrypted media transfer was interrupted.');
+    }
+    if(response.statusCode<200 || response.statusCode>=300) {
+      throw OrbitIdentityException('Encrypted media transfer was denied.',
+          response.statusCode);
+    }
+    return buffered.toBytes();
+  }
 
   Future<Map<String, dynamic>> socialRequest(String method, String path,
       {Map<String, Object?>? body, String? idempotencyKey}) {
