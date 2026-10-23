@@ -24,12 +24,14 @@ class CirclePermissionScreen extends StatefulWidget {
     required this.onBack,
     required this.onCreateCircle,
     this.onSkip,
+    this.circleAlreadyCreated = false,
     super.key,
   });
 
   final VoidCallback onBack;
   final VoidCallback onCreateCircle;
   final VoidCallback? onSkip;
+  final bool circleAlreadyCreated;
 
   @override
   State<CirclePermissionScreen> createState() => _CirclePermissionScreenState();
@@ -42,7 +44,7 @@ class _CirclePermissionScreenState extends State<CirclePermissionScreen> {
   static const double _rowGap = 10;
   static const double _screenHorizontalPadding = 20;
 
-  final List<bool> _permissions = <bool>[true, true, false, true, true];
+  final List<bool> _permissions = <bool>[false, false, false, false, false];
 
   static const List<_PermissionItemData> _items = <_PermissionItemData>[
     _PermissionItemData(
@@ -78,7 +80,11 @@ class _CirclePermissionScreenState extends State<CirclePermissionScreen> {
   ];
 
   void _setPermission(int index, bool value) {
-    setState(() => _permissions[index] = value);
+    // Backend M5 has no approved location/media/messaging grants. Do not
+    // represent a local toggle as saved privacy consent.
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Sharing stays OFF until the secure sharing feature is available.'),
+    ));
   }
 
   @override
@@ -154,7 +160,7 @@ class _CirclePermissionScreenState extends State<CirclePermissionScreen> {
                   child: Center(
                     child: WelcomeActionPanel(
                       primaryKey: CirclePermissionKeys.createCircleButton,
-                      primaryLabel: 'Create Circle',
+                      primaryLabel: widget.circleAlreadyCreated ? 'Continue to Invites' : 'Create Circle',
                       onPrimaryPressed: widget.onCreateCircle,
                       secondaryKey: widget.onSkip == null
                           ? null

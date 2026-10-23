@@ -15,6 +15,7 @@
   static const String notifications = '/notifications';
   static const String shareLocation = '/share-location';
   static const String createCircle = '/create-circle';
+  static const String joinCircle = '/join-circle';
   static const String circlePermission = '/circle-permission';
   static const String invitePeople = '/invite-people';
 

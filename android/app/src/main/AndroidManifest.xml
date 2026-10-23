@@ -35,6 +35,9 @@
                 <data android:scheme="https"
                       android:host="indigo-caribou-178970.hostingersite.com"
                       android:pathPrefix="/invite/friend/"/>
+                <data android:scheme="https"
+                      android:host="indigo-caribou-178970.hostingersite.com"
+                      android:pathPrefix="/invite/circle/"/>
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

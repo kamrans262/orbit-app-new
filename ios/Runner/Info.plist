@@ -48,7 +48,7 @@
         <string>UIInterfaceOrientationLandscapeRight</string>
     </array>
     <key>NSCameraUsageDescription</key>
-    <string>Orbit uses your camera to scan a friend invitation QR code or capture a Moment.</string>
+    <string>Orbit uses your camera to scan a friend or Circle invitation QR code or capture a Moment.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Orbit may use the microphone for Moment video capture.</string>
     <key>NSContactsUsageDescription</key>

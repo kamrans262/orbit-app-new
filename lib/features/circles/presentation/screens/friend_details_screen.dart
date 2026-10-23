@@ -32,6 +32,12 @@ class FriendDetailsScreen extends StatefulWidget {
     required this.groups,
     required this.onBack,
     required this.onAddMember,
+    this.liveInviteMode = false,
+    this.showAddMemberButton = true,
+    this.showGroupSegment = true,
+    this.showFavoriteActions = true,
+    this.headerTitle = 'Friend Details',
+    this.lifecycleNotice,
     this.initialSegment = FriendDetailsSegment.circle,
     this.viewState = FriendDetailsViewState.loaded,
     this.errorMessage = 'Something went wrong. Please try again.',
@@ -140,6 +146,12 @@ class FriendDetailsScreen extends StatefulWidget {
   final List<CircleGroupData> groups;
   final VoidCallback onBack;
   final VoidCallback onAddMember;
+  final bool liveInviteMode;
+  final bool showAddMemberButton;
+  final bool showGroupSegment;
+  final bool showFavoriteActions;
+  final String headerTitle;
+  final String? lifecycleNotice;
   final FriendDetailsSegment initialSegment;
   final FriendDetailsViewState viewState;
   final String errorMessage;
@@ -204,18 +216,30 @@ class _FriendDetailsScreenState extends State<FriendDetailsScreen> {
               sliver: SliverToBoxAdapter(child: _buildSummary()),
             ),
             const SliverToBoxAdapter(child: SizedBox(height: _sectionGap)),
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: _horizontalPadding,
+            if(widget.lifecycleNotice != null) ...<Widget>[
+              SliverPadding(
+                padding:const EdgeInsets.symmetric(horizontal:_horizontalPadding),
+                sliver:SliverToBoxAdapter(child:Container(
+                  padding:const EdgeInsets.all(12),
+                  decoration:BoxDecoration(color:const Color(0xFFFFF0E7),
+                    borderRadius:BorderRadius.circular(10)),
+                  child:Text(widget.lifecycleNotice!,
+                    style:const TextStyle(fontFamily:AppTypography.fontFamily,
+                      fontSize:12,color:Color(0xFF7C2D12))),
+                )),
               ),
-              sliver: SliverToBoxAdapter(
-                child: CircleGroupSegmentedControl(
-                  value: _segment,
-                  onChanged: _handleSegmentChanged,
+              const SliverToBoxAdapter(child:SizedBox(height:_sectionGap)),
+            ],
+            if (widget.showGroupSegment) ...<Widget>[
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal:_horizontalPadding),
+                sliver: SliverToBoxAdapter(
+                  child: CircleGroupSegmentedControl(
+                    value:_segment,onChanged:_handleSegmentChanged),
                 ),
               ),
-            ),
-            const SliverToBoxAdapter(child: SizedBox(height: _sectionGap)),
+              const SliverToBoxAdapter(child:SizedBox(height:_sectionGap)),
+            ],
             ..._buildDynamicContent(),
             const SliverToBoxAdapter(child: SizedBox(height: 24)),
           ],
@@ -225,7 +249,9 @@ class _FriendDetailsScreenState extends State<FriendDetailsScreen> {
   }
 
   void _openInvitePeople() {
+    // Production M5 owns the invitation flow; never open demo invite UI.
     widget.onAddMember();
+    if (widget.liveInviteMode) return;
     Navigator.of(context).push<void>(
       AppFadeSlidePageRoute<void>(
         builder: (_) => InvitePeopleScreen(
@@ -254,9 +280,9 @@ class _FriendDetailsScreenState extends State<FriendDetailsScreen> {
             iconColor: Colors.black,
           ),
           const SizedBox(width: 10),
-          const Expanded(
+          Expanded(
             child: Text(
-              'Friend Details',
+              widget.headerTitle,
               key: FriendDetailsKeys.title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -275,7 +301,7 @@ class _FriendDetailsScreenState extends State<FriendDetailsScreen> {
             ),
           ),
           const SizedBox(width: 10),
-          AppCircularIconButton(
+          if (widget.showAddMemberButton) AppCircularIconButton(
             key: FriendDetailsKeys.addMemberButton,
             semanticLabel: 'Add member',
             onPressed: _openInvitePeople,
@@ -401,6 +427,7 @@ class _FriendDetailsScreenState extends State<FriendDetailsScreen> {
                 ),
                 onTap: member.onTap ?? () {},
                 onFavoritePressed: () => _toggleMemberFavorite(memberIndex),
+                showFavoriteAction:widget.showFavoriteActions,
               ),
             );
           }, childCount: childCount),
