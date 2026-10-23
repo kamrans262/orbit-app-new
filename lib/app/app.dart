@@ -34,7 +34,9 @@ import '../features/app_update/presentation/orbit_update_runtime.dart';
 import '../features/connectivity/presentation/orbit_connectivity_runtime.dart';
 
 class OrbitApp extends StatefulWidget {
-  const OrbitApp({super.key});
+  const OrbitApp({this.initialRoute = AppRoutes.welcome, this.startupAuthenticated = false, super.key});
+  final String initialRoute;
+  final bool startupAuthenticated;
 
   @override
   State<OrbitApp> createState() => _OrbitAppState();
@@ -62,9 +64,20 @@ class _OrbitAppState extends State<OrbitApp> {
       builder: (context, child) => OrbitGradientScaffoldMessenger(
         child: AppKeyboardDismiss(child: child ?? const SizedBox.shrink()),
       ),
-      initialRoute: AppRoutes.welcome,
-      onGenerateRoute: (settings) {
-        switch (settings.name) {
+      initialRoute: widget.initialRoute,
+      onGenerateInitialRoutes: (name) => <Route<dynamic>>[
+        _route(RouteSettings(
+          name: name,
+          arguments: name == AppRoutes.home && widget.startupAuthenticated
+              ? const _VerifiedStartupHome() : null,
+        )),
+      ],
+      onGenerateRoute: _route,
+    );
+  }
+
+  Route<dynamic> _route(RouteSettings settings) {
+    switch (settings.name) {
           case AppRoutes.welcome:
             return MaterialPageRoute<void>(
               settings: settings,
@@ -190,6 +203,15 @@ class _OrbitAppState extends State<OrbitApp> {
                 },
                 onRegisterDevice: OrbitIdentityClient.instance.registerDevice,
                 onCheckApproval: OrbitIdentityClient.instance.checkDeviceApproval,
+                onRequestRecoveryCode: OrbitIdentityClient.instance.requestDeviceRecoveryCode,
+                onCompleteRecovery: OrbitIdentityClient.instance.completeDeviceRecovery,
+                onSignInAgain: () async {
+                  await OrbitIdentityClient.instance.clearSession();
+                  if (!context.mounted) return;
+                  Navigator.of(context).pushNamedAndRemoveUntil(
+                    AppRoutes.login, (_) => false,
+                  );
+                },
               ),
             );
           case AppRoutes.profileBasics:
@@ -380,6 +402,7 @@ class _OrbitAppState extends State<OrbitApp> {
             return MaterialPageRoute<void>(
               settings: settings,
               builder: (context) => OrbitProtectedHome(
+                startupVerified: settings.arguments is _VerifiedStartupHome,
                 home: HomeScreen.demo(
                   onTabSelected: (index) {},
                   onAddPressed: () {},
@@ -399,9 +422,12 @@ class _OrbitAppState extends State<OrbitApp> {
               ),
             );
         }
-      },
-    );
   }
+}
+
+/// Only the app's verified initial-route builder can attach this marker.
+class _VerifiedStartupHome {
+  const _VerifiedStartupHome();
 }
 
 /// Navigation-only parameters. Password is retained in memory only for

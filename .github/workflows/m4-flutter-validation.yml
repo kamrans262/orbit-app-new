@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/m4-social-graph-flutter
+      - integration/m2-m4-flutter-consolidated-2026-10-24
   pull_request:
     branches:
       - feature/m3-completion-offline
@@ -55,6 +56,14 @@ jobs:
         run: flutter test test/features/friends/
       - name: M3 profile/offline regression
         run: flutter test test/features/auth/orbit_m3_offline_profile_test.dart
+      - name: Analyze consolidated M2-M4 session and startup flows
+        run: |
+          dart analyze lib/features/splash lib/features/auth/presentation/screens/orbit_sessions_screen.dart lib/features/auth/presentation/screens/device_registration_screen.dart lib/features/auth/presentation/screens/orbit_offline_profile_screen.dart lib/features/auth/presentation/screens/orbit_account_deletion_status_screen.dart lib/features/profile/presentation/screens/devices_screen.dart lib/core/widgets/orbit_gradient_scaffold_messenger.dart lib/core/widgets/app_text_field.dart lib/main.dart
+      - name: M3 devices, sessions, recovery and splash regressions
+        run: |
+          flutter test test/features/auth/presentation/orbit_sessions_screen_test.dart test/features/profile/presentation/screens/devices_screen_test.dart test/features/auth/presentation/device_approval_screen_test.dart test/features/auth/orbit_m3_restricted_screen_styles_test.dart
+          flutter test test/features/splash/
+          flutter test test/app/orbit_app_navigation_test.dart
       - name: Validate iOS plist XML structure
         run: python3 -c "import plistlib; plistlib.load(open('ios/Runner/Info.plist','rb'))"
       - name: Android debug build with native M4 plugins

@@ -381,7 +381,7 @@ class SettingsScreen extends StatelessWidget {
     }
     if (!context.mounted) return;
     Navigator.of(context, rootNavigator: true)
-        .pushNamedAndRemoveUntil(AppRoutes.welcome, (_) => false);
+        .pushNamedAndRemoveUntil(AppRoutes.login, (_) => false);
   }
 
   Future<void> _requestDeletion(BuildContext context) async {
@@ -389,7 +389,7 @@ class SettingsScreen extends StatelessWidget {
       await OrbitIdentityClient.instance.requestDeletion();
       if (!context.mounted) return;
       Navigator.of(context, rootNavigator: true)
-          .pushNamedAndRemoveUntil(AppRoutes.welcome, (_) => false);
+          .pushNamedAndRemoveUntil(AppRoutes.login, (_) => false);
     } on OrbitIdentityException catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(

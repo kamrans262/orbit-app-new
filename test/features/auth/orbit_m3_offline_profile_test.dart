@@ -134,13 +134,13 @@ void main() {
       initialRoute: AppRoutes.offlineProfile,
       routes:<String,WidgetBuilder>{
         AppRoutes.offlineProfile: (_) => OrbitOfflineProfileScreen(identity:fake),
-        AppRoutes.welcome: (_) => const Scaffold(body:Text('Welcome')),
+        AppRoutes.login: (_) => const Scaffold(body:Text('Login')),
       },
     ));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Sign out and clear offline data'));
     await tester.pumpAndSettle();
     expect(fake.cleared, true);
-    expect(find.text('Welcome'), findsOneWidget);
+    expect(find.text('Login'), findsOneWidget);
   });
 }

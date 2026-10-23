@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_ui/features/splash/presentation/screens/orbit_splash_gate.dart';
@@ -58,4 +60,31 @@ void main() {
     expect(find.text('ORBIT APP'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('splash waits for verified startup route after minimum time',
+      (tester) async {
+    final pending = Completer<Widget>();
+    await tester.pumpWidget(OrbitSplashGate(
+      displayDuration: const Duration(milliseconds: 40),
+      fadeDuration: const Duration(milliseconds: 20),
+      preparedChild: pending.future,
+      child: const MaterialApp(
+        home: Scaffold(body: Text('INCORRECT WELCOME')),
+      ),
+    ));
+
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byKey(const ValueKey<String>('orbit-splash-image')),
+        findsOneWidget);
+    expect(find.text('INCORRECT WELCOME'), findsNothing);
+
+    pending.complete(const MaterialApp(
+      home: Scaffold(body: Text('VERIFIED HOME')),
+    ));
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(find.text('VERIFIED HOME'), findsOneWidget);
+    expect(find.text('INCORRECT WELCOME'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
 }
