@@ -4,6 +4,7 @@ import '../features/home/presentation/screens/home_screen.dart';
 import '../features/friends/presentation/screens/orbit_discover_friends_screen.dart';
 
 import '../core/widgets/app_keyboard_dismiss.dart';
+import '../core/widgets/orbit_gradient_scaffold_messenger.dart';
 import '../core/navigation/orbit_invite_link_runtime.dart';
 
 import '../features/auth/presentation/screens/login_screen.dart';
@@ -58,8 +59,9 @@ class _OrbitAppState extends State<OrbitApp> {
       title: 'Orbit',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
-      builder: (context, child) =>
-          AppKeyboardDismiss(child: child ?? const SizedBox.shrink()),
+      builder: (context, child) => OrbitGradientScaffoldMessenger(
+        child: AppKeyboardDismiss(child: child ?? const SizedBox.shrink()),
+      ),
       initialRoute: AppRoutes.welcome,
       onGenerateRoute: (settings) {
         switch (settings.name) {
