@@ -132,7 +132,7 @@ class OrbitMediaOutbox {
     if (!RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(sealed.transferId)) {
       throw const FormatException('Transfer ID must be a UUID.');
     }
-    if (sealed.cipherSha256.length != 64) {
+    if (sealed.sha256.length != 64) {
       throw const FormatException('Invalid encrypted media checksum.');
     }
     final root=await _root(sealed.ownerId);
