@@ -6,6 +6,11 @@ import '../../../../core/widgets/app_screen_header.dart';
 import '../../data/orbit_social_repository.dart';
 
 /// M4 privacy settings: server-confirmed changes, never optimistic consent.
+abstract final class OrbitDiscoveryHeaderKeys {
+  static const back = Key('orbit_friend_discovery_header_back');
+  static const title = Key('orbit_friend_discovery_header_title');
+}
+
 class OrbitDiscoveryPreferencesScreen extends StatefulWidget {
   const OrbitDiscoveryPreferencesScreen({super.key,this.repository});
   final OrbitSocialRepository? repository;
@@ -67,7 +72,12 @@ class _OrbitDiscoveryPreferencesScreenState extends State<OrbitDiscoveryPreferen
       body: SafeArea(child: ListView(
         padding:const EdgeInsets.all(20),
         children: [
-          AppScreenHeader(title:'Friend Discovery'),
+          const AppScreenHeader(
+            title: 'Friend Discovery',
+            prominent: true,
+            backButtonKey: OrbitDiscoveryHeaderKeys.back,
+            titleKey: OrbitDiscoveryHeaderKeys.title,
+          ),
           const SizedBox(height:18),
           const Text('Choose who can find you. Your phone contacts remain private and are never automatically uploaded.',
             style:TextStyle(fontSize:13,color:Color(0xFF64748B))),
