@@ -192,6 +192,28 @@ class OrbitMediaOutbox {
       purpose:item.purpose,variant:item.variant);
   }
 
+
+  /// Persist the parent media UUID after an original is verified so a
+  /// thumbnail can resume independently after connectivity is restored.
+  Future<OrbitQueuedMedia> bindVariantParent(OrbitQueuedMedia item,
+      String parentMediaId) async {
+    await _requireOwner(item.owner);
+    final drafts=await _load(item.owner);
+    final index=drafts.indexWhere((d)=>d.transfer==item.transfer);
+    if(index<0)throw StateError('Offline media job disappeared.');
+    final updated=OrbitQueuedMedia(
+      owner:item.owner,transfer:item.transfer,purpose:item.purpose,
+      kind:item.kind,mime:item.mime,variant:item.variant,
+      fileName:item.fileName,cipherSha256:item.cipherSha256,
+      cipherBytes:item.cipherBytes,plainBytes:item.plainBytes,
+      noncePrefix:item.noncePrefix,parentMediaId:parentMediaId,
+      width:item.width,height:item.height,durationMs:item.durationMs,
+    );
+    drafts[index]=updated;
+    await _save(item.owner,drafts);
+    return updated;
+  }
+
   Future<void> discard(OrbitQueuedMedia item) async {
     await _requireOwner(item.owner);
     final entries=await _load(item.owner);
