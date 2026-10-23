@@ -19,6 +19,18 @@ class OrbitIdentityException implements Exception {
   String toString() => message;
 }
 
+
+/// M6 key-material view is allowed only after a fresh trusted-device API read.
+/// Never persist the private key in app preferences, logs or an upload request.
+class OrbitMediaTrustedDevice {
+  const OrbitMediaTrustedDevice({
+    required this.id, required this.publicKey, required this.privateKey,
+  });
+  final String id;
+  final List<int> publicKey;
+  final List<int> privateKey;
+}
+
 /// Only consumer credentials live here; admin authentication is independent.
 class OrbitIdentityClient {
   OrbitIdentityClient({http.Client? client, FlutterSecureStorage? storage})
@@ -299,6 +311,41 @@ class OrbitIdentityClient {
     } finally {
       await clearSession();
     }
+  }
+
+
+  Future<OrbitMediaTrustedDevice> trustedMediaDevice() async {
+    final owner=await currentLocalSocialOwner();
+    if(owner==null)throw OrbitIdentityException('Sign in before accessing encrypted media.',401);
+    // Always validate the live server trust state. An offline profile or stale
+    // cached device record can never authorize an encrypted media action.
+    final live=await devices();
+    Map<String,dynamic>? active;
+    for(final d in live){
+      if(d['is_current']==true && d['trust_state']=='trusted' &&
+         d['revoked_at']==null && d['key_registered']==true){
+        active=d; break;
+      }
+    }
+    if(active==null)throw OrbitIdentityException('Trusted device required.',403);
+    final public=await _storage.read(key:_publicKey);
+    final private=await _storage.read(key:_privateKey);
+    if(public==null || private==null){
+      throw OrbitIdentityException('Device encryption key is unavailable.',403);
+    }
+    late final List<int> pubBytes;
+    late final List<int> privateBytes;
+    try {
+      pubBytes=base64Decode(public);
+      privateBytes=base64Decode(private);
+    } catch (_) {
+      throw OrbitIdentityException('Device encryption key is invalid.',403);
+    }
+    if(pubBytes.length!=32 || privateBytes.length!=32){
+      throw OrbitIdentityException('Device encryption key is invalid.',403);
+    }
+    return OrbitMediaTrustedDevice(id:active['id'] as String,
+      publicKey:pubBytes,privateKey:privateBytes);
   }
 
   Future<bool> registerDevice() async {
