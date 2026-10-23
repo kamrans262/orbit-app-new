@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_ui/features/auth/data/orbit_identity_client.dart';
 import 'package:orbit_ui/features/circles/data/orbit_circle_repository.dart';
+import 'package:orbit_ui/features/circles/data/orbit_circle_change_source.dart';
 import 'package:orbit_ui/features/circles/data/orbit_circle_snapshot.dart';
 import 'package:orbit_ui/features/circles/presentation/screens/orbit_live_circles_screen.dart';
 
@@ -42,6 +44,13 @@ class _MutableCircles extends OrbitCircleRepository {
       const OrbitCirclePage<OrbitCircle>([],1,false);
 }
 
+class _TestChangeSource extends OrbitCircleChangeSource {
+  final controller=StreamController<OrbitCircleInvalidation>.broadcast(sync:true);
+  @override
+  Stream<OrbitCircleInvalidation> get invalidations=>controller.stream;
+  Future<void> close()=>controller.close();
+}
+
 class _FakeStore extends OrbitCircleSnapshotStore {
   @override
   Future<void> save(List<OrbitCircle> circles) async {}
@@ -73,6 +82,24 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Archived'),findsOneWidget);
   });
+  testWidgets('future change-source invalidations revalidate server ACL, not event data',
+    (tester) async {
+      final repo=_MutableCircles();
+      final feed=_TestChangeSource();
+      await tester.pumpWidget(MaterialApp(home:OrbitLiveCirclesScreen(
+        repository:repo,store:_FakeStore(),changeSource:feed)));
+      await tester.pumpAndSettle();
+      expect(find.text('Revocable Circle'),findsOneWidget);
+      repo.revoked=true;
+      feed.controller.add(const OrbitCircleInvalidation(
+        circleId:'revoke1',revision:2));
+      await tester.pumpAndSettle();
+      expect(find.text('Revocable Circle'),findsNothing);
+      expect(repo.calls,greaterThan(1));
+      await tester.pumpWidget(const SizedBox());
+      await feed.close();
+    });
+
   testWidgets('foreground revalidation clears a revoked Circle without navigation',
     (tester) async {
       final repo=_MutableCircles();
