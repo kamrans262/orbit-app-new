@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_ui/features/more_menu/presentation/screens/more_menu_screen.dart';
+import 'package:orbit_ui/core/popups/orbit_popup_modal.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -47,6 +48,18 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Update Available'), findsOneWidget);
+  });
+
+  testWidgets('Rate Orbit reuses popup and circular star controls',
+      (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: MoreMenuScreen()));
+    await tester.tap(find.byKey(MoreMenuKeys.tile('rate_orbit')));
+    await tester.pumpAndSettle();
+    expect(find.byType(OrbitPopupModal), findsOneWidget);
+    expect(find.byType(AlertDialog), findsNothing);
+    await tester.tap(find.bySemanticsLabel('5 star'));
+    await tester.pumpAndSettle();
+    expect(find.text('Thanks for rating Orbit 5/5.'), findsOneWidget);
   });
 
   testWidgets('Delete Account never runs before confirmation', (tester) async {

@@ -7,6 +7,10 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../../../core/widgets/orbit_searchable_header.dart';
+import '../../../../core/widgets/app_circular_icon_button.dart';
+import '../../../../core/widgets/app_text_field.dart';
+import '../../../../core/popups/orbit_popup_modal.dart';
+import '../widgets/orbit_social_confirmation.dart';
 import '../../../../core/widgets/app_action_row.dart';
 import '../../../home/domain/models/home_models.dart';
 import '../../../home/presentation/widgets/favorite_person_tile.dart';
@@ -96,24 +100,12 @@ class _OrbitDiscoverFriendsScreenState extends State<OrbitDiscoverFriendsScreen>
     if (mounted && _query.length >= 2) _load(++_generation, reset: true);
   }
 
-  Future<String?> _ask(String title, String hint) async {
-    final controller = TextEditingController();
-    try {
-      return await showDialog<String>(context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
-          title: Text(title),
-          content: TextField(controller: controller, autofocus: true,
-            autocorrect: false, decoration: InputDecoration(hintText: hint)),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-            TextButton(onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-                child: const Text('Continue')),
-          ],
-        ));
-    } finally { controller.dispose(); }
-  }
+  Future<String?> _ask(String title, String hint) =>
+      showOrbitPopupModal<String>(
+        context: context,
+        barrierDismissible: true,
+        builder: (_) => _OrbitInviteEntryPopup(title: title, hint: hint),
+      );
 
   void _notice(String message) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
@@ -163,20 +155,12 @@ class _OrbitDiscoverFriendsScreenState extends State<OrbitDiscoverFriendsScreen>
       if (!mounted) return;
       final who = data['display_name'] as String? ??
           data['username'] as String? ?? 'this person';
-      final accepted = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
-          title: const Text('Friend invitation'),
-          content: Text('Send a friend request to $who? This does not grant location or Circle access.'),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-            TextButton(onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Send request')),
-          ],
-        ),
+      final accepted = await confirmOrbitSocialAction(
+        context,
+        title: 'Friend invitation',
+        description: 'Send a friend request to $who? This does not grant location or Circle access.',
+        confirmation: 'Send request',
+      barrierDismissible: true,
       );
       if (accepted != true) return;
       await _repo.redeemInvite(code);
@@ -203,19 +187,12 @@ class _OrbitDiscoverFriendsScreenState extends State<OrbitDiscoverFriendsScreen>
 
   Future<void> _matchSelected(String type, String value) async {
     if (!mounted) return;
-    final accepted = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: Colors.white,
-        title: const Text('Match this contact?'),
-        content: const Text('Only the one selected address or number will be checked against people who opted in. Orbit will not upload your address book.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Find friend')),
-        ],
-      ),
+    final accepted = await confirmOrbitSocialAction(
+      context,
+      title: 'Match this contact?',
+      description: 'Only the one selected address or number will be checked against people who opted in. Orbit will not upload your address book.',
+      confirmation: 'Find friend',
+      barrierDismissible: true,
     );
     if (accepted != true) return;
     try {
@@ -275,12 +252,15 @@ class _OrbitDiscoverFriendsScreenState extends State<OrbitDiscoverFriendsScreen>
             onQueryChanged: _onQuery,
             onBack: () => Navigator.of(context).maybePop(),
             trailingActions: <Widget>[
-              IconButton(
-                icon: const Icon(Icons.manage_accounts_outlined),
-                tooltip: 'Friend discovery settings',
+              AppCircularIconButton(
+                semanticLabel: 'Friend discovery settings',
+                icon: Icons.manage_accounts_outlined,
+                iconSize: 20,
+                iconColor: const Color(0xFF7C3AED),
+                size: 40,
                 onPressed: () => Navigator.of(context).push<void>(
                   AppFadeSlidePageRoute<void>(builder: (_) =>
-                    OrbitDiscoveryPreferencesScreen(repository:_repo))),
+                    OrbitDiscoveryPreferencesScreen(repository: _repo))),
               ),
             ],
           )),
@@ -353,4 +333,46 @@ class _OrbitDiscoverFriendsScreenState extends State<OrbitDiscoverFriendsScreen>
       ])),
     );
   }
+}
+
+ 
+/// Owns the text controller for the full lifetime of the popup's outgoing
+/// transition. Disposing in _ask() after pop() is too early for showGeneralDialog.
+class _OrbitInviteEntryPopup extends StatefulWidget {
+  const _OrbitInviteEntryPopup({required this.title, required this.hint});
+
+  final String title;
+  final String hint;
+
+  @override
+  State<_OrbitInviteEntryPopup> createState() => _OrbitInviteEntryPopupState();
+}
+
+class _OrbitInviteEntryPopupState extends State<_OrbitInviteEntryPopup> {
+  final TextEditingController _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => OrbitPopupModal(
+        title: widget.title,
+        showCloseButton: true,
+        content: AppTextField(
+          controller: _controller,
+          hintText: widget.hint,
+          textInputAction: TextInputAction.done,
+        ),
+        primaryAction: OrbitPopupPrimaryButton(
+          label: 'Continue',
+          onPressed: () => Navigator.of(context).pop(_controller.text.trim()),
+        ),
+        secondaryAction: OrbitPopupTextButton(
+          label: 'Cancel',
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      );
 }

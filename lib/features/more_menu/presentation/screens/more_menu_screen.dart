@@ -11,6 +11,8 @@ import '../../../help_center/presentation/screens/help_center_screen.dart'
     as help_center;
 import '../../../app_update/presentation/orbit_update_runtime.dart';
 import '../../../../core/popups/orbit_popup_variants.dart';
+import '../../../../core/popups/orbit_popup_modal.dart';
+import '../../../../core/widgets/app_circular_icon_button.dart';
 import '../../../../core/services/orbit_share_service.dart';
 
 abstract final class MoreMenuKeys {
@@ -236,69 +238,49 @@ class MoreMenuScreen extends StatelessWidget {
     _push(context, const PrivacyPolicyScreen());
   }
 
-  void _handleRateOrbit(BuildContext context) {
+  Future<void> _handleRateOrbit(BuildContext context) async {
     if (onRateOrbitPressed != null) {
       onRateOrbitPressed!();
       return;
     }
 
-    showDialog<void>(
+    final rating = await showOrbitPopupModal<int>(
       context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          backgroundColor: Colors.white,
-          surfaceTintColor: Colors.transparent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-          ),
-          title: const Text(
-            'Rate Orbit',
-            style: TextStyle(
-              fontFamily: AppTypography.fontFamily,
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF0F1724),
-            ),
-          ),
-          content: const Text(
+      barrierDismissible: true,
+      builder: (dialogContext) => OrbitPopupModal(
+        title: 'Rate Orbit',
+        description:
             'Choose a rating. The native App Store / Play Store review action can replace this callback later.',
-            style: TextStyle(
-              fontFamily: AppTypography.fontFamily,
-              fontSize: 14,
-              height: 1.4,
-              color: Color(0xFF64748B),
-            ),
-          ),
-          actionsAlignment: MainAxisAlignment.center,
-          actions: <Widget>[
-            Wrap(
-              alignment: WrapAlignment.center,
-              children: List<Widget>.generate(5, (index) {
-                return IconButton(
-                  tooltip: '${index + 1} star',
-                  onPressed: () {
-                    Navigator.of(dialogContext).pop();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'Thanks for rating Orbit ${index + 1}/5.',
-                          style: const TextStyle(
-                            fontFamily: AppTypography.fontFamily,
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                  icon: const Icon(
-                    Icons.star_rounded,
-                    color: Color(0xFFF43F8E),
-                  ),
-                );
-              }),
-            ),
-          ],
-        );
-      },
+        showCloseButton: true,
+        content: Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 8,
+          runSpacing: 8,
+          children: List<Widget>.generate(5, (index) {
+            return AppCircularIconButton(
+              semanticLabel: '${index + 1} star',
+              icon: Icons.star_rounded,
+              iconSize: 24,
+              iconColor: const Color(0xFFF43F8E),
+              size: 44,
+              onPressed: () => Navigator.of(dialogContext).pop(index + 1),
+            );
+          }),
+        ),
+        secondaryAction: OrbitPopupTextButton(
+          label: 'Cancel',
+          onPressed: () => Navigator.of(dialogContext).pop(),
+        ),
+      ),
+    );
+    if (!context.mounted || rating == null) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Thanks for rating Orbit $rating/5.',
+          style: const TextStyle(fontFamily: AppTypography.fontFamily),
+        ),
+      ),
     );
   }
 

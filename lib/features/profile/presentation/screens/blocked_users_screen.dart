@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_screen_header.dart';
+import '../../../../core/popups/orbit_popup_modal.dart';
 import '../../domain/models/user_privacy_entry.dart';
 
 abstract final class BlockUsersKeys {
@@ -286,65 +287,22 @@ class _BlockUsersScreenState extends State<BlockUsersScreen> {
   }
 
   Future<bool> _showBlockConfirmation(UserPrivacyEntry user) async {
-    final result = await showDialog<bool>(
+    final result = await showOrbitPopupModal<bool>(
       context: context,
       barrierDismissible: true,
-      builder: (dialogContext) {
-        return Dialog(
-          backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(28),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(22, 22, 22, 18),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  'Block ${user.name}?',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontSize: 18,
-                    height: 1.2,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF0F1724),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                const Text(
-                  'They will no longer be able to interact with you in the applicable areas.',
-                  style: TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontSize: 13,
-                    height: 1.45,
-                    fontWeight: FontWeight.w400,
-                    color: Color(0xFF64748B),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: <Widget>[
-                    _DialogAction(
-                      label: 'Cancel',
-                      onTap: () => Navigator.of(dialogContext).pop(false),
-                    ),
-                    const SizedBox(width: 8),
-                    _DialogAction(
-                      label: 'Block',
-                      destructive: true,
-                      onTap: () => Navigator.of(dialogContext).pop(true),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+      builder: (dialogContext) => OrbitPopupModal(
+        title: 'Block ${user.name}?',
+        description:
+            'They will no longer be able to interact with you in the applicable areas.',
+        primaryAction: OrbitPopupDestructiveButton(
+          label: 'Block',
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+        ),
+        secondaryAction: OrbitPopupTextButton(
+          label: 'Cancel',
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+        ),
+      ),
     );
 
     return result ?? false;

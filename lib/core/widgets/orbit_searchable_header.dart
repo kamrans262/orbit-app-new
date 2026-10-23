@@ -59,6 +59,8 @@ class OrbitSearchableHeader extends StatelessWidget {
     required this.onQueryChanged,
     this.onBack,
     this.onSearchOpened,
+    this.onSearchPressed,
+    this.searchSemanticLabel,
     this.showBack = true,
     this.trailingActions = const <Widget>[],
     this.titleKey,
@@ -75,6 +77,10 @@ class OrbitSearchableHeader extends StatelessWidget {
   final ValueChanged<String> onQueryChanged;
   final VoidCallback? onBack;
   final VoidCallback? onSearchOpened;
+  /// Override navigation only when a screen uses the search icon as a route.
+  /// Without an override the existing inline search behavior is preserved.
+  final VoidCallback? onSearchPressed;
+  final String? searchSemanticLabel;
   final bool showBack;
   final List<Widget> trailingActions;
   final Key? titleKey;
@@ -172,8 +178,8 @@ class OrbitSearchableHeader extends StatelessWidget {
           data: _noFlashTheme(context),
           child: AppCircularIconButton(
             key: searchButtonKey,
-            semanticLabel: 'Search $title',
-            onPressed: () {
+            semanticLabel: searchSemanticLabel ?? 'Search $title',
+            onPressed: onSearchPressed ?? () {
               onSearchOpened?.call();
               controller.open();
             },

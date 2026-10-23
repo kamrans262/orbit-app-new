@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
+import '../../../../core/popups/orbit_popup_modal.dart';
 import '../../../../core/widgets/app_action_row.dart';
 import '../../../../core/widgets/app_circular_icon_button.dart';
 import '../../../../core/widgets/app_text_field.dart';
@@ -385,60 +386,25 @@ class _CircleSettingScreenState extends State<CircleSettingScreen> {
       return;
     }
 
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showOrbitPopupModal<bool>(
       context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-          ),
-          title: const Text(
-            'Delete Circle?',
-            style: TextStyle(
-              fontFamily: AppTypography.fontFamily,
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF0F1724),
-            ),
-          ),
-          content: const Text(
+      barrierDismissible: true,
+      builder: (dialogContext) => OrbitPopupModal(
+        title: 'Delete Circle?',
+        description:
             'This action requires confirmation before the circle can be deleted.',
-            style: TextStyle(
-              fontFamily: AppTypography.fontFamily,
-              fontSize: 14,
-              height: 1.4,
-              fontWeight: FontWeight.w400,
-              color: Color(0xFF64748B),
-            ),
+        primaryAction: KeyedSubtree(
+          key: CircleSettingKeys.deleteConfirmButton,
+          child: OrbitPopupDestructiveButton(
+            label: 'Delete',
+            onPressed: () => Navigator.of(dialogContext).pop(true),
           ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text(
-                'Cancel',
-                style: TextStyle(
-                  fontFamily: AppTypography.fontFamily,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF64748B),
-                ),
-              ),
-            ),
-            TextButton(
-              key: CircleSettingKeys.deleteConfirmButton,
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text(
-                'Delete',
-                style: TextStyle(
-                  fontFamily: AppTypography.fontFamily,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFFF44336),
-                ),
-              ),
-            ),
-          ],
-        );
-      },
+        ),
+        secondaryAction: OrbitPopupTextButton(
+          label: 'Cancel',
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+        ),
+      ),
     );
 
     if (confirmed == true && mounted) {

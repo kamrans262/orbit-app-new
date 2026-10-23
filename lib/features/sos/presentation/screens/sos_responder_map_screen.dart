@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../../app/theme/app_typography.dart';
+import '../../../../core/widgets/app_circular_icon_button.dart';
+import '../../../../core/popups/orbit_popup_modal.dart';
 
 /// A responder, as supplied by the authenticated SOS service. Never fabricated.
 @immutable
@@ -102,24 +104,22 @@ class _SosResponderMapScreenState extends State<SosResponderMapScreen> {
     final handler = resolve ? widget.onResolve : widget.onEngage;
     if (handler == null) return;
     if (resolve) {
-      final confirmed = await showDialog<bool>(
+      final confirmed = await showOrbitPopupModal<bool>(
         context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('Resolve this SOS?'),
-          content: const Text(
-            'Only confirm after your emergency is over. '
-            'The server must acknowledge resolution.',
+        barrierDismissible: true,
+        builder: (dialogContext) => OrbitPopupModal(
+          title: 'Resolve this SOS?',
+          description:
+              'Only confirm after your emergency is over. '
+              'The server must acknowledge resolution.',
+          primaryAction: OrbitPopupDestructiveButton(
+            label: 'Resolve SOS',
+            onPressed: () => Navigator.of(dialogContext).pop(true),
           ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Resolve SOS'),
-            ),
-          ],
+          secondaryAction: OrbitPopupTextButton(
+            label: 'Cancel',
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+          ),
         ),
       );
       if (confirmed != true || !mounted) return;
@@ -241,13 +241,12 @@ class _SosResponderMapScreenState extends State<SosResponderMapScreen> {
     height: 50,
     child: Row(
       children: <Widget>[
-        IconButton(
-          tooltip: 'Back',
-          icon: const Icon(
-            Icons.arrow_back_ios_new_rounded,
-            color: Colors.white,
-            size: 21,
-          ),
+        AppCircularIconButton(
+          semanticLabel: 'Back',
+          icon: Icons.chevron_left_rounded,
+          iconSize: 24,
+          iconColor: const Color(0xFF0F1724),
+          size: 40,
           onPressed: () => Navigator.of(context).maybePop(),
         ),
         const Expanded(
@@ -262,7 +261,7 @@ class _SosResponderMapScreenState extends State<SosResponderMapScreen> {
             ),
           ),
         ),
-        const SizedBox(width: 48),
+        const SizedBox(width: 40),
       ],
     ),
   );

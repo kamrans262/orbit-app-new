@@ -5,6 +5,9 @@ import 'package:orbit_ui/features/friends/data/orbit_friend_snapshot.dart';
 import 'package:orbit_ui/features/auth/data/orbit_identity_client.dart';
 import 'package:orbit_ui/features/friends/presentation/screens/orbit_person_screen.dart';
 import 'package:orbit_ui/features/friends/presentation/screens/orbit_live_friends_screen.dart';
+import 'package:orbit_ui/features/friends/presentation/screens/friends_screen.dart';
+import 'package:orbit_ui/features/friends/presentation/screens/orbit_discover_friends_screen.dart';
+import 'package:orbit_ui/core/widgets/app_circular_icon_button.dart';
 import 'package:orbit_ui/features/profile/presentation/screens/orbit_live_blocked_users_screen.dart';
 
 class _FakeSocial extends OrbitSocialRepository {
@@ -93,11 +96,34 @@ void main() {
     expect(find.text('Ayesha'),findsOneWidget);
     expect(find.text('@ayesha'),findsOneWidget);
     expect(find.text('Emma'),findsNothing);
-    expect(find.byTooltip('Find friends'),findsOneWidget);
-    expect(find.byTooltip('Friend requests'),findsOneWidget);
-    expect(repo.friendReads,1);
+    expect(find.byKey(FriendsKeys.searchButton), findsOneWidget);
+    expect(find.bySemanticsLabel('Friend requests'), findsOneWidget);
+    expect(find.byType(AppCircularIconButton), findsWidgets);
+    expect(find.byIcon(Icons.person_search_outlined), findsNothing);
+    expect(repo.friendReads, 1);
+    await tester.tap(find.byKey(FriendsKeys.searchButton));
+    await tester.pumpAndSettle();
+    expect(find.byType(OrbitDiscoverFriendsScreen), findsOneWidget);
+    expect(find.text('Find Friends'), findsOneWidget);
   });
 
+
+  testWidgets('Invitation code entry uses approved popup and safe controller lifetime',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: OrbitDiscoverFriendsScreen(repository: _FakeSocial()),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Enter Invite Code'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('orbit_popup_card')), findsOneWidget);
+    expect(find.byType(AlertDialog), findsNothing);
+    await tester.enterText(find.byType(TextField).last, 'CODE123');
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('orbit_popup_card')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('Person Detail pending request opens the authoritative Sent tab',
       (tester) async {
@@ -126,7 +152,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Saved Friend'), findsOneWidget);
     expect(find.textContaining('OFFLINE'), findsOneWidget);
-    expect(find.byTooltip('Find friends'), findsNothing);
+    await tester.tap(find.byKey(FriendsKeys.searchButton));
+    await tester.pumpAndSettle();
+    expect(find.byType(OrbitDiscoverFriendsScreen), findsNothing);
+    expect(find.text('Reconnect to find friends.'), findsOneWidget);
     repo.disconnected = false;
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pumpAndSettle();

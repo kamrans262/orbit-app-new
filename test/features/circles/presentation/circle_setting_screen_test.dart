@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_ui/features/circles/domain/models/circle_settings.dart';
 import 'package:orbit_ui/features/circles/presentation/screens/circle_setting_screen.dart';
+import 'package:orbit_ui/core/popups/orbit_popup_modal.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -76,6 +77,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Delete Circle?'), findsOneWidget);
+    expect(find.byType(OrbitPopupModal), findsOneWidget);
+    expect(find.byType(AlertDialog), findsNothing);
     expect(deleteCount, 0);
 
     await tester.tap(find.byKey(CircleSettingKeys.deleteConfirmButton));

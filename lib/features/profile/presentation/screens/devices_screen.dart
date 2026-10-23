@@ -161,33 +161,22 @@ class _DevicesScreenState extends State<DevicesScreen> {
       );
       return;
     }
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showOrbitPopupModal<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: const Text(
-          'Remove device?',
-          style: TextStyle(
-            fontFamily: AppTypography.fontFamily,
-            fontWeight: FontWeight.w600,
-          ),
+      barrierDismissible: true,
+      builder: (dialogContext) => OrbitPopupModal(
+        title: 'Remove device?',
+        description:
+            'Remove ${device.name} from your Orbit account? '
+            'Its session and message access must be revoked by the server.',
+        primaryAction: OrbitPopupDestructiveButton(
+          label: 'Remove',
+          onPressed: () => Navigator.of(dialogContext).pop(true),
         ),
-        content: Text(
-          'Remove ${device.name} from your Orbit account? '
-          'Its session and message access must be revoked by the server.',
-          style: AppTypography.body,
+        secondaryAction: OrbitPopupTextButton(
+          label: 'Cancel',
+          onPressed: () => Navigator.of(dialogContext).pop(false),
         ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Remove'),
-          ),
-        ],
       ),
     );
     if (!mounted || confirmed != true) return;
@@ -207,32 +196,20 @@ class _DevicesScreenState extends State<DevicesScreen> {
       );
       return;
     }
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showOrbitPopupModal<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: const Text(
-          'Trust this device?',
-          style: TextStyle(
-            fontFamily: AppTypography.fontFamily,
-            fontWeight: FontWeight.w600,
-          ),
+      barrierDismissible: true,
+      builder: (dialogContext) => OrbitPopupModal(
+        title: 'Trust this device?',
+        description: 'Approve ${device.name} only if you recognize this device.',
+        primaryAction: OrbitPopupPrimaryButton(
+          label: 'Approve',
+          onPressed: () => Navigator.of(dialogContext).pop(true),
         ),
-        content: Text(
-          'Approve ${device.name} only if you recognize this device.',
-          style: AppTypography.body,
+        secondaryAction: OrbitPopupTextButton(
+          label: 'Cancel',
+          onPressed: () => Navigator.of(dialogContext).pop(false),
         ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Approve'),
-          ),
-        ],
       ),
     );
     if (!mounted || confirmed != true) return;

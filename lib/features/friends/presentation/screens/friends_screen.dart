@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../../../core/widgets/orbit_searchable_header.dart';
+import '../../../../core/widgets/app_circular_icon_button.dart';
 import '../../../circles/domain/models/friend_details_models.dart';
 import '../../../circles/presentation/screens/friend_details_screen.dart';
 import '../../../home/domain/models/home_models.dart';
@@ -156,15 +157,28 @@ class _FriendsScreenState extends State<FriendsScreen> {
                     setState(() => _query = value);
                   },
                   onBack: widget.onBack,
+                  searchSemanticLabel: widget.liveMode ? 'Find friends' : null,
+                  onSearchPressed: widget.liveMode
+                      ? (widget.onDiscover ?? () {
+                          // Offline snapshots are read-only and never trigger
+                          // discovery, even if the cached friends list is visible.
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Reconnect to find friends.'),
+                            ),
+                          );
+                        })
+                      : null,
                   trailingActions: <Widget>[
                     if (widget.onRequests != null)
-                      IconButton(tooltip: 'Friend requests',
-                          icon: const Icon(Icons.person_add_alt_outlined),
-                          onPressed: widget.onRequests),
-                    if (widget.onDiscover != null)
-                      IconButton(tooltip: 'Find friends',
-                          icon: const Icon(Icons.person_search_outlined),
-                          onPressed: widget.onDiscover),
+                      AppCircularIconButton(
+                        semanticLabel: 'Friend requests',
+                        icon: Icons.person_add_alt_outlined,
+                        iconSize: 20,
+                        iconColor: const Color(0xFF7C3AED),
+                        size: 40,
+                        onPressed: widget.onRequests!,
+                      ),
                   ],
                   titleKey: FriendsKeys.headerTitle,
                   searchButtonKey: FriendsKeys.searchButton,

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_primary_button.dart';
+import '../../../../core/widgets/app_screen_header.dart';
 import '../../../../core/widgets/app_text_field.dart';
 import '../../../../core/widgets/app_otp_input.dart';
 import '../widgets/orbit_auth_channel_selector.dart';
@@ -60,9 +61,15 @@ class _OrbitLinkIdentityScreenState extends State<OrbitLinkIdentityScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Verified contacts', style: AppTypography.smallHeading),
-        backgroundColor: AppColors.background,
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(64),
+        child: SafeArea(
+          bottom: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+            child: const AppScreenHeader(title: 'Verified contacts'),
+          ),
+        ),
       ),
       body: AuthScreenLayout(
         child: AuthCard(child: Column(

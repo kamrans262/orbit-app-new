@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../app/theme/app_typography.dart';
+import '../../../../core/widgets/app_circular_icon_button.dart';
 
 class SosHeader extends StatelessWidget {
   const SosHeader({required this.onBack, required this.onClose, super.key});
@@ -84,34 +85,16 @@ class _HeaderIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: semanticLabel,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: SizedBox.square(
-          dimension: 44,
-          child: Center(
-            child: DecoratedBox(
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                boxShadow: <BoxShadow>[
-                  BoxShadow(
-                    color: Color(0x0A000000),
-                    offset: Offset(0, 4),
-                    blurRadius: 12,
-                  ),
-                ],
-              ),
-              child: SizedBox.square(
-                dimension: 30,
-                child: Center(child: Icon(icon, size: 23, color: iconColor)),
-              ),
-            ),
-          ),
-        ),
-      ),
+    return AppCircularIconButton(
+      semanticLabel: semanticLabel,
+      onPressed: onTap,
+      icon: icon,
+      iconSize: 23,
+      iconColor: iconColor,
+      size: 40,
+      // Keep the emergency screen's approved dark overlay treatment, but
+      // use the same circular container, shadow and hit handling as Orbit.
+      backgroundColor: const Color(0x1FFFFFFF),
     );
   }
 }

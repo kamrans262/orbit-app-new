@@ -40,4 +40,28 @@ void main() {
     expect(queries.last, '');
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('search route override does not open an inline text field',
+      (tester) async {
+    final controller = OrbitSearchController();
+    addTearDown(controller.dispose);
+    var opens = 0;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: SafeArea(child: OrbitSearchableHeader(
+        title: 'Friends',
+        placeholder: 'Search friends',
+        controller: controller,
+        showBack: false,
+        onQueryChanged: (_) {},
+        onSearchPressed: () => opens++,
+        searchSemanticLabel: 'Find friends',
+      ))),
+    ));
+    await tester.tap(find.bySemanticsLabel('Find friends'));
+    await tester.pumpAndSettle();
+    expect(opens, 1);
+    expect(controller.isSearching, isFalse);
+    expect(find.byType(TextField), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 }

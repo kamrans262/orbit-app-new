@@ -836,18 +836,31 @@ class _CameraTopButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Header actions use the same circular surface and drop shadow as
+    // AppCircularIconButton, while retaining the approved custom SVG artwork.
     return Semantics(
       button: true,
       label: semanticLabel,
-      child: InkResponse(
-        onTap: onTap,
-        radius: 28,
-        containedInkWell: false,
-        child: SizedBox.square(
-          dimension: 48,
-          child: Center(
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: <BoxShadow>[
+            BoxShadow(
+              color: Color(0x0A000000),
+              offset: Offset(0, 4),
+              blurRadius: 12,
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.white,
+          shape: const CircleBorder(),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            customBorder: const CircleBorder(),
             child: SizedBox.square(
-              dimension: 36,
+              dimension: 40,
               child: Center(
                 child: SvgPicture.asset(
                   assetPath,

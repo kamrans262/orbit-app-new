@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_ui/features/sos/presentation/screens/sos_alert_screen.dart';
 import 'package:orbit_ui/features/sos/presentation/screens/sos_responder_map_screen.dart';
+import 'package:orbit_ui/core/widgets/app_circular_icon_button.dart';
 
 void main() {
   testWidgets('SOS demo links to preview, never claiming an alert was sent', (
@@ -16,6 +17,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(SosResponderMapKeys.screen), findsOneWidget);
     expect(find.byKey(SosResponderMapKeys.previewBanner), findsOneWidget);
+    expect(find.byType(AppCircularIconButton), findsOneWidget);
     expect(find.text('Preview only — no SOS was sent'), findsOneWidget);
     // The responder section is below the first viewport in the lazy ListView.
     await tester.scrollUntilVisible(

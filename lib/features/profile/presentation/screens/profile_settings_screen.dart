@@ -10,6 +10,7 @@ import '../../../../app/routing/app_routes.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../../../core/widgets/app_bottom_navigation_bar.dart';
+import '../../../../core/widgets/app_screen_header.dart';
 import '../../domain/models/profile_models.dart';
 import '../../../more_menu/presentation/screens/more_menu_screen.dart';
 import '../widgets/profile_summary_header.dart';
@@ -627,16 +628,13 @@ class _FutureSettingsDestination extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        foregroundColor: const Color(0xFF0F1724),
-        title: Text(
-          title,
-          style: const TextStyle(
-            fontFamily: AppTypography.fontFamily,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(64),
+        child: SafeArea(
+          bottom: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+            child: AppScreenHeader(title: title),
           ),
         ),
       ),

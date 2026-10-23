@@ -173,6 +173,8 @@ void main() {
     await tester.tap(find.byKey(DevicesKeys.revoke('other')));
     await tester.pumpAndSettle();
     expect(find.text('Remove device?'), findsOneWidget);
+    expect(find.byType(OrbitPopupModal), findsOneWidget);
+    expect(find.byType(AlertDialog), findsNothing);
     expect(revoked, isFalse);
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();

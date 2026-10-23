@@ -8,9 +8,11 @@ Future<bool> confirmOrbitSocialAction(BuildContext context, {
   required String description,
   required String confirmation,
   bool destructive = false,
+  bool barrierDismissible = false,
 }) async {
   final result = await showOrbitPopupModal<bool>(
     context: context,
+    barrierDismissible: barrierDismissible,
     builder: (dialog) => OrbitPopupModal(
       title: title,
       description: description,
