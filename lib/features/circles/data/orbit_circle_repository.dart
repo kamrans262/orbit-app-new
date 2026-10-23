@@ -129,6 +129,10 @@ class OrbitCircleRepository {
 
   Future<Map<String, dynamic>> features() => _request('GET','/circles/features');
 
+  /// Returns Firebase bootstrap only when server-approved; 404 when off.
+  Future<Map<String, dynamic>> realtimeBootstrap() =>
+      _request('POST','/circles/realtime/bootstrap');
+
   Future<OrbitCirclePage<OrbitCircle>> list({int page = 1}) async =>
       _page(await _request('GET','/circles?page=$page'), OrbitCircle.fromJson);
 
