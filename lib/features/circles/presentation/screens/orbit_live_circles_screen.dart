@@ -7,6 +7,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../../auth/data/orbit_identity_client.dart';
 import '../../data/orbit_circle_repository.dart';
+import '../../data/orbit_circle_change_source.dart';
 import '../../data/orbit_circle_snapshot.dart';
 import '../../domain/models/friend_details_models.dart';
 import 'circle_list_screen.dart';
@@ -19,10 +20,11 @@ import 'orbit_live_archived_circles_screen.dart';
 /// or fake membership/presence/location values ever reach this screen.
 class OrbitLiveCirclesScreen extends StatefulWidget {
   const OrbitLiveCirclesScreen({super.key, this.repository, this.store,
-    this.initialInviteCode});
+    this.initialInviteCode, this.changeSource});
   final OrbitCircleRepository? repository;
   final OrbitCircleSnapshotStore? store;
   final String? initialInviteCode;
+  final OrbitCircleChangeSource? changeSource;
 
   @override
   State<OrbitLiveCirclesScreen> createState() => _OrbitLiveCirclesScreenState();
@@ -37,12 +39,18 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
   String? _error;
   int _serial = 0;
   Timer? _membershipRefresh;
+  StreamSubscription<OrbitCircleInvalidation>? _invalidationSubscription;
   bool _revalidating = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _invalidationSubscription=(widget.changeSource ??
+        OrbitCircleChangeSource.disabled).invalidations.listen((event) {
+      // Treat event as untrusted hint only. Read Circle ACL anew from backend.
+      if(mounted && !_busy && !_revalidating) _load(silent:true);
+    });
     _membershipRefresh=Timer.periodic(const Duration(seconds:25),(_){
       if(!mounted || _busy || _revalidating ||
           WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed ||
@@ -61,6 +69,7 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
   void dispose() {
     _serial++;
     _membershipRefresh?.cancel();
+    _invalidationSubscription?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
