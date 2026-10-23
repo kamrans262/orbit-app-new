@@ -573,7 +573,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
                         bottom: 10,
                         height: 78,
                         child: _buildBottomControls(
-                          compact: constraints.maxWidth <= 340,
+                          compact: constraints.maxWidth <= 440,
                         ),
                       ),
                       if (_countdownValue != null)
@@ -1029,10 +1029,10 @@ class _SendToButton extends StatelessWidget {
               constraints: const BoxConstraints(minWidth: 108, minHeight: 46),
               child: Padding(
                 padding: EdgeInsets.symmetric(
-                  horizontal: compact ? 12 : 18,
+                  horizontal: compact ? 4 : 18,
                   vertical: 13,
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: <Widget>[
@@ -1045,16 +1045,16 @@ class _SendToButton extends StatelessWidget {
                           'Apple Color Emoji',
                           'Segoe UI Emoji',
                         ],
-                        fontSize: 15,
+                        fontSize: compact ? 12 : 15,
                         height: 1.2,
                         fontWeight: FontWeight.w600,
                         color: Colors.white,
                       ),
                     ),
-                    SizedBox(width: 5),
+                    SizedBox(width: compact ? 3 : 5),
                     Icon(
                       Icons.chevron_right_rounded,
-                      size: 18,
+                      size: compact ? 16 : 18,
                       color: Colors.white,
                     ),
                   ],

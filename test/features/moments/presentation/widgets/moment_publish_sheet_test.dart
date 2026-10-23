@@ -105,6 +105,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Continue with 1 circle'));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Preview publishing flow'), 80,
+      scrollable: find.byType(Scrollable).last,
+    );
     await tester.ensureVisible(find.text('Preview publishing flow'));
     await tester.tap(find.text('Preview publishing flow'));
     await tester.pump();

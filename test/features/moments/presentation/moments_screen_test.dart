@@ -144,6 +144,12 @@ void main() {
       );
       await tester.pumpAndSettle();
       final like = find.bySemanticsLabel('Like moment');
+      await tester.scrollUntilVisible(like, 70,
+        scrollable: find.descendant(
+          of: find.byKey(MomentsKeys.feed),
+          matching: find.byType(Scrollable),
+        ).first,
+      );
       await tester.ensureVisible(like);
       await tester.pumpAndSettle();
       expect(like, findsOneWidget);
@@ -153,6 +159,12 @@ void main() {
       expect(find.bySemanticsLabel('Unlike moment'), findsOneWidget);
 
       final bookmark = find.bySemanticsLabel('Bookmark moment');
+      await tester.scrollUntilVisible(bookmark, 70,
+        scrollable: find.descendant(
+          of: find.byKey(MomentsKeys.feed),
+          matching: find.byType(Scrollable),
+        ).first,
+      );
       await tester.ensureVisible(bookmark);
       await tester.pumpAndSettle();
       await tester.tap(bookmark);
