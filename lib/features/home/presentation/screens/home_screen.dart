@@ -20,12 +20,14 @@ import '../widgets/upcoming_plan_card.dart';
 import '../../../circles/presentation/screens/friend_details_screen.dart';
 import '../../../circles/domain/models/friend_details_models.dart';
 import '../../../friends/presentation/screens/friends_screen.dart';
+import '../../../friends/presentation/screens/orbit_discover_friends_screen.dart';
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../../requests/presentation/screens/request_screen.dart';
 import '../../../../core/widgets/app_emoji_safe_text.dart';
 
 abstract final class HomeKeys {
   static const greeting = Key('home_greeting');
+  static const findFriendsButton = Key('home_find_friends_button');
   static const notificationButton = Key('home_notification_button');
   static const quickActionsList = Key('home_quick_actions_list');
   static const recentMomentsList = Key('home_recent_moments_list');
@@ -332,6 +334,14 @@ class _HomeScreenState extends State<HomeScreen> {
     OrbitMomentCameraLauncher.open(context);
   }
 
+  void _openFindFriends() {
+    Navigator.of(context).push<void>(
+      AppFadeSlidePageRoute<void>(
+        builder: (_) => const OrbitDiscoverFriendsScreen(),
+      ),
+    );
+  }
+
   void _handleNotificationPressed() {
     widget.onNotificationPressed();
     Navigator.of(context).push<void>(
@@ -471,6 +481,17 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ),
+            AppCircularIconButton(
+              key: HomeKeys.findFriendsButton,
+              semanticLabel: 'Find friends',
+              onPressed: _openFindFriends,
+              icon: Icons.person_search_outlined,
+              iconSize: 20,
+              iconGradient: const LinearGradient(
+                colors: <Color>[AppColors.primaryStart, AppColors.primaryEnd],
+              ),
+            ),
+            const SizedBox(width: 10),
             AppCircularIconButton(
               key: HomeKeys.notificationButton,
               semanticLabel: 'Notifications',
