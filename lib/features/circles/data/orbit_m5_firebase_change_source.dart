@@ -29,6 +29,7 @@ class OrbitM5FirebaseChangeSource extends OrbitCircleChangeSource {
   Future<void>? _connecting;
   FirebaseAuth? _auth;
   FirebaseDatabase? _database;
+  int _identityEpoch = 0;
 
   @override
   Stream<OrbitCircleInvalidation> get invalidations => _changes.stream;
@@ -53,7 +54,9 @@ class OrbitM5FirebaseChangeSource extends OrbitCircleChangeSource {
   }
 
   Future<void> _establishConnection() async {
+    final epoch = _identityEpoch;
     final data = await _requestTicket!();
+    if (epoch != _identityEpoch) return;
     if (data['enabled'] != true || data['custom_token'] is! String ||
         data['firebase'] is! Map) {
       return; // Server policy denies; polling stays active.
@@ -89,6 +92,10 @@ class OrbitM5FirebaseChangeSource extends OrbitCircleChangeSource {
     final auth = FirebaseAuth.instanceFor(app: app);
     // This secondary app is isolated from Orbit's own trusted-device auth.
     await auth.signInWithCustomToken(data['custom_token'] as String);
+    if (epoch != _identityEpoch) {
+      await auth.signOut();
+      return;
+    }
     _auth = auth;
     _database = FirebaseDatabase.instanceFor(app: app, databaseURL: url);
   }
@@ -136,6 +143,8 @@ class OrbitM5FirebaseChangeSource extends OrbitCircleChangeSource {
 
   /// Auth logout, identity switch, or account deletion invalidates all hooks.
   Future<void> stop() async {
+    // Invalidates any still-in-flight HTTP ticket or Firebase sign-in.
+    _identityEpoch++;
     final watching = _watches.values.toList();
     _watches.clear();
     _revisions.clear();
