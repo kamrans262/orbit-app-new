@@ -147,7 +147,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
     if (!mounted || newName == null || newName == device.name) return;
     await _runAction(
       device.id,
-      () => rename(device.id, newName!),
+      () => rename(device.id, newName),
       'Could not rename this device. Please retry.',
     );
   }
