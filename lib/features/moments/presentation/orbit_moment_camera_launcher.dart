@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../core/popups/orbit_popup_variants.dart';
 import 'orbit_camera_permission_memory.dart';
 import 'screens/moment_camera_screen.dart';
+import '../domain/models/moment_publish_models.dart';
 
 /// Central launcher for the global Orbit bottom-bar Add action.
 ///
@@ -15,11 +16,17 @@ import 'screens/moment_camera_screen.dart';
 /// If the user never grants camera access, or camera initialization never
 /// succeeds, the education popup is not permanently skipped.
 abstract final class OrbitMomentCameraLauncher {
-  static void open(BuildContext context) {
-    unawaited(_open(context));
+  static void open(BuildContext context, {
+    MomentPublisher? confirmedPublisher,
+    List<MomentAudienceCircle> circles = const [],
+  }) {
+    unawaited(_open(context, publisher: confirmedPublisher, circles: circles));
   }
 
-  static Future<void> _open(BuildContext context) async {
+  static Future<void> _open(BuildContext context, {
+    MomentPublisher? publisher,
+    required List<MomentAudienceCircle> circles,
+  }) async {
     final alreadyConfirmed =
         await OrbitCameraPermissionMemory.hasConfirmedCameraAccess();
 
@@ -28,7 +35,7 @@ abstract final class OrbitMomentCameraLauncher {
     }
 
     if (alreadyConfirmed) {
-      _pushCamera(context);
+      _pushCamera(context, publisher: publisher, circles: circles);
       return;
     }
 
@@ -38,15 +45,21 @@ abstract final class OrbitMomentCameraLauncher {
         if (!context.mounted) {
           return;
         }
-        _pushCamera(context);
+        _pushCamera(context, publisher: publisher, circles: circles);
       },
       onNotNow: () {},
     );
   }
 
-  static void _pushCamera(BuildContext context) {
+  static void _pushCamera(BuildContext context, {
+    MomentPublisher? publisher,
+    required List<MomentAudienceCircle> circles,
+  }) {
     Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(builder: (_) => const MomentCameraScreen()),
+      MaterialPageRoute<void>(builder: (_) => MomentCameraScreen(
+        publishMoment: publisher,
+        momentAudienceCircles: circles,
+      )),
     );
   }
 }
