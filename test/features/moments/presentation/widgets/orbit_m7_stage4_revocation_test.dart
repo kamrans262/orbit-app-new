@@ -28,6 +28,7 @@ final class _FakeMoments extends OrbitMomentRepository {
 void main() {
   testWidgets('Stage 4 hides decrypted viewer content on audience revocation',
       (tester) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     final repo=_FakeMoments();
     final item=OrbitLiveMoment(id:'moment-test-uuid',creatorId:'owner-uuid',
       mediaId:'media-test-uuid',contextId:'friends',
@@ -46,6 +47,7 @@ void main() {
 
   testWidgets('Stage 4 evicts visible decrypted caption on app background',
       (tester) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     final repo=_FakeMoments();
     final item=OrbitLiveMoment(id:'moment-test-uuid',creatorId:'owner-uuid',
       mediaId:'media-test-uuid',contextId:'self',
@@ -54,7 +56,7 @@ void main() {
       moment:item,repository:repo,author:'You')));
     await tester.pumpAndSettle();
     expect(find.text('Private Moment caption'),findsOneWidget);
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
     await tester.pump();
     expect(find.text('Private Moment caption'),findsNothing);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
