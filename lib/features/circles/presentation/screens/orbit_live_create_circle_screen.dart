@@ -36,6 +36,7 @@ class _OrbitLiveCreateCircleScreenState extends State<OrbitLiveCreateCircleScree
 
   @override
   Widget build(BuildContext context)=>CreateCircleScreen(
+    isOnboarding:false,
     enableTemporary:_allowTemporary,
     onCreateRequested:(name,color,icon,key,expiresAt) async {
       _created=await _repo.create(name,color:color,icon:icon,
@@ -50,6 +51,5 @@ class _OrbitLiveCreateCircleScreenState extends State<OrbitLiveCreateCircleScree
           OrbitLiveCircleDetailScreen(circleId:circle.id,repository:_repo)),
       );
     },
-    onSkip:()=>Navigator.of(context).maybePop(),
   );
 }
