@@ -18,10 +18,13 @@ import '../../media/data/orbit_media_outbox.dart';
 class OrbitLiveMoment {
   const OrbitLiveMoment({required this.id,required this.creatorId,
     required this.mediaId,required this.contextId,required this.publishedAt,
-    this.captionCiphertext,this.mediaKind='image',this.durationMs});
+    this.captionCiphertext,this.mediaKind='image',this.durationMs,
+    this.placeCiphertext,this.taggedUserIds=const []});
   final String id, creatorId, mediaId, contextId;
   final DateTime publishedAt;
   final String? captionCiphertext;
+  final String? placeCiphertext;
+  final List<String> taggedUserIds;
   final String mediaKind;
   final int? durationMs;
   factory OrbitLiveMoment.fromJson(Map<String,dynamic> d) =>
@@ -29,6 +32,8 @@ class OrbitLiveMoment {
       mediaId:d['media_id'] as String,contextId:d['context_id'] as String,
       publishedAt:DateTime.parse(d['published_at'] as String),
       captionCiphertext:d['caption_ciphertext'] as String?,
+      placeCiphertext:d['place_ciphertext'] as String?,
+      taggedUserIds:List<String>.from(d['tagged_user_ids'] as List? ?? const []),
       mediaKind:d['media_kind'] as String? ?? 'image',
       durationMs:(d['duration_ms'] as num?)?.toInt());
 }
@@ -495,6 +500,13 @@ class OrbitMomentRepository {
     return _openText(encrypted,await _key(item.mediaId),item.mediaId,
       'caption','self');
   }
+  Future<String?> place(OrbitLiveMoment item) async {
+    final cipher=item.placeCiphertext;
+    if(cipher==null || cipher.isEmpty)return null;
+    return _openText(cipher,await _key(item.mediaId),item.mediaId,
+      'place','self');
+  }
+
   Future<void> view(OrbitLiveMoment item) async {
     await _api('POST','/moments/'+Uri.encodeComponent(item.id)+'/views',
       body:{'context_id':item.contextId});

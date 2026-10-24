@@ -32,6 +32,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
   final Map<String,Uint8List> _previews={};
   final Map<String,String> _names={};
   final Map<String,String> _captions={};
+  final Map<String,String> _places={};
   OrbitMomentAudienceOptions _options=
     const OrbitMomentAudienceOptions([],[],'Nobody');
   final Set<String> _likes={};
@@ -62,6 +63,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
     }
     _previews.clear();
     _captions.clear();
+    _places.clear();
   }
 
   @override
@@ -122,6 +124,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       final names=<String,String>{};
       final previews=<String,Uint8List>{};
       final captions=<String,String>{};
+      final places=<String,String>{};
       for(final m in moments){
         try {
           names[m.creatorId]??=await _repo.name(m.creatorId);
@@ -130,6 +133,8 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
           previews[m.id]=await _repo.photo(m);
           final text=await _repo.caption(m);
           if(text!=null)captions[m.id]=text;
+          final place=await _repo.place(m);
+          if(place!=null)places[m.id]=place;
         }catch(_){
           // An expired or revoked key never uses an unauthenticated media URL.
         }
@@ -144,6 +149,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         _previews..clear()..addAll(previews);
         _names..clear()..addAll(names);
         _captions..clear()..addAll(captions);
+        _places..clear()..addAll(places);
         _busy=false;
       });
     }catch(_){
@@ -240,7 +246,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         timeLabel:_relative(m.publishedAt),
         imagePath:null,imageBytes:_previews[m.id],
         title:_captions[m.id]??'',
-        location:'',
+        location:_places[m.id]??'',
         likeCount:0,commentCount:0,countsKnown:false,
         isLiked:_likes.contains(m.id),
       ),
