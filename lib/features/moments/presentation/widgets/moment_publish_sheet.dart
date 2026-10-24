@@ -200,8 +200,9 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
   void initState() {
     super.initState();
     if(widget.initialOverlayText.isNotEmpty){
-      _overlayText.text=widget.initialOverlayText.substring(0,
-        widget.initialOverlayText.length.clamp(0,80));
+      _overlayText.text=widget.initialOverlayText.length>80
+        ? widget.initialOverlayText.substring(0,80)
+        : widget.initialOverlayText;
       WidgetsBinding.instance.addPostFrameCallback((_){
         if(mounted)_queuePreview();
       });
