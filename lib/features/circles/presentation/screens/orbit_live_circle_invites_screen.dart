@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/orbit_circle_confirmation.dart';
+
 import '../../../auth/data/orbit_identity_client.dart';
 import '../../data/orbit_circle_repository.dart';
 import '../../domain/models/circle_invite.dart';
@@ -75,15 +77,14 @@ class _OrbitLiveCircleInvitesScreenState extends State<OrbitLiveCircleInvitesScr
 
   Future<void> _pressed(CircleInvite invite) async {
     if(invite.status!=CircleInviteStatus.pending || !_revocable.contains(invite.id)) return;
-    final agree=await showDialog<bool>(context:context,builder:(d)=>AlertDialog(
-      backgroundColor:Colors.white,
-      title:const Text('Revoke invitation?'),
-      content:Text('Cancel the pending invitation for ${invite.userName}?'),
-      actions:[
-        TextButton(onPressed:()=>Navigator.pop(d,false),child:const Text('Keep')),
-        TextButton(onPressed:()=>Navigator.pop(d,true),child:const Text('Revoke')),
-      ],
-    ));
+    final agree=await showOrbitCircleConfirmation(
+      context:context,
+      title:'Revoke invitation?',
+      description:'Cancel the pending invitation for ${invite.userName}?',
+      confirmLabel:'Revoke',
+      cancelLabel:'Keep',
+      destructive:true,
+    );
     if(agree!=true) return;
     try {
       await _repo.revoke(widget.circle.id,invite.id);
