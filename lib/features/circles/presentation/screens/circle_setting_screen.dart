@@ -6,6 +6,7 @@ import '../../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../../../core/popups/orbit_popup_modal.dart';
 import '../../../../core/widgets/app_action_row.dart';
 import '../../../../core/widgets/app_circular_icon_button.dart';
+import '../../../../core/widgets/app_screen_header.dart';
 import '../../../../core/widgets/app_text_field.dart';
 import '../../domain/models/circle_settings.dart';
 import '../widgets/circle_color_selector.dart';
@@ -198,44 +199,25 @@ class _CircleSettingScreenState extends State<CircleSettingScreen> {
   }
 
   Widget _buildHeader(BuildContext context) {
-    return SizedBox(
-      height: 30,
-      child: Row(
-        children: <Widget>[
+    return Row(
+      children: <Widget>[
+        Expanded(
+          child: AppScreenHeader(
+            title: 'Setting',
+            onBack: widget.onBack,
+            backButtonKey: CircleSettingKeys.backButton,
+            titleKey: CircleSettingKeys.title,
+          ),
+        ),
+        if (widget.onManagePressed != null)
           AppCircularIconButton(
-            key: CircleSettingKeys.backButton,
-            semanticLabel: 'Back',
-            onPressed: widget.onBack ?? () => Navigator.of(context).maybePop(),
-            icon: Icons.chevron_left_rounded,
+            semanticLabel: 'Manage Circle',
+            onPressed: widget.onManagePressed!,
+            icon: Icons.more_horiz_rounded,
             iconSize: 24,
-            iconColor: Colors.black,
+            iconColor: const Color(0xFF7C3AED),
           ),
-          const SizedBox(width: 10),
-          const Expanded(
-            child: Text(
-              'Setting',
-              key: CircleSettingKeys.title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontFamily: AppTypography.fontFamily,
-                fontSize: 16,
-                height: 1.2,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF0F1724),
-              ),
-            ),
-          ),
-          if (widget.onManagePressed != null)
-            AppCircularIconButton(
-              semanticLabel: 'Manage Circle',
-              onPressed: widget.onManagePressed!,
-              icon: Icons.more_horiz_rounded,
-              iconSize: 24,
-              iconColor: const Color(0xFF7C3AED),
-            ),
-        ],
-      ),
+      ],
     );
   }
 
