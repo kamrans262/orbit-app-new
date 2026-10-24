@@ -62,6 +62,7 @@ class OrbitSearchableHeader extends StatelessWidget {
     this.onSearchPressed,
     this.searchSemanticLabel,
     this.showBack = true,
+    this.compactTitle = false,
     this.trailingActions = const <Widget>[],
     this.titleKey,
     this.searchButtonKey,
@@ -82,6 +83,9 @@ class OrbitSearchableHeader extends StatelessWidget {
   final VoidCallback? onSearchPressed;
   final String? searchSemanticLabel;
   final bool showBack;
+  /// Reuses the compact 16pt title and 30px back control of AppScreenHeader.
+  /// Search and trailing actions keep their existing accessible 40px size.
+  final bool compactTitle;
   final List<Widget> trailingActions;
   final Key? titleKey;
   final Key? searchButtonKey;
@@ -153,7 +157,7 @@ class OrbitSearchableHeader extends StatelessWidget {
               icon: Icons.chevron_left_rounded,
               iconSize: 24,
               iconColor: Colors.black,
-              size: 40,
+              size: compactTitle ? 30 : 40,
             ),
           ),
           const SizedBox(width: 10),
@@ -164,9 +168,9 @@ class OrbitSearchableHeader extends StatelessWidget {
             key: titleKey,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: AppTypography.fontFamily,
-              fontSize: 24,
+              fontSize: compactTitle ? 16 : 24,
               height: 1.15,
               fontWeight: FontWeight.w600,
               color: Color(0xFF0F1724),
@@ -210,7 +214,7 @@ class OrbitSearchableHeader extends StatelessWidget {
               icon: Icons.chevron_left_rounded,
               iconSize: 24,
               iconColor: Colors.black,
-              size: 40,
+              size: compactTitle ? 30 : 40,
             ),
           ),
           const SizedBox(width: 8),
