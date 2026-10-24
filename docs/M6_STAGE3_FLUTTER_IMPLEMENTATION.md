@@ -44,7 +44,15 @@ were created and no production or Firebase settings were changed.
   encrypted outbox items when connection is restored. This is foreground/
   resume recovery only: no unapproved OS background task or Firebase use.
 - Camera photo temp files are explicitly cleaned up after capture. The
-  preview-only publish sheet no longer injects fabricated demo Circle names.
+  preview/publish sheet no longer injects fabricated demo Circle names.
+  An explicit **Save privately** action is wired through the existing Orbit
+  camera and Moment sheet into M6 encrypted photo + thumbnail staging; it
+  grants access only to the creator's trusted device and never claims M7
+  audience publication. Tests assert the action without fabricated Circles.
+- The approved consolidated Home Find Friends action, Friends discovery header,
+  existing Orbit popup patterns and Received/Sent request control were copied
+  into the M6 branch without replacing M5/M6 media code. Full integration of
+  subsequent UI/feature commits remains separately reviewable.
 - UI remains the current Orbit camera, review sheet, typography, colors and
   popup components; no second design system is introduced.
 - Existing Moments regression test was adjusted to scroll to the actual Like
