@@ -76,11 +76,12 @@ class OrbitNativeVideoProcessor implements OrbitVideoProcessor {
     // The plugin's never-larger fallback can return the unchanged camera
     // original. Never upload it: source location tags and non-H.264 codecs
     // have not been re-encoded or removed in that case.
-    if(result.usedOriginal) {
-      throw const FormatException('A privacy-safe video re-encode is required.');
-    }
     final path=result.outputPath;
     final output=File(path);
+    try {
+      if(result.usedOriginal || output.path==input.path) {
+        throw const FormatException('A privacy-safe video re-encode is required.');
+      }
     if(!await output.exists() ||
        await output.length()<1 ||
        await output.length()>OrbitMediaFormat.videoLimit) {
@@ -105,6 +106,17 @@ class OrbitNativeVideoProcessor implements OrbitVideoProcessor {
     final poster=OrbitMediaCrypto.preparePhoto(bytes).thumbnail;
     return OrbitPreparedVideo(file:output,posterJpeg:poster,
       durationMs:info.durationMs,width:info.widthPx,height:info.heightPx);
+    } catch (_) {
+      // Plugin output is still plaintext until the caller encrypts it. Any
+      // metadata/codec/thumbnail validation error must not leave an unsealed
+      // transcoded clip in the application's temporary storage.
+      if(output.path!=input.path){
+        try {
+          if(await output.exists())await output.delete();
+        } catch (_) { /* Preserve the original validation failure. */ }
+      }
+      rethrow;
+    }
   }
 }
 
