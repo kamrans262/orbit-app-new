@@ -24,4 +24,22 @@ void main() {
     expect(received,orderedEquals(photo));
     expect(find.byKey(MomentCameraKeys.capturedPreview),findsOneWidget);
   });
+  testWidgets('M7 video/voice camera modes expose hold-to-record without inventing a new camera',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(const MaterialApp(home:MomentCameraScreen(
+      enableCamera:false,
+    )));
+    await tester.pump();
+    expect(find.bySemanticsLabel('Capture moment'),findsOneWidget);
+    await tester.tap(find.byKey(MomentCameraKeys.videoMode));
+    await tester.pump();
+    expect(find.bySemanticsLabel('Hold to record moment'),findsOneWidget);
+    await tester.tap(find.byKey(MomentCameraKeys.voiceMode));
+    await tester.pump();
+    expect(find.bySemanticsLabel('Hold to record moment'),findsOneWidget);
+    expect(tester.takeException(),isNull);
+  });
+
 }
