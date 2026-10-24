@@ -12,6 +12,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../../app/theme/app_typography.dart';
+import '../../../../app/theme/app_colors.dart';
 import '../../domain/models/moment_publish_models.dart';
 import '../widgets/moment_publish_sheet.dart';
 import '../../../../core/widgets/app_bottom_navigation_bar.dart';
@@ -748,7 +749,50 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     }
   }
 
-  Future<void> _handleSendPressed() async {
+  Future<void> _openEditorTool(String tool) async {
+    if(_publishSheetOpen || !mounted)return;
+    if(_capturedBytes==null && _capturedClip==null){
+      if(_mode!=_OrbitCaptureMode.photo){
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content:Text('Record the Moment before editing it.')));
+        return;
+      }
+      await _captureMoment();
+      if(!mounted||_capturedBytes==null)return;
+    }
+    String initialText='';
+    if(tool=='sticker'){
+      if(_mode!=_OrbitCaptureMode.photo){
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content:Text('Stickers are available for photos only.')));
+        return;
+      }
+      final selected=await showModalBottomSheet<String>(
+        context:context,useSafeArea:true,
+        backgroundColor:AppColors.background,
+        shape:const RoundedRectangleBorder(
+          borderRadius:BorderRadius.vertical(top:Radius.circular(28))),
+        builder:(sheet)=>Padding(
+          padding:const EdgeInsets.all(20),
+          child:Column(mainAxisSize:MainAxisSize.min,
+            crossAxisAlignment:CrossAxisAlignment.start,children:[
+            Text('Choose a photo sticker',style:AppTypography.smallHeading),
+            const SizedBox(height:12),
+            Wrap(spacing:8,runSpacing:8,children:[
+              for(final label in const ['LOVE!','WOW!','YES!','GO!','SMILE!'])
+                ActionChip(label:Text(label,style:AppTypography.body),
+                  onPressed:()=>Navigator.of(sheet).pop(label)),
+            ]),
+          ]),
+        ),
+      );
+      if(selected==null||!mounted)return;
+      initialText=selected;
+    }
+    await _handleSendPressed(initialOverlayText:initialText);
+  }
+
+  Future<void> _handleSendPressed({String initialOverlayText=''}) async {
     final captured = _capturedBytes;
     if(_recording){await _finishRecording();return;}
     if (captured == null && _capturedClip==null) {
@@ -779,6 +823,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
           (_mode==_OrbitCaptureMode.video?'video':'audio'),
         durationMs:_capturedDurationMs,
         waveformLevels:List<double>.unmodifiable(_waveform),
+        initialOverlayText:initialOverlayText,
         // An authenticated account must never show fabricated Circle names.
         circles: widget.momentAudienceCircles,
         friends: widget.momentAudienceFriends,
@@ -837,7 +882,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
                           key: MomentCameraKeys.filterButton,
                           semanticLabel: 'Camera filters and settings',
                           assetPath: 'assets/icons/filter.svg',
-                          onTap: widget.onFilterPressed ?? () {},
+                          onTap: widget.onFilterPressed ?? ()=>unawaited(_openEditorTool('filter')), 
                         ),
                       ),
                       Positioned(
@@ -1115,7 +1160,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
           semanticLabel: 'Open stickers',
           assetPath: 'assets/icons/sticker.svg',
           label: 'Stickers',
-          onTap: widget.onStickersPressed ?? () {},
+          onTap: widget.onStickersPressed ?? ()=>unawaited(_openEditorTool('sticker')), 
         ),
       ],
     );
@@ -1129,7 +1174,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
           alignment: Alignment.centerLeft,
           child: _CameraTextButton(
             key: MomentCameraKeys.textButton,
-            onTap: widget.onTextPressed ?? () {},
+            onTap: widget.onTextPressed ?? ()=>unawaited(_openEditorTool('text')), 
           ),
         ),
         Align(
