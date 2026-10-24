@@ -21,7 +21,7 @@ class OrbitLiveMomentsScreen extends StatefulWidget {
   @override
   State<OrbitLiveMomentsScreen> createState()=>_OrbitLiveMomentsScreenState();
 }
-class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> {
+class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with WidgetsBindingObserver {
   final OrbitMomentRepository _repo=OrbitMomentRepository();
   List<OrbitLiveMoment> _items=const [];
   List<OrbitLiveMoment> _rail=const [];
@@ -33,14 +33,60 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> {
   final Set<String> _likes={};
   bool _busy=true;
   String? _error;
+  Timer? _authorizationRefresh;
+  int _loadEpoch=0;
 
   @override
   void initState(){
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _authorizationRefresh=Timer.periodic(const Duration(seconds:25),(_){
+      if(!mounted || _busy ||
+          WidgetsBinding.instance.lifecycleState!=AppLifecycleState.resumed ||
+          ModalRoute.of(context)?.isCurrent!=true)return;
+      unawaited(_load());
+    });
     unawaited(_load());
   }
+
+  void _evictDecodedMedia() {
+    for(final bytes in _previews.values) {
+      unawaited(MemoryImage(bytes).evict());
+    }
+    _previews.clear();
+    _captions.clear();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if(state==AppLifecycleState.paused || state==AppLifecycleState.inactive) {
+      ++_loadEpoch;
+      if(mounted)setState((){
+        _evictDecodedMedia();
+        _items=const [];
+        _rail=const [];
+        _names.clear();
+        _likes.clear();
+        _busy=true;
+      });
+    }else if(state==AppLifecycleState.resumed) {
+      unawaited(_load());
+    }
+  }
+
+  @override
+  void dispose() {
+    ++_loadEpoch;
+    _authorizationRefresh?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _evictDecodedMedia();
+    super.dispose();
+  }
+
   Future<void> _load() async {
-    if(mounted)setState((){_busy=true;_error=null;});
+    if(!mounted)return;
+    final epoch=++_loadEpoch;
+    setState((){_busy=true;_error=null;});
     try {
       final moments=await _repo.feed(maxItems:30,
         circleId:widget.circleId,profileId:widget.profileId);
@@ -66,8 +112,12 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> {
           // An expired or revoked key never uses an unauthenticated media URL.
         }
       }
-      if(!mounted)return;
+      if(!mounted || epoch!=_loadEpoch){
+        for(final bytes in previews.values)unawaited(MemoryImage(bytes).evict());
+        return;
+      }
       setState((){
+        _evictDecodedMedia();
         _items=moments;_rail=rail;_options=options;
         _previews..clear()..addAll(previews);
         _names..clear()..addAll(names);
@@ -75,7 +125,12 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> {
         _busy=false;
       });
     }catch(_){
-      if(mounted)setState((){
+      if(mounted && epoch==_loadEpoch)setState((){
+        _evictDecodedMedia();
+        _items=const [];
+        _rail=const [];
+        _names.clear();
+        _likes.clear();
         _busy=false;
         _error='Unable to load encrypted Moments. Check your connection and try again.';
       });
