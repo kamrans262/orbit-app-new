@@ -615,6 +615,10 @@ class OrbitMomentRepository {
           commentId!=null?'comment':'moment',
         'evidence_consent':false});
   }
+  /// UI owner controls are gated against the currently signed-in account;
+  /// Laravel independently re-checks ownership before any sensitive action.
+  Future<String?> currentUserId() => _identity.currentLocalSocialOwner();
+
   Future<void> delete(OrbitLiveMoment item) async {
     await _api('DELETE','/moments/'+Uri.encodeComponent(item.id));
   }
