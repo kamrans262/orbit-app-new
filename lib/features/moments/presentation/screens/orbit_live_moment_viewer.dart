@@ -110,12 +110,13 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> {
     try {lines=await widget.repository.allComments(_current);}
     catch(_){error='Comments are unavailable. Please try again.';}
     if(!mounted){controller.dispose();return;}
+    String? replyingTo;
     await showModalBottomSheet<void>(
       context:context,isScrollControlled:true,useSafeArea:true,
       backgroundColor:AppColors.background,
       shape:const RoundedRectangleBorder(
         borderRadius:BorderRadius.vertical(top:Radius.circular(28))),
-      builder:(sheetContext)=>Padding(
+      builder:(sheetContext)=>StatefulBuilder(builder:(sheetContext,setSheet)=>Padding(
         padding:EdgeInsets.fromLTRB(20,16,20,
           MediaQuery.viewInsetsOf(sheetContext).bottom+20),
         child:Column(mainAxisSize:MainAxisSize.min,
@@ -126,7 +127,18 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> {
             SizedBox(height:180,child:ListView.builder(
               itemCount:lines.length,itemBuilder:(_,index)=>Padding(
                 padding:const EdgeInsets.only(bottom:12),
-                child:Text(lines[index].body,style:AppTypography.body)))),
+                child:ListTile(
+                  title:Text(lines[index].body,style:AppTypography.body),
+                  subtitle:Text(lines[index].parent==null
+                      ? 'Reply':'Reply in thread',style:AppTypography.bodyMuted),
+                  onTap:()=>setSheet(()=>replyingTo=lines[index].id),
+                )))),
+            if(replyingTo!=null)Row(children:[
+              Expanded(child:Text('Replying to comment',
+                style:AppTypography.bodyMuted)),
+              TextButton(onPressed:()=>setSheet(()=>replyingTo=null),
+                child:const Text('Cancel reply')),
+            ]),
             TextField(controller:controller,maxLength:280,maxLines:2,
               decoration:const InputDecoration(hintText:'Write a comment')),
             const SizedBox(height:10),
@@ -134,7 +146,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> {
               final text=controller.text.trim();
               if(text.isEmpty)return;
               try{
-                await widget.repository.comment(_current,text);
+                await widget.repository.comment(_current,text,parent:replyingTo);
                 if(sheetContext.mounted)Navigator.of(sheetContext).pop();
               }catch(_){
                 if(mounted)_notice('Comment could not be sent.');
@@ -142,7 +154,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> {
             }),
           ],
         ),
-      ),
+      )),
     );
     controller.dispose();
   }
