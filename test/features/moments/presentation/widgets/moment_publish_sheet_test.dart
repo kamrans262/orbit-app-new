@@ -139,7 +139,13 @@ void main() {
     });
     expect(find.byKey(MomentPublishKeys.chooseAudience), findsNothing);
     expect(find.text('Save privately'), findsOneWidget);
-    await tester.ensureVisible(find.text('Save privately'));
+    await tester.scrollUntilVisible(
+      find.text('Save privately'), 90,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.drag(find.byKey(MomentPublishKeys.review),
+        const Offset(0, -180));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Save privately'));
     await tester.pumpAndSettle();
     expect(stored, true);
