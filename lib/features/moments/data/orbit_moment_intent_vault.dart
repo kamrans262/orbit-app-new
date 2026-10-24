@@ -117,7 +117,8 @@ class OrbitMomentIntentVault {
     final old=await read(owner,transfer);
     if(old==null)throw StateError('Encrypted Moment intent disappeared.');
     final attempts=old.attemptCount+1;
-    final seconds=(10*(1<<(attempts-1).clamp(0,6))).clamp(10,900);
+    final seconds=(10*(1<<((attempts-1).clamp(0,6).toInt())))
+      .clamp(10,900).toInt();
     final next=OrbitStoredMomentIntent(
       owner:old.owner,transfer:old.transfer,clientId:old.clientId,
       audienceKind:old.audienceKind,targetIds:old.targetIds,

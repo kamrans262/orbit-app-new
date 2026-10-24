@@ -339,6 +339,13 @@ class OrbitMomentRepository {
     }
   }
 
+  /// Count only this signed-in account's protected publication intents.
+  Future<int> pendingPublishCount() async {
+    final owner=await _identity.currentLocalSocialOwner();
+    if(owner==null)return 0;
+    return (await _intents.pending(owner)).length;
+  }
+
   /// User-initiated or foreground retry only. Never publish from a background
   /// worker, and do not treat encrypted upload success as Moment publication.
   Future<int> resumePendingPublishes({
@@ -461,6 +468,13 @@ class OrbitMomentRepository {
     }
     final dir=Directory('${(await getTemporaryDirectory()).path}/orbit-m7-playback');
     await dir.create(recursive:true);
+    // Previous-session playback caches contain local decrypted clips. They
+    // must not survive another playback session or become an offline archive.
+    for(final entry in await dir.list().toList()){
+      if(entry is File){
+        try{await entry.delete();}catch(_){}
+      }
+    }
     final path='${dir.path}/${_uuid.v4()}.${item.mediaKind=='video'?'mp4':'m4a'}';
     final file=File(path);
     try{
