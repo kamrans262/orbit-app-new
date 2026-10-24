@@ -6,6 +6,8 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../data/orbit_circle_repository.dart';
+import '../widgets/orbit_circle_sheet.dart';
+import '../../../../core/widgets/app_action_row.dart';
 import '../../data/orbit_circle_change_source.dart';
 import '../../data/orbit_m5_firebase_change_source.dart';
 import '../../domain/models/friend_details_models.dart';
@@ -118,29 +120,57 @@ class _OrbitLiveCircleDetailScreenState extends State<OrbitLiveCircleDetailScree
   }
 
   Future<void> _memberPreview(OrbitCircleMember member) async {
-    if(_circle==null) return;
-    await showModalBottomSheet<void>(context:context,
-      backgroundColor:AppColors.background,
-      shape:const RoundedRectangleBorder(
-        borderRadius:BorderRadius.vertical(top:Radius.circular(28)),
+    if (_circle == null) return;
+    await showOrbitCircleSheet<void>(
+      context: context,
+      title: 'Circle member',
+      builder: (sheet) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            child: Column(children: [
+              const CircleAvatar(
+                radius: 30,
+                backgroundColor: Color(0xFFF2EAFE),
+                child: Icon(Icons.person_outline_rounded,
+                    size: 30, color: AppColors.primaryEnd),
+              ),
+              const SizedBox(height: 12),
+              Text(member.name, textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontFamily: AppTypography.fontFamily,
+                  fontSize: 18, fontWeight: FontWeight.w600,
+                  color: Color(0xFF0F1724),
+                )),
+              if (member.username.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text('@${member.username}', textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 13, color: Color(0xFF64748B),
+                  )),
+              ],
+            ]),
+          ),
+          const SizedBox(height: 10),
+          AppActionRow(
+            leadingIcon: Icons.shield_outlined,
+            iconBackgroundColor: const Color(0xFFF2EAFE),
+            leadingIconColor: AppColors.primaryEnd,
+            title: 'Role: ${member.role.toUpperCase()}',
+          ),
+          const SizedBox(height: 10),
+          const AppActionRow(
+            leadingIcon: Icons.lock_outline_rounded,
+            iconBackgroundColor: Color(0xFFF2EAFE),
+            leadingIconColor: AppColors.primaryEnd,
+            title: 'Live presence and location are private',
+          ),
+        ],
       ),
-      builder:(context)=>SafeArea(child:Padding(
-        padding:const EdgeInsets.all(20),
-        child:Column(mainAxisSize:MainAxisSize.min,
-          crossAxisAlignment:CrossAxisAlignment.start,
-          children:[
-            const Text('Circle member',style:TextStyle(
-              fontFamily:AppTypography.fontFamily,fontWeight:FontWeight.w600,fontSize:18)),
-            const SizedBox(height:12),
-            Text(member.name),
-            if(member.username.isNotEmpty)Text('@${member.username}'),
-            Text('Role: ${member.role}'),
-            const SizedBox(height:12),
-            const Text('Live presence and location are not shared.',
-              style:TextStyle(color:Color(0xFF64748B),fontSize:12)),
-          ],
-        ),
-      )));
+    );
   }
 
   Future<void> _openInvite() async {
