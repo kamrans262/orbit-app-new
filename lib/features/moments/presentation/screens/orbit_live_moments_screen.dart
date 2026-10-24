@@ -12,8 +12,9 @@ import '../screens/orbit_live_moment_viewer.dart';
 /// The authenticated replacement for MomentsScreen.demo. It passes real
 /// server-authorized data to the existing styled MomentsScreen only.
 class OrbitLiveMomentsScreen extends StatefulWidget {
-  const OrbitLiveMomentsScreen({required this.onTabSelected,super.key});
+  const OrbitLiveMomentsScreen({required this.onTabSelected,this.onAddPressed,super.key});
   final ValueChanged<int> onTabSelected;
+  final VoidCallback? onAddPressed;
   @override
   State<OrbitLiveMomentsScreen> createState()=>_OrbitLiveMomentsScreenState();
 }

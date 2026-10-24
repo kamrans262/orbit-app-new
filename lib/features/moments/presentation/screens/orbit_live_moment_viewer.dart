@@ -152,7 +152,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> {
             Row(children:[
               AppCircularIconButton(
                 semanticLabel:_liked?'Unlike moment':'Like moment',
-                onPressed:_sending?null:_toggleLike,
+                onPressed:_toggleLike,
                 icon:_liked?Icons.favorite_rounded:Icons.favorite_border_rounded,
                 iconSize:20,size:40),
               const SizedBox(width:12),
