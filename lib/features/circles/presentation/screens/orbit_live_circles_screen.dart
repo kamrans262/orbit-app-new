@@ -294,18 +294,14 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
           'Reconnect to view members or make changes.',
           style: TextStyle(fontFamily: AppTypography.fontFamily,fontSize:12)),
       ),
-    if (!_offline && !_busy)
-      SingleChildScrollView(
-        scrollDirection:Axis.horizontal,
-        child:Row(mainAxisAlignment:MainAxisAlignment.end,children:[
-          TextButton.icon(onPressed:_scan,
-            icon:const Icon(Icons.qr_code_scanner),label:const Text('Scan QR')),
-          TextButton.icon(onPressed:_incoming,
-            icon:const Icon(Icons.mail_outline),label:const Text('Invitations')),
-          if(_archiveEnabled)
-            TextButton.icon(onPressed:_archived,
-              icon:const Icon(Icons.archive_outlined),label:const Text('Archived')),
-        ]),
+    if (!_offline && !_busy && _archiveEnabled)
+      Align(
+        alignment:Alignment.centerRight,
+        child:TextButton.icon(
+          onPressed:_archived,
+          icon:const Icon(Icons.archive_outlined),
+          label:const Text('Archived'),
+        ),
       ),
     Expanded(child: CircleListScreen(
       circles: _circles.map((circle) => CircleGroupData(
@@ -323,6 +319,8 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
       showMemberCounts: !_offline,
       onCreatePressed: _offline || _busy ? () => _notify('Reconnect to create a Circle.') : _create,
       onJoinRequested: _offline || _busy ? (_) => _notify('Reconnect to join a Circle.') : _join,
+      onScanQrPressed: _offline || _busy ? null : _scan,
+      onInvitationsPressed: _offline || _busy ? null : _incoming,
       onCirclePressed: _offline ? (_) => _notify('Reconnect to view Circle members.')
         : (c) => _open(_circles.firstWhere((x) => x.id == c.id)),
     )),
