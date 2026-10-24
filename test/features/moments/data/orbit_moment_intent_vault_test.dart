@@ -51,4 +51,30 @@ void main(){
       audienceKind:'only_me',targetIds:const [],caption:'',
       createdAt:now)),throwsStateError);
   });
+  test('M7 encrypted draft backoff persists after restart without losing consent',() async {
+    const owner='owner';
+    final storage=_MemoryVault();
+    final vault=OrbitMomentIntentVault(vault:storage,owner:() async=>owner);
+    const transfer='transfer-backoff';
+    await vault.save(OrbitStoredMomentIntent(
+      owner:owner,transfer:transfer,clientId:'one-client',
+      audienceKind:'selected_friends',targetIds:const ['friend'],
+      caption:'saved',placeLabel:'Consented place',
+      locationConsent:true,taggedUserIds:const ['friend'],
+      createdAt:DateTime.now().toUtc()));
+    final before=DateTime.now().toUtc();
+    final first=await vault.markAttempt(owner,transfer);
+    expect(first.attemptCount,1);
+    expect(first.retryAfter!.isAfter(before),isTrue);
+    final afterRestart=OrbitMomentIntentVault(vault:storage,owner:()async=>owner);
+    final persisted=(await afterRestart.pending(owner)).single;
+    expect(persisted.attemptCount,1);
+    expect(persisted.locationConsent,isTrue);
+    expect(persisted.placeLabel,'Consented place');
+    expect(persisted.taggedUserIds,['friend']);
+    final second=await afterRestart.markAttempt(owner,transfer);
+    expect(second.attemptCount,2);
+    expect(second.retryAfter!.isAfter(first.retryAfter!),isTrue);
+  });
+
 }
