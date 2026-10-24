@@ -20,7 +20,8 @@ class OrbitLiveMoment {
   const OrbitLiveMoment({required this.id,required this.creatorId,
     required this.mediaId,required this.contextId,required this.publishedAt,
     this.captionCiphertext,this.mediaKind='image',this.durationMs,
-    this.placeCiphertext,this.taggedUserIds=const []});
+    this.placeCiphertext,this.taggedUserIds=const [],
+    this.publishVersion=1,this.audienceRevision=1});
   final String id, creatorId, mediaId, contextId;
   final DateTime publishedAt;
   final String? captionCiphertext;
@@ -28,6 +29,7 @@ class OrbitLiveMoment {
   final List<String> taggedUserIds;
   final String mediaKind;
   final int? durationMs;
+  final int publishVersion,audienceRevision;
   factory OrbitLiveMoment.fromJson(Map<String,dynamic> d) =>
     OrbitLiveMoment(id:d['id'] as String,creatorId:d['creator_id'] as String,
       mediaId:d['media_id'] as String,contextId:d['context_id'] as String,
@@ -36,7 +38,9 @@ class OrbitLiveMoment {
       placeCiphertext:d['place_ciphertext'] as String?,
       taggedUserIds:List<String>.from(d['tagged_user_ids'] as List? ?? const []),
       mediaKind:d['media_kind'] as String? ?? 'image',
-      durationMs:(d['duration_ms'] as num?)?.toInt());
+      durationMs:(d['duration_ms'] as num?)?.toInt(),
+      publishVersion:(d['publish_version'] as num?)?.toInt()??1,
+      audienceRevision:(d['audience_revision'] as num?)?.toInt()??1);
 }
 
 class OrbitMomentAudienceOptions {
@@ -628,6 +632,26 @@ class OrbitMomentRepository {
   /// UI owner controls are gated against the currently signed-in account;
   /// Laravel independently re-checks ownership before any sensitive action.
   Future<String?> currentUserId() => _identity.currentLocalSocialOwner();
+
+  /// A caption edit changes only encrypted text, not keys, media or audience.
+  /// Backend enforces creator ownership and optimistic publish_version.
+  Future<int> updateCaption(OrbitLiveMoment item,String text) async {
+    final owner=await currentUserId();
+    if(owner==null || owner!=item.creatorId)throw StateError('Not the Moment owner.');
+    final value=text.trim();
+    if(value.length>200)throw const FormatException('Caption exceeds 200 characters.');
+    final cipher=value.isEmpty?null:
+      await _sealText(value,await _key(item.mediaId),item.mediaId,'caption','self');
+    final response=await _api('PATCH','/moments/${Uri.encodeComponent(item.id)}',
+      body:{'revision':item.publishVersion,
+        'caption_ciphertext':cipher,
+        'caption_key_version':cipher==null?null:'v1'});
+    final revision=response['publish_version'];
+    if(revision is! num || revision.toInt()<=item.publishVersion) {
+      throw StateError('Caption revision was not confirmed.');
+    }
+    return revision.toInt();
+  }
 
   Future<void> delete(OrbitLiveMoment item) async {
     await _api('DELETE','/moments/'+Uri.encodeComponent(item.id));
