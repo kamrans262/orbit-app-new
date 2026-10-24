@@ -1202,7 +1202,7 @@ class _CameraTopButton extends StatelessWidget {
 
   final String semanticLabel;
   final String assetPath;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
