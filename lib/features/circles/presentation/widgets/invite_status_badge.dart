@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../app/theme/app_typography.dart';
+import '../../../../app/theme/app_colors.dart';
 import '../../domain/models/circle_invite.dart';
 
 class InviteStatusBadge extends StatelessWidget {
@@ -19,7 +20,10 @@ class InviteStatusBadge extends StatelessWidget {
       ),
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: palette.background,
+        color: status == CircleInviteStatus.accepted ? null : palette.background,
+        gradient: status == CircleInviteStatus.accepted
+            ? const LinearGradient(colors: [AppColors.primaryStart, AppColors.primaryEnd])
+            : null,
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
@@ -48,8 +52,8 @@ class InviteStatusBadge extends StatelessWidget {
       case CircleInviteStatus.accepted:
         return const _InviteStatusPalette(
           label: 'Accepted',
-          foreground: Color(0xFF5ACDAE),
-          background: Color(0xFFDFF7F1),
+          foreground: Colors.white,
+          background: Colors.transparent,
         );
       case CircleInviteStatus.revoked:
         return const _InviteStatusPalette(
