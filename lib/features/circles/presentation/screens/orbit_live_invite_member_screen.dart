@@ -134,15 +134,13 @@ class _OrbitLiveInviteMemberScreenState extends State<OrbitLiveInviteMemberScree
   @override
   Widget build(BuildContext context)=>Scaffold(
     backgroundColor:AppColors.background,
-    appBar:AppBar(
-      automaticallyImplyLeading:false,
-      backgroundColor:AppColors.background,
-      elevation:0,
-      toolbarHeight:68,
-      titleSpacing:20,
-      title:const AppScreenHeader(title:'Invite friends',prominent:true),
-    ),
-    body:_loading ? const Center(child:CircularProgressIndicator())
+    body:SafeArea(child:Column(children:[
+      const Padding(
+        padding:EdgeInsets.fromLTRB(20,20,20,0),
+        child:AppScreenHeader(title:'Invite friends'),
+      ),
+      const SizedBox(height:20),
+      Expanded(child:_loading ? const Center(child:CircularProgressIndicator())
       : _error!=null ? Center(child:Column(
           mainAxisSize:MainAxisSize.min,children:[
             Text(_error!,textAlign:TextAlign.center),
@@ -165,5 +163,7 @@ class _OrbitLiveInviteMemberScreenState extends State<OrbitLiveInviteMemberScree
             ));
         },
       ),
+      ),
+    ])),
   );
 }
