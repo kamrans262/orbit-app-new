@@ -88,6 +88,13 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
     final epoch=++_loadEpoch;
     setState((){_busy=true;_error=null;});
     try {
+      // Resume only this account's encrypted outbox while foregrounded.
+      // Failures leave the original ciphertext queued without fake success.
+      try {
+        await _repo.resumePendingPublishes();
+      } catch (_) {
+        // An encrypted draft remains for explicit retry on the next refresh.
+      }
       final moments=await _repo.feed(maxItems:30,
         circleId:widget.circleId,profileId:widget.profileId);
       final rail=widget.circleId!=null||widget.profileId!=null
