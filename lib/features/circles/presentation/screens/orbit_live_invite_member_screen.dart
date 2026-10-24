@@ -5,6 +5,8 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../core/widgets/app_screen_header.dart';
+import '../../../../core/popups/orbit_popup_modal.dart';
 import '../../../auth/data/orbit_identity_client.dart';
 import '../../../friends/data/orbit_social_repository.dart';
 import '../../data/orbit_circle_repository.dart';
@@ -80,32 +82,41 @@ class _OrbitLiveInviteMemberScreenState extends State<OrbitLiveInviteMemberScree
       if(!mounted) return;
       if(invite.code != null && invite.code!.isNotEmpty) {
         final code=invite.code!;
-        await showDialog<void>(context:context,builder:(d)=>AlertDialog(
-          backgroundColor:Colors.white,
-          title:const Text('Private Circle invitation'),
-          content:SingleChildScrollView(child:Column(
-            mainAxisSize:MainAxisSize.min,
-            children:[
-              Text('For ${person.name} only. Valid for 7 days. '
-                'Share privately; it will be shown only once.'),
-              const SizedBox(height:12),
-              QrImageView(data:code,size:190),
-              const SizedBox(height:12),
-              SelectableText(code),
-            ],
-          )),
-          actions:[
-            TextButton(onPressed:() async {
-              await Share.share('Private Orbit Circle invitation for ${person.name}: $code '
-                '(valid for 7 days; usable by the intended recipient only).');
-            },child:const Text('Share code')),
-            TextButton(onPressed:() async {
-              await Clipboard.setData(ClipboardData(text:code));
-              if(d.mounted) Navigator.pop(d);
-            },child:const Text('Copy code')),
-            TextButton(onPressed:()=>Navigator.pop(d),child:const Text('Done')),
-          ],
-        ));
+        await showOrbitPopupModal<void>(
+          context:context,
+          builder:(d)=>OrbitPopupModal(
+            title:'Private Circle invitation',
+            description:'For ${person.name} only. Valid for 7 days. '
+              'Share privately; the code will be shown only once.',
+            content:Column(
+              mainAxisSize:MainAxisSize.min,
+              children:[
+                QrImageView(data:code,size:190),
+                const SizedBox(height:12),
+                SelectableText(code),
+                const SizedBox(height:12),
+                OrbitPopupTextButton(
+                  label:'Share code',
+                  onPressed:() async {
+                    await Share.share('Private Orbit Circle invitation for ${person.name}: $code '
+                      '(valid for 7 days; usable by the intended recipient only).');
+                  },
+                ),
+              ],
+            ),
+            primaryAction:OrbitPopupPrimaryButton(
+              label:'Copy code',
+              onPressed:() async {
+                await Clipboard.setData(ClipboardData(text:code));
+                if(d.mounted) Navigator.of(d).pop();
+              },
+            ),
+            secondaryAction:OrbitPopupTextButton(
+              label:'Done',
+              onPressed:()=>Navigator.of(d).pop(),
+            ),
+          ),
+        );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content:Text('Invitation sent. Awaiting acceptance.')));
@@ -123,9 +134,14 @@ class _OrbitLiveInviteMemberScreenState extends State<OrbitLiveInviteMemberScree
   @override
   Widget build(BuildContext context)=>Scaffold(
     backgroundColor:AppColors.background,
-    appBar:AppBar(title:const Text('Invite friends',style:TextStyle(
-      fontFamily:AppTypography.fontFamily,fontWeight:FontWeight.w600)),
-      backgroundColor:AppColors.background),
+    appBar:AppBar(
+      automaticallyImplyLeading:false,
+      backgroundColor:AppColors.background,
+      elevation:0,
+      toolbarHeight:68,
+      titleSpacing:20,
+      title:const AppScreenHeader(title:'Invite friends',prominent:true),
+    ),
     body:_loading ? const Center(child:CircularProgressIndicator())
       : _error!=null ? Center(child:Column(
           mainAxisSize:MainAxisSize.min,children:[
