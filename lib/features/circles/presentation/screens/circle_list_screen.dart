@@ -23,6 +23,7 @@ abstract final class CircleListKeys {
   static const join = Key('circle_list_join');
   static const scanQr = Key('circle_list_scan_qr');
   static const invitations = Key('circle_list_invitations');
+  static const archived = Key('circle_list_archived');
   static Key circle(String id) => Key('circle_list_circle_$id');
 }
 
@@ -40,6 +41,7 @@ class CircleListScreen extends StatefulWidget {
     this.onJoinRequested,
     this.onScanQrPressed,
     this.onInvitationsPressed,
+    this.onArchivedPressed,
     this.onRetry,
     this.onBack,
     this.viewState = CircleListViewState.loaded,
@@ -98,6 +100,7 @@ class CircleListScreen extends StatefulWidget {
   final ValueChanged<String>? onJoinRequested;
   final VoidCallback? onScanQrPressed;
   final VoidCallback? onInvitationsPressed;
+  final VoidCallback? onArchivedPressed;
   final VoidCallback? onRetry;
   final VoidCallback? onBack;
   final CircleListViewState viewState;
@@ -307,6 +310,24 @@ class _CircleListScreenState extends State<CircleListScreen> {
                     onTap: widget.onInvitationsPressed!,
                   ),
                 ),
+            ],
+          ),
+        ],
+        if (widget.onArchivedPressed != null) ...<Widget>[
+          const SizedBox(height: 10),
+          Row(
+            children: <Widget>[
+              const Spacer(),
+              Expanded(
+                flex: 2,
+                child: _CircleActionButton(
+                  key: CircleListKeys.archived,
+                  icon: Icons.archive_outlined,
+                  label: 'Archived',
+                  onTap: widget.onArchivedPressed!,
+                ),
+              ),
+              const Spacer(),
             ],
           ),
         ],
