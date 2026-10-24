@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   moments:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.target == 'moments' }}
+    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.target == 'moments') }}
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -34,11 +34,13 @@ jobs:
       - name: Only affected M7 publishing, offline vault and M6 outbox regression tests
         run: |
           flutter test test/features/moments/presentation/widgets/orbit_m7_live_publish_test.dart
+          flutter test test/features/moments/presentation/widgets/orbit_m7_gallery_capture_test.dart
           flutter test test/features/moments/data/orbit_moment_intent_vault_test.dart
+          flutter test test/features/moments/data/moment_photo_processor_test.dart
           flutter test test/features/media/orbit_media_recovery_coordinator_test.dart
 
   android-native-compile:
-    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.target == 'android') }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.target == 'android' }}
     runs-on: ubuntu-latest
     timeout-minutes: 65
     steps:
