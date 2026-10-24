@@ -29,6 +29,7 @@ class OrbitLiveMomentViewer extends StatefulWidget {
 class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with WidgetsBindingObserver {
   Uint8List? _photo;
   String? _caption;
+  int? _ownerPublishVersion;
   String? _error;
   bool _loading=true, _liked=false, _sending=false, _paused=false;
   bool _allCaughtUp=false;
@@ -176,6 +177,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
         setState((){
           _photo=photo;
           _caption=caption;
+          _ownerPublishVersion=current.publishVersion;
           _isOwner=viewer!=null && viewer==current.creatorId;
           _loading=false;
         });
@@ -325,6 +327,51 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
       if(mounted)_notice('Your report has been submitted.');
     }catch(_){if(mounted)_notice('Unable to submit this report.');}
   }
+  Future<void> _ownerEditCaption() async {
+    if(!_isOwner || !mounted)return;
+    final item=_current;
+    final controller=TextEditingController(text:_caption??'');
+    final wasPaused=_paused;
+    _pause(true);
+    try {
+      await showModalBottomSheet<void>(
+        context:context,useSafeArea:true,isScrollControlled:true,
+        backgroundColor:AppColors.background,
+        shape:const RoundedRectangleBorder(
+          borderRadius:BorderRadius.vertical(top:Radius.circular(28))),
+        builder:(sheetContext)=>Padding(
+          padding:EdgeInsets.fromLTRB(20,20,20,
+            MediaQuery.viewInsetsOf(sheetContext).bottom+24),
+          child:Column(mainAxisSize:MainAxisSize.min,
+            crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+              Text('Edit Moment caption',style:AppTypography.smallHeading),
+              const SizedBox(height:12),
+              TextField(controller:controller,maxLength:200,maxLines:3,
+                decoration:const InputDecoration(hintText:'Your caption')),
+              const SizedBox(height:16),
+              AppPrimaryButton(label:'Save changes',onPressed:() async {
+                try {
+                  final newRevision=await widget.repository.updateCaption(
+                    item,controller.text,version:_ownerPublishVersion);
+                  if(!mounted || _current.id!=item.id)return;
+                  setState((){
+                    _caption=controller.text.trim();
+                    _ownerPublishVersion=newRevision;
+                  });
+                  if(sheetContext.mounted)Navigator.of(sheetContext).pop();
+                }catch(_){
+                  if(mounted)_notice('Could not save this caption. Refresh if it changed elsewhere.');
+                }
+              }),
+            ]),
+        ),
+      );
+    } finally {
+      controller.dispose();
+      if(mounted)_pause(wasPaused);
+    }
+  }
+
   Future<void> _ownerDelete() async {
     if(!_isOwner || !mounted)return;
     final item=_current;
@@ -448,6 +495,11 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
                 iconSize:20,size:40),
               const Spacer(),
               if(_isOwner) ...[
+                AppCircularIconButton(
+                  semanticLabel:'Edit Moment caption',
+                  onPressed:()=>unawaited(_ownerEditCaption()),
+                  icon:Icons.edit_outlined,iconSize:20,size:40),
+                const SizedBox(width:8),
                 AppCircularIconButton(
                   semanticLabel:'View Moment viewers',
                   onPressed:()=>unawaited(_ownerViewers()),
