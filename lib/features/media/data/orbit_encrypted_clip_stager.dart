@@ -40,7 +40,16 @@ class OrbitNativeVideoProcessor implements OrbitVideoProcessor {
 
   @override
   Future<OrbitPreparedVideo> prepare(File input,
-      {void Function(double progress)? onProgress}) async {
+      {void Function(double progress)? onProgress}) =>
+    _prepare(input,onProgress:onProgress,stripAudio:false);
+
+  Future<OrbitPreparedVideo> prepareWithoutAudio(File input,
+      {void Function(double progress)? onProgress}) =>
+    _prepare(input,onProgress:onProgress,stripAudio:true);
+
+  Future<OrbitPreparedVideo> _prepare(File input,
+      {void Function(double progress)? onProgress,
+       required bool stripAudio}) async {
     if(!await input.exists() || await input.length()>maxUncompressedBytes
         || await input.length()==0) {
       throw const FormatException('Video file exceeds the capture limits.');
@@ -52,7 +61,8 @@ class OrbitNativeVideoProcessor implements OrbitVideoProcessor {
     // Native Media3/AVFoundation encoding; strips original EXIF/GPS metadata
     // and makes a bounded MP4 before per-part authenticated encryption.
     final job=_compressor.compress(input.path,
-      options:const CompressOptions(preset:CompressPreset.p720));
+      options:CompressOptions(preset:CompressPreset.p720,
+        audio:stripAudio?const AudioStrip():const AudioPassthrough()));
     final progress=job.progress.listen((value) {
       onProgress?.call((value/100).clamp(0.0,1.0));
     });
@@ -76,6 +86,9 @@ class OrbitNativeVideoProcessor implements OrbitVideoProcessor {
       throw const FormatException('Compressed video exceeds upload limits.');
     }
     final info=await _compressor.getMediaInfo(output.path);
+    if(stripAudio && info.audioCodec!=null){
+      throw const FormatException('Muted Moment export still contains audio.');
+    }
     if(info.durationMs<=0 || info.durationMs>maxDurationMs ||
         info.widthPx<=0 || info.heightPx<=0 ||
         max(info.widthPx,info.heightPx)>1280 ||
@@ -127,13 +140,18 @@ class OrbitEncryptedClipStager {
       {void Function(double progress)? onProgress,
        Future<void> Function(OrbitSealedMedia original, OrbitSealedMedia poster,
          String mediaId)? onReadyForAudience,
-       Future<void> Function(String originalTransfer)? onQueued}) async {
+       Future<void> Function(String originalTransfer)? onQueued,
+       bool muteAudio=false}) async {
     return OrbitMediaTransferGate.run(() async {
     final owner=await _identity.currentLocalSocialOwner();
     if(owner==null)throw OrbitIdentityException('Please sign in.',401);
     final device=await _identity.trustedMediaDevice();
-    final prepared=await _processor.prepare(original,
-      onProgress:(p)=>onProgress?.call(p*0.35));
+    final prepared=await (muteAudio
+      ? (_processor is OrbitNativeVideoProcessor
+          ? (_processor as OrbitNativeVideoProcessor).prepareWithoutAudio(
+              original,onProgress:onProgress)
+          : throw StateError('Selected video processor cannot mute audio.'))
+      : _processor.prepare(original,onProgress:onProgress));
     final root=Directory((await _temp()).path+'/orbit-m6-transcode');
     await root.create(recursive:true);
     final videoId=const Uuid().v4(),posterId=const Uuid().v4();

@@ -288,7 +288,7 @@ class OrbitMomentRepository {
       final stager=OrbitEncryptedClipStager(identity:_identity,crypto:_crypto,
         media:_media);
       if(request.mediaKind=='video'){
-        await stager.stageVideo(source,
+        await stager.stageVideo(source,muteAudio:request.muteVideo,
           onProgress:(v)=>progress(v*0.82),
           onReadyForAudience:(video,poster,mediaId) async =>
             commit(video,poster,mediaId),onQueued:queued);

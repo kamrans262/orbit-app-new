@@ -113,6 +113,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
   final TextEditingController _overlayText=TextEditingController();
   final TextEditingController _placeLabel=TextEditingController();
   bool _locationConsent=false;
+  bool _muteVideo=false;
   final Set<String> _taggedPeople={};
 
   MomentFilter _filter=MomentFilter.natural;
@@ -262,6 +263,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
           mediaFile:widget.mediaFile,
           mediaKind:widget.mediaKind,
           durationMs:widget.durationMs,
+          muteVideo:_muteVideo,
           placeLabel:_locationConsent?_placeLabel.text.trim():'',
           locationConsent:_locationConsent && _placeLabel.text.trim().isNotEmpty,
           taggedUserIds:_taggedPeople,
@@ -427,6 +429,14 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
                 ],
               )),
           ),
+        ),
+        if(widget.mediaKind=='video')SwitchListTile(
+          value:_muteVideo,
+          activeColor:AppColors.primaryEnd,
+          title:Text('Mute video audio',style:AppTypography.body),
+          subtitle:Text('Remove audio from the encrypted video export',
+            style:AppTypography.bodyMuted),
+          onChanged:(value)=>setState(()=>_muteVideo=value),
         ),
         if(widget.mediaKind=='image') ...[
           const SizedBox(height:10),

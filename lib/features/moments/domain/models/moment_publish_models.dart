@@ -17,6 +17,7 @@ class MomentPublishRequest {
     this.mediaFile,
     this.mediaKind='image',
     this.durationMs,
+    this.muteVideo=false,
     this.placeLabel='',
     this.locationConsent=false,
     Iterable<String> taggedUserIds=const [],
@@ -33,6 +34,7 @@ class MomentPublishRequest {
   final File? mediaFile;
   final String mediaKind;
   final int? durationMs;
+  final bool muteVideo;
   final String placeLabel;
   final bool locationConsent;
   final Set<String> taggedUserIds;
