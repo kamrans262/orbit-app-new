@@ -8,7 +8,6 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_screen_header.dart';
 import '../../../../core/popups/orbit_popup_modal.dart';
-import '../../../../core/popups/orbit_popup_components.dart';
 import '../../../auth/data/orbit_identity_client.dart';
 import '../../../friends/data/orbit_social_repository.dart';
 import '../../data/orbit_circle_repository.dart';
@@ -185,12 +184,19 @@ class _OrbitLiveInviteMemberScreenState extends State<OrbitLiveInviteMemberScree
                 onPressed:(_sending || _rateLimited) ? null : ()=>_invite(p),
                 child: Opacity(
                   opacity: (_sending || _rateLimited) ? 0.45 : 1,
-                  child: const OrbitGradientText(
-                    text: 'Invite',
-                    style: TextStyle(
-                      fontFamily: AppTypography.fontFamily,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
+                  child: ShaderMask(
+                    blendMode: BlendMode.srcIn,
+                    shaderCallback: (bounds) => const LinearGradient(
+                      colors: [AppColors.primaryStart, AppColors.primaryEnd],
+                    ).createShader(bounds),
+                    child: const Text(
+                      'Invite',
+                      style: TextStyle(
+                        fontFamily: AppTypography.fontFamily,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
                 ),
