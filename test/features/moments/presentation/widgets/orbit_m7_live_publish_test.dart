@@ -25,7 +25,7 @@ void main() {
     ));
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
-    expect(find.text('Only Me'), findsWidgets);
+    expect(find.textContaining('Only Me'), findsWidgets);
     await tester.ensureVisible(find.text('Publish Moment'));
     await tester.tap(find.text('Publish Moment'));
     await tester.pumpAndSettle();
@@ -56,6 +56,7 @@ void main() {
     ));
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(MomentPublishKeys.chooseAudience));
     await tester.tap(find.byKey(MomentPublishKeys.chooseAudience));
     await tester.pumpAndSettle();
     expect(find.text('Selected Friends'), findsOneWidget);
