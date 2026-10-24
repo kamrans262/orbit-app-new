@@ -12,6 +12,8 @@ import '../../media/data/orbit_media_repository.dart';
 import '../../media/data/orbit_moment_media_stager.dart';
 import '../../media/data/orbit_encrypted_clip_stager.dart';
 import '../domain/models/moment_publish_models.dart';
+import 'orbit_moment_intent_vault.dart';
+import '../../media/data/orbit_media_outbox.dart';
 
 class OrbitLiveMoment {
   const OrbitLiveMoment({required this.id,required this.creatorId,
@@ -43,19 +45,22 @@ class OrbitMomentAudienceOptions {
 class OrbitMomentRepository {
   OrbitMomentRepository({OrbitIdentityClient? identity,OrbitMediaRepository? media,
     OrbitMomentMediaStager? stager,OrbitMediaRecipientKeys? recipientKeys,
-    OrbitCircleRepository? circles,OrbitMediaCrypto? crypto})
+    OrbitCircleRepository? circles,OrbitMediaCrypto? crypto,
+    OrbitMomentIntentVault? intents})
     : _identity=identity??OrbitIdentityClient.instance,
       _media=media??OrbitMediaRepository(identity:identity),
       _stager=stager??OrbitMomentMediaStager(identity:identity),
       _keys=recipientKeys??OrbitMediaRecipientKeys(identity:identity),
       _circles=circles??OrbitCircleRepository(identity:identity),
-      _crypto=crypto??OrbitMediaCrypto();
+      _crypto=crypto??OrbitMediaCrypto(),
+      _intents=intents??OrbitMomentIntentVault();
   final OrbitIdentityClient _identity;
   final OrbitMediaRepository _media;
   final OrbitMomentMediaStager _stager;
   final OrbitMediaRecipientKeys _keys;
   final OrbitCircleRepository _circles;
   final OrbitMediaCrypto _crypto;
+  final OrbitMomentIntentVault _intents;
   static const Uuid _uuid=Uuid();
 
   Future<Map<String,dynamic>> _api(String method,String path,
@@ -224,9 +229,21 @@ class OrbitMomentRepository {
         (audience=='selected_friends'||audience=='accepted_friends')&&!options.friendsEnabled) {
       throw StateError('Update Moment sharing in Privacy Settings first.');
     }
+    final owner=await _identity.currentLocalSocialOwner();
+    if(owner==null)throw StateError('Sign in before publishing.');
+    String? stagedTransfer;
+    Future<void> queued(String transfer) async {
+      stagedTransfer=transfer;
+      await _intents.save(OrbitStoredMomentIntent(
+        owner:owner,transfer:transfer,clientId:request.clientId,
+        audienceKind:audience,targetIds:targets,caption:request.caption,
+        createdAt:DateTime.now().toUtc()));
+    }
     String? id;
     Future<void> commit(OrbitSealedMedia original,OrbitSealedMedia? derivative,
         String mediaId) async {
+      final existing=await _existingReceipt(request.clientId);
+      if(existing!=null){id=existing;return;}
       if(audience!='only_me'){
         final grants=await _media.createGrants(mediaId,
           audience:audience,recipients:targets,
@@ -253,7 +270,7 @@ class OrbitMomentRepository {
     if(request.mediaKind=='image'){
       await _stager.stagePhoto(request.photoBytes,
         onProgress:(v)=>progress(v*0.82),
-        onReadyForAudience:commit);
+        onReadyForAudience:commit,onQueued:queued);
     }else{
       final source=request.mediaFile;
       if(source==null || !await source.exists()) {
@@ -265,7 +282,7 @@ class OrbitMomentRepository {
         await stager.stageVideo(source,
           onProgress:(v)=>progress(v*0.82),
           onReadyForAudience:(video,poster,mediaId) async =>
-            commit(video,poster,mediaId));
+            commit(video,poster,mediaId),onQueued:queued);
       }else if(request.mediaKind=='audio'){
         final duration=request.durationMs;
         if(duration==null || duration<1 || duration>60000){
@@ -275,12 +292,13 @@ class OrbitMomentRepository {
           mime:'audio/mp4',durationMs:duration,purpose:'moment',
           onProgress:(v)=>progress(v*0.82),
           onReadyForAudience:(audio,mediaId) async =>
-            commit(audio,null,mediaId));
+            commit(audio,null,mediaId),onQueued:queued);
       }else{
         throw StateError('Unsupported Moment media kind.');
       }
     }
     if(id==null)throw StateError('Moment not published.');
+    if(stagedTransfer!=null)await _intents.remove(owner,stagedTransfer!);
     progress(1);
     return MomentPublishReceipt(momentId:id!);
   }
@@ -297,6 +315,84 @@ class OrbitMomentRepository {
     } catch (_) {
       return false; // Offline, revoked or expired: fail closed.
     }
+  }
+
+  Future<String?> _existingReceipt(String clientId) async {
+    try{
+      final d=await _api('GET','/moments/receipt/'+Uri.encodeComponent(clientId));
+      if(d['published']!=true || d['audience_keys_confirmed']!=true){
+        throw StateError('Moment receipt is not published.');
+      }
+      return d['moment_id'] as String;
+    }on OrbitIdentityException catch(e){
+      if(e.statusCode==404)return null;
+      rethrow;
+    }
+  }
+
+  /// User-initiated or foreground retry only. Never publish from a background
+  /// worker, and do not treat encrypted upload success as Moment publication.
+  Future<int> resumePendingPublishes({
+    void Function(double progress)? onProgress,
+  }) async {
+    final owner=await _identity.currentLocalSocialOwner();
+    if(owner==null)return 0;
+    final intents=await _intents.pending(owner);
+    if(intents.isEmpty)return 0;
+    var completed=0;
+    final encryptedDrafts=await OrbitMediaOutbox().pending(owner);
+    final transferIds=encryptedDrafts.where((d)=>d.variant=='original')
+      .map((d)=>d.transfer).toSet();
+    for(final intent in intents){
+      final server=await _existingReceipt(intent.clientId);
+      if(server!=null){
+        await _intents.remove(owner,intent.transfer);
+        completed++;
+      }else if(!transferIds.contains(intent.transfer)){
+        throw StateError('Missing encrypted media: recapture is required.');
+      }
+    }
+    await _stager.retryPending(onProgress:onProgress,
+      onRecovered:(transfer,original,derivative,mediaId) async {
+        final intent=await _intents.read(owner,transfer);
+        if(intent==null)return;
+        final previous=await _existingReceipt(intent.clientId);
+        if(previous!=null){
+          await _intents.remove(owner,transfer);
+          completed++;
+          return;
+        }
+        final options=await audienceOptions();
+        if(intent.audienceKind=='selected_circles'&&!options.circlesEnabled ||
+           (intent.audienceKind=='selected_friends'||
+            intent.audienceKind=='accepted_friends')&&!options.friendsEnabled){
+          throw StateError('Audience privacy changed. Review the Moment draft.');
+        }
+        if(intent.audienceKind!='only_me'){
+          final keys=await _envelopes(intent.audienceKind,intent.targetIds,
+            original,derivative);
+          final grants=await _media.createGrants(mediaId,
+            audience:intent.audienceKind,recipients:intent.targetIds,
+            idempotencyKey:_uuid.v4(),keyEnvelopes:keys);
+          if(grants.isEmpty)throw StateError('Recipient key delivery failed.');
+        }
+        final cipher=intent.caption.trim().isEmpty?null:
+          await _sealText(intent.caption.trim(),original.key,mediaId,
+            'caption','self');
+        final r=await _api('POST','/moments',key:intent.clientId,body:{
+          'client_id':intent.clientId,'media_id':mediaId,
+          'audience_kind':intent.audienceKind,'target_ids':intent.targetIds,
+          if(cipher!=null)'caption_ciphertext':cipher,
+          if(cipher!=null)'caption_key_version':'v1',
+        });
+        if(r['published']!=true||r['audience_keys_confirmed']!=true||
+            r['moment_id'] is! String){
+          throw StateError('Publication has not been confirmed.');
+        }
+        await _intents.remove(owner,transfer);
+        completed++;
+      });
+    return completed;
   }
 
   Future<Uint8List> photo(OrbitLiveMoment item,{String variant='thumbnail'}) async {
