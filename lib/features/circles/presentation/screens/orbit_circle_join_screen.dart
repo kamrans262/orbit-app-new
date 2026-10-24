@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/orbit_circle_confirmation.dart';
+
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../core/widgets/app_screen_header.dart';
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../../auth/data/orbit_identity_client.dart';
 import '../../data/orbit_circle_repository.dart';
@@ -49,16 +52,13 @@ class _OrbitCircleJoinScreenState extends State<OrbitCircleJoinScreen> {
       if (circleName is! String || circleName.trim().isEmpty) {
         throw const FormatException('The invitation cannot be verified.');
       }
-      final approved = await showDialog<bool>(context:context,builder:(d)=>AlertDialog(
-        backgroundColor:Colors.white,
-        title:const Text('Join private Circle?'),
-        content:Text('Join "$circleName"? Membership never enables your '
-          'location, presence, photos or messages automatically.'),
-        actions:[
-          TextButton(onPressed:()=>Navigator.pop(d,false),child:const Text('Cancel')),
-          TextButton(onPressed:()=>Navigator.pop(d,true),child:const Text('Join Circle')),
-        ],
-      ));
+      final approved = await showOrbitCircleConfirmation(
+        context: context,
+        title: 'Join private Circle?',
+        description: 'Join "$circleName"? Membership never enables your '
+          'location, presence, photos or messages automatically.',
+        confirmLabel: 'Join Circle',
+      );
       if (approved != true || !mounted) return;
       await _repo.redeemCode(code);
       if (!mounted) return;
@@ -79,9 +79,14 @@ class _OrbitCircleJoinScreenState extends State<OrbitCircleJoinScreen> {
   @override
   Widget build(BuildContext context)=>Scaffold(
     backgroundColor:AppColors.background,
-    appBar:AppBar(backgroundColor:AppColors.background,
-      title:const Text('Join with Code',style:TextStyle(
-        fontFamily:AppTypography.fontFamily,fontWeight:FontWeight.w600))),
+    appBar:AppBar(
+      automaticallyImplyLeading:false,
+      backgroundColor:AppColors.background,
+      elevation:0,
+      toolbarHeight:68,
+      titleSpacing:20,
+      title:const AppScreenHeader(title:'Join with Code',prominent:true),
+    ),
     body:SafeArea(child:ListView(padding:const EdgeInsets.all(20),children:[
       const Text('Enter the private Circle invitation code you received.',
         style:TextStyle(fontFamily:AppTypography.fontFamily,fontSize:14)),
