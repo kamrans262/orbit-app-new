@@ -79,15 +79,13 @@ class _OrbitCircleJoinScreenState extends State<OrbitCircleJoinScreen> {
   @override
   Widget build(BuildContext context)=>Scaffold(
     backgroundColor:AppColors.background,
-    appBar:AppBar(
-      automaticallyImplyLeading:false,
-      backgroundColor:AppColors.background,
-      elevation:0,
-      toolbarHeight:68,
-      titleSpacing:20,
-      title:const AppScreenHeader(title:'Join with Code',prominent:true),
-    ),
-    body:SafeArea(child:ListView(padding:const EdgeInsets.all(20),children:[
+    body:SafeArea(child:Column(children:[
+      const Padding(
+        padding:EdgeInsets.fromLTRB(20,20,20,0),
+        child:AppScreenHeader(title:'Join with Code'),
+      ),
+      const SizedBox(height:20),
+      Expanded(child:ListView(padding:const EdgeInsets.all(20),children:[
       const Text('Enter the private Circle invitation code you received.',
         style:TextStyle(fontFamily:AppTypography.fontFamily,fontSize:14)),
       const SizedBox(height:20),
@@ -125,5 +123,6 @@ class _OrbitCircleJoinScreenState extends State<OrbitCircleJoinScreen> {
         label:const Text('Scan invitation QR'),
       ),
     ])),
+  ])),
   );
 }
