@@ -15,6 +15,7 @@ void main() {
   Future<void> showSheet(
     WidgetTester tester, {
     MomentPublisher? publisher,
+    OrbitPrivatePhotoSaver? privateSaver,
   }) async {
     await tester.binding.setSurfaceSize(const Size(320, 568));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -28,6 +29,7 @@ void main() {
                 photoBytes: Uint8List.fromList(const <int>[1, 2, 3]),
                 circles: circles,
                 publisher: publisher,
+                privateSaver: privateSaver,
               ),
               child: const Text('Open review'),
             ),
@@ -125,4 +127,25 @@ void main() {
     expect(find.textContaining('Nothing was uploaded or sent'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('private save uses real M6 callback without fabricated audience', (
+    tester,
+  ) async {
+    var stored = false;
+    await showSheet(tester, privateSaver: (bytes, progress) async {
+      expect(bytes, isNotEmpty);
+      progress(0.9);
+      stored = true;
+      progress(1);
+    });
+    expect(find.byKey(MomentPublishKeys.chooseAudience), findsNothing);
+    expect(find.text('Save privately'), findsOneWidget);
+    await tester.ensureVisible(find.text('Save privately'));
+    await tester.tap(find.text('Save privately'));
+    await tester.pumpAndSettle();
+    expect(stored, true);
+    expect(find.text('Photo saved privately'), findsOneWidget);
+    expect(find.textContaining('Nothing was shared with a Circle'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
 }
