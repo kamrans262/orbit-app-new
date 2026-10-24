@@ -106,6 +106,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   int _elapsedSeconds=0;
   bool _stopWhenStarted=false;
   bool _recording=false;
+  double _zoomStart=1,_currentZoom=1,_minZoom=1,_maxZoom=1;
 
   FlashMode _flashMode = FlashMode.off;
   Duration _captureDelay = Duration.zero;
@@ -257,6 +258,13 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       );
 
       await controller.initialize();
+      try{
+        _minZoom=await controller.getMinZoomLevel();
+        _maxZoom=await controller.getMaxZoomLevel();
+        _currentZoom=_minZoom.clamp(_minZoom,_maxZoom).toDouble();
+      }catch(_){
+        _minZoom=1;_maxZoom=1;_currentZoom=1;
+      }
 
       if (!mounted) {
         await controller.dispose();
@@ -344,6 +352,28 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
             ? error.description!.trim()
             : 'Camera could not be started. Please try again.';
     }
+  }
+
+  Future<void> _focusAt(Offset point,Size size) async {
+    final c=_controller;
+    if(c==null || !c.value.isInitialized ||
+       size.width<=0 || size.height<=0 || _recording)return;
+    final normalized=Offset(
+      (point.dx/size.width).clamp(0.0,1.0).toDouble(),
+      (point.dy/size.height).clamp(0.0,1.0).toDouble());
+    try{await c.setFocusPoint(normalized);}catch(_){}
+    try{await c.setExposurePoint(normalized);}catch(_){}
+  }
+
+  void _startZoom(ScaleStartDetails details){_zoomStart=_currentZoom;}
+  void _zoomCamera(ScaleUpdateDetails details) {
+    final c=_controller;
+    if(c==null || !c.value.isInitialized ||
+       _capturedClip!=null || _capturedBytes!=null || _maxZoom<=_minZoom)return;
+    final value=(_zoomStart*details.scale).clamp(_minZoom,_maxZoom).toDouble();
+    if((value-_currentZoom).abs()<0.05)return;
+    _currentZoom=value;
+    unawaited(c.setZoomLevel(value).catchError((_){ }));
   }
 
   Future<void> _toggleFlash() async {
@@ -855,7 +885,14 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
 
     final controller = _controller;
     if (controller != null && controller.value.isInitialized) {
-      return _CoverCameraPreview(controller: controller);
+      return LayoutBuilder(builder:(context,constraints)=>GestureDetector(
+        behavior:HitTestBehavior.translucent,
+        onTapUp:(tap)=>unawaited(_focusAt(
+          tap.localPosition,constraints.biggest)),
+        onScaleStart:_startZoom,
+        onScaleUpdate:_zoomCamera,
+        child:_CoverCameraPreview(controller:controller),
+      ));
     }
 
     if (_cameraError != null) {
