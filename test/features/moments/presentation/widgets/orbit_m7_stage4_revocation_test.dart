@@ -1,0 +1,64 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:orbit_ui/features/moments/data/orbit_moment_repository.dart';
+import 'package:orbit_ui/features/moments/presentation/screens/orbit_live_moment_viewer.dart';
+
+final class _FakeMoments extends OrbitMomentRepository {
+  bool authorized=true;
+  static final Uint8List _pixel=Uint8List.fromList(base64Decode(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAOEGFykAAAAASUVORK5CYII='));
+
+  @override
+  Future<bool> remainsAuthorized(OrbitLiveMoment moment) async => authorized;
+
+  @override
+  Future<Uint8List> photo(OrbitLiveMoment moment,{String variant='thumbnail'}) async =>
+    Uint8List.fromList(_pixel);
+
+  @override
+  Future<String?> caption(OrbitLiveMoment moment) async => 'Private Moment caption';
+
+  @override
+  Future<void> view(OrbitLiveMoment moment) async {}
+}
+
+void main() {
+  testWidgets('Stage 4 hides decrypted viewer content on audience revocation',
+      (tester) async {
+    final repo=_FakeMoments();
+    final item=OrbitLiveMoment(id:'moment-test-uuid',creatorId:'owner-uuid',
+      mediaId:'media-test-uuid',contextId:'friends',
+      publishedAt:DateTime.utc(2026,10,25));
+    await tester.pumpWidget(MaterialApp(home:OrbitLiveMomentViewer(
+      moment:item,repository:repo,author:'Orbit author')));
+    await tester.pumpAndSettle();
+    expect(find.text('Private Moment caption'),findsOneWidget);
+    repo.authorized=false;
+    await tester.pump(const Duration(seconds:21));
+    await tester.pumpAndSettle();
+    expect(find.text('Private Moment caption'),findsNothing);
+    expect(find.textContaining('unavailable or access has changed'),findsOneWidget);
+    expect(find.byType(Image),findsNothing);
+  });
+
+  testWidgets('Stage 4 evicts visible decrypted caption on app background',
+      (tester) async {
+    final repo=_FakeMoments();
+    final item=OrbitLiveMoment(id:'moment-test-uuid',creatorId:'owner-uuid',
+      mediaId:'media-test-uuid',contextId:'self',
+      publishedAt:DateTime.utc(2026,10,25));
+    await tester.pumpWidget(MaterialApp(home:OrbitLiveMomentViewer(
+      moment:item,repository:repo,author:'You')));
+    await tester.pumpAndSettle();
+    expect(find.text('Private Moment caption'),findsOneWidget);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+    expect(find.text('Private Moment caption'),findsNothing);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(find.text('Private Moment caption'),findsOneWidget);
+  });
+}
