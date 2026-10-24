@@ -13,9 +13,11 @@ import '../screens/orbit_live_moment_viewer.dart';
 /// The authenticated replacement for MomentsScreen.demo. It passes real
 /// server-authorized data to the existing styled MomentsScreen only.
 class OrbitLiveMomentsScreen extends StatefulWidget {
-  const OrbitLiveMomentsScreen({required this.onTabSelected,this.onAddPressed,super.key});
+  const OrbitLiveMomentsScreen({required this.onTabSelected,this.onAddPressed,
+    this.circleId,this.profileId,super.key});
   final ValueChanged<int> onTabSelected;
   final VoidCallback? onAddPressed;
+  final String? circleId, profileId;
   @override
   State<OrbitLiveMomentsScreen> createState()=>_OrbitLiveMomentsScreenState();
 }
@@ -40,8 +42,12 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> {
   Future<void> _load() async {
     if(mounted)setState((){_busy=true;_error=null;});
     try {
-      final moments=await _repo.feed(maxItems:30);
-      final rail=await _repo.feed(rail:true,maxItems:20);
+      final moments=await _repo.feed(maxItems:30,
+        circleId:widget.circleId,profileId:widget.profileId);
+      final rail=widget.circleId!=null||widget.profileId!=null
+        ? moments.where((m)=>DateTime.now().difference(m.publishedAt)
+          <const Duration(hours:24)).take(20).toList(growable:false)
+        : await _repo.feed(rail:true,maxItems:20);
       OrbitMomentAudienceOptions options;
       try {options=await _repo.audienceOptions();}
       catch(_){options=const OrbitMomentAudienceOptions([],[],'Nobody');}
