@@ -222,8 +222,8 @@ class OrbitEncryptedClipStager {
     final peaks=levels.isEmpty?const [0.02]:levels;
     for(var i=0;i<32;i++){
       final level=peaks[(i*peaks.length/32).floor()
-        .clamp(0,peaks.length-1)].clamp(0.01,1.0);
-      final h=(level*72).round().clamp(2,72);
+        .clamp(0,peaks.length-1).toInt()].clamp(0.01,1.0);
+      final h=(level*72).round().clamp(2,72).toInt();
       final x=8+i*10;
       img.drawLine(bitmap,x1:x,y1:48-h~/2,x2:x,y2:48+h~/2,
         color:img.ColorRgb8(79,55,140),thickness:4);
