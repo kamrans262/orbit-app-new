@@ -22,10 +22,13 @@ class MomentDrawStroke {
 class MomentPhotoEdit {
   const MomentPhotoEdit({
     this.filter=MomentFilter.natural,
+    this.beautyStrength=0,
     this.text='',
     this.strokes=const [],
   });
   final MomentFilter filter;
+  /// Optional bounded, subtle local smoothing. Strictly off by default.
+  final double beautyStrength;
   final String text;
   final List<MomentDrawStroke> strokes;
 }
@@ -34,6 +37,10 @@ abstract final class MomentPhotoProcessor {
   static Uint8List render(Uint8List source,MomentPhotoEdit edit){
     if(source.isEmpty || source.length>26*1024*1024){
       throw const FormatException('Photo exceeds the secure editor size limit.');
+    }
+    if(!edit.beautyStrength.isFinite || edit.beautyStrength<0 ||
+        edit.beautyStrength>0.25){
+      throw const FormatException('Beauty adjustment outside safe range.');
     }
     final decoded=img.decodeImage(source);
     if(decoded==null)throw const FormatException('Unsupported photo format.');
@@ -72,6 +79,18 @@ abstract final class MomentPhotoProcessor {
           case MomentFilter.soft:rr=(r*.78+l*.22+6).round();gg=(g*.78+l*.22+6).round();bb=(b*.78+l*.22+6).round();break;
           case MomentFilter.vibrant:rr=(l+(r-l)*1.30).round();gg=(l+(g-l)*1.30).round();bb=(l+(b-l)*1.30).round();break;
           case MomentFilter.blackAndWhite:rr=l;gg=l;bb=l;break;
+        }
+        if(edit.beautyStrength>0 && x>0 && y>0 && x<w-1 && y<h-1){
+          // Small neighborhood blend, never alter the face shape or identity.
+          // The source is already baked/oriented and is never written to disk.
+          final a=originalPixels.getPixel(x-1,y);
+          final b=originalPixels.getPixel(x+1,y);
+          final c=originalPixels.getPixel(x,y-1);
+          final d=originalPixels.getPixel(x,y+1);
+          final blend=edit.beautyStrength;
+          rr=(rr*(1-blend)+(a.r+b.r+c.r+d.r)*blend/4).round();
+          gg=(gg*(1-blend)+(a.g+b.g+c.g+d.g)*blend/4).round();
+          bb=(bb*(1-blend)+(a.b+b.b+c.b+d.b)*blend/4).round();
         }
         image.setPixelRgb(x,y,rr.clamp(0,255).toInt(),
           gg.clamp(0,255).toInt(),bb.clamp(0,255).toInt());
