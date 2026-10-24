@@ -24,12 +24,14 @@ class OrbitLiveMomentViewer extends StatefulWidget {
   State<OrbitLiveMomentViewer> createState()=>_OrbitLiveMomentViewerState();
 }
 
-class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> {
+class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with WidgetsBindingObserver {
   Uint8List? _photo;
   String? _caption;
   String? _error;
   bool _loading=true, _liked=false, _sending=false, _paused=false;
   Timer? _advance;
+  Timer? _revalidation;
+  int _loadEpoch=0;
   late int _index;
   OrbitLiveMoment get _current => widget.playlist.isEmpty
       ? widget.moment : widget.playlist[_index];
@@ -37,13 +39,65 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> {
   @override
   void initState(){
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _index=widget.playlist.isEmpty?0:widget.initialIndex.clamp(0,widget.playlist.length-1);
+    _revalidation=Timer.periodic(const Duration(seconds:20),(_){
+      if(!mounted || _loading || _error!=null ||
+          WidgetsBinding.instance.lifecycleState!=AppLifecycleState.resumed ||
+          ModalRoute.of(context)?.isCurrent!=true)return;
+      unawaited(_checkAuthorization());
+    });
     unawaited(_load());
   }
+
+  void _forgetPhoto(){
+    final bytes=_photo;
+    if(bytes!=null)unawaited(MemoryImage(bytes).evict());
+    _photo=null;
+    _caption=null;
+  }
+  Future<void> _checkAuthorization() async {
+    if(!mounted || _loading)return;
+    final moment=_current;
+    _advance?.cancel();
+    setState(()=>_loading=true); // Hide decrypted content while policy is checked.
+    final valid=await widget.repository.remainsAuthorized(moment);
+    if(!mounted || _current.id!=moment.id)return;
+    if(!valid){
+      setState((){
+        ++_loadEpoch;
+        _forgetPhoto();
+        _loading=false;
+        _error='This encrypted Moment is unavailable or access has changed.';
+      });
+    }else{
+      setState(()=>_loading=false);
+      _schedule();
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if(state==AppLifecycleState.inactive || state==AppLifecycleState.paused){
+      _advance?.cancel();
+      ++_loadEpoch;
+      if(mounted)setState((){
+        _forgetPhoto();
+        _loading=true;
+        _error=null;
+      });
+    }else if(state==AppLifecycleState.resumed && mounted){
+      unawaited(_load());
+    }
+  }
+
   @override
   void dispose(){
+    ++_loadEpoch;
     _advance?.cancel();
-    _photo=null;
+    _revalidation?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _forgetPhoto();
     super.dispose();
   }
   void _schedule(){
@@ -61,7 +115,8 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> {
     }
     _advance?.cancel();
     setState(() {
-      _index=to;_photo=null;_caption=null;_loading=true;_liked=false;
+      _forgetPhoto();
+      _index=to;_loading=true;_liked=false;
       _error=null;
     });
     unawaited(_load());
@@ -75,17 +130,36 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> {
     _move(tap.localPosition.dx<constraints.maxWidth/2?-1:1);
   }
   Future<void> _load() async {
+    final epoch=++_loadEpoch;
+    if(!mounted)return;
+    setState((){
+      _advance?.cancel();
+      _forgetPhoto();
+      _loading=true;
+      _error=null;
+    });
     try{
       final current=_current;
+      // A stale story response cannot retain access if the policy changed.
+      if(!await widget.repository.remainsAuthorized(current)){
+        throw StateError('Audience authorization expired');
+      }
       final photo=await widget.repository.photo(current,variant:'original');
       final caption=await widget.repository.caption(current);
       await widget.repository.view(current);
-      if(mounted && _current.id==current.id){
-        setState((){_photo=photo;_caption=caption;_loading=false;});
+      if(mounted && epoch==_loadEpoch && _current.id==current.id){
+        setState((){
+          _photo=photo;
+          _caption=caption;
+          _loading=false;
+        });
         _schedule();
+      }else{
+        unawaited(MemoryImage(photo).evict());
       }
     }catch(_){
-      if(mounted)setState((){
+      if(mounted && epoch==_loadEpoch)setState((){
+        _forgetPhoto();
         _error='This encrypted Moment is unavailable or access has changed.';
         _loading=false;
       });
