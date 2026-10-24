@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../widgets/orbit_circle_confirmation.dart';
+import '../widgets/orbit_circle_sheet.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_screen_header.dart';
+import '../../../../core/widgets/app_action_row.dart';
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../../auth/data/orbit_identity_client.dart';
 import '../../data/orbit_circle_repository.dart';
@@ -86,22 +88,23 @@ class _OrbitLiveCircleManageScreenState extends State<OrbitLiveCircleManageScree
       'star':Icons.star_border_rounded,'music':Icons.music_note_rounded,
       'location':Icons.location_on_outlined,'sunny':Icons.wb_sunny_outlined,
     };
-    final choice=await showModalBottomSheet<String>(context:context,
-      backgroundColor:AppColors.background,
-      shape:const RoundedRectangleBorder(
-        borderRadius:BorderRadius.vertical(top:Radius.circular(28)),
-      ),
-      builder:(sheet)=>SafeArea(child:Padding(padding:const EdgeInsets.all(20),
-        child:Wrap(spacing:12,runSpacing:12,children:[
-          for(final entry in icons.entries)
-            ActionChip(
-              avatar:Icon(entry.value,size:18,color:const Color(0xFF7C3AED)),
-              label:Text(entry.key,style:const TextStyle(
-                fontFamily:AppTypography.fontFamily)),
-              onPressed:()=>Navigator.pop(sheet,entry.key),
+    final choice = await showOrbitCircleSheet<String>(
+      context: context,
+      title: 'Choose Circle icon',
+      builder: (sheet) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final entry in icons.entries) ...[
+            OrbitCircleSheetAction(
+              title: entry.key[0].toUpperCase() + entry.key.substring(1),
+              icon: entry.value,
+              onTap: () => Navigator.of(sheet).pop(entry.key),
             ),
-        ]),
-      )));
+            const SizedBox(height: 10),
+          ],
+        ],
+      ),
+    );
     if(choice==null || choice==_circle.iconKey)return;
     try {
       final updated=await _repo.update(_circle.id,icon:choice);
@@ -193,6 +196,62 @@ class _OrbitLiveCircleManageScreenState extends State<OrbitLiveCircleManageScree
     }catch(e){_errorNotice(e);}
   }
 
+  Future<void> _manageMember(OrbitCircleMember member) async {
+    if (member.role == 'owner') return;
+    final canRemove = _circle.can('remove_members');
+    final canChangeRole = _circle.can('change_roles');
+    final canTransfer = _circle.can('transfer_owner') &&
+        member.role != 'restricted';
+    if (!canRemove && !canChangeRole && !canTransfer) return;
+
+    final action = await showOrbitCircleSheet<String>(
+      context: context,
+      title: member.name,
+      builder: (sheet) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          AppActionRow(
+            leadingIcon: Icons.person_outline_rounded,
+            iconBackgroundColor: const Color(0xFFF2EAFE),
+            leadingIconColor: AppColors.primaryEnd,
+            title: member.username.isEmpty
+                ? member.role.toUpperCase()
+                : '@${member.username} • ${member.role.toUpperCase()}',
+          ),
+          const SizedBox(height: 12),
+          if (canChangeRole)
+            for (final role in const ['admin', 'member', 'restricted']) ...[
+              OrbitCircleSheetAction(
+                title: 'Set ${role.toUpperCase()}',
+                icon: Icons.manage_accounts_outlined,
+                onTap: () => Navigator.of(sheet).pop('role:$role'),
+              ),
+              const SizedBox(height: 10),
+            ],
+          if (canTransfer) ...[
+            OrbitCircleSheetAction(
+              title: 'Transfer ownership',
+              icon: Icons.swap_horiz_rounded,
+              onTap: () => Navigator.of(sheet).pop('transfer'),
+            ),
+            const SizedBox(height: 10),
+          ],
+          if (canRemove)
+            OrbitCircleSheetAction(
+              title: 'Remove member',
+              icon: Icons.person_remove_outlined,
+              destructive: true,
+              onTap: () => Navigator.of(sheet).pop('remove'),
+            ),
+        ],
+      ),
+    );
+    if (!mounted || action == null) return;
+    if (action == 'remove') return _remove(member);
+    if (action == 'transfer') return _transfer(member);
+    if (action.startsWith('role:')) return _changeRole(member, action.substring(5));
+  }
+
   Widget _item(IconData icon,String title,VoidCallback? callback,
       {String? subtitle,Color? color})=>Card(
       elevation:0,color:Colors.white,
@@ -260,22 +319,16 @@ class _OrbitLiveCircleManageScreenState extends State<OrbitLiveCircleManageScree
             title:Text(member.name,style:const TextStyle(
               fontFamily:AppTypography.fontFamily,fontWeight:FontWeight.w500)),
             subtitle:Text('${member.username.isEmpty ? '' : '@${member.username} • '}${member.role}'),
-            trailing:_circle.can('remove_members') && member.role!='owner'
-              ? PopupMenuButton<String>(
-                  tooltip:'Manage member',
-                  onSelected:(choice){
-                    if(choice=='remove') {_remove(member);return;}
-                    if(choice=='transfer') {_transfer(member);return;}
-                    _changeRole(member,choice);
-                  },
-                  itemBuilder:(_)=>[
-                    if(_circle.can('change_roles'))
-                      for(final role in const ['admin','member','restricted'])
-                        PopupMenuItem(value:role,child:Text('Set ${role.toUpperCase()}')),
-                    if(_circle.can('transfer_owner') && member.role!='restricted')
-                      const PopupMenuItem(value:'transfer',child:Text('Transfer ownership')),
-                    const PopupMenuItem(value:'remove',child:Text('Remove member')),
-                  ],
+            trailing:member.role!='owner' &&
+              (_circle.can('remove_members') ||
+               _circle.can('change_roles') ||
+               _circle.can('transfer_owner'))
+              ? IconButton(
+                  key: Key('circle_member_more_${member.id}'),
+                  tooltip: 'Manage ${member.name}',
+                  icon: const Icon(Icons.more_horiz_rounded,
+                      color: Color(0xFF0F1724)),
+                  onPressed: () => _manageMember(member),
                 ) : null,
           )),
         const SizedBox(height:20),
