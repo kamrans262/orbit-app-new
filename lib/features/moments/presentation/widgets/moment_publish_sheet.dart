@@ -2,6 +2,9 @@ import 'dart:io';
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
+import '../../data/moment_photo_processor.dart';
+
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
@@ -17,6 +20,9 @@ typedef OrbitPrivatePhotoSaver = Future<void> Function(
 abstract final class MomentPublishKeys {
   static const sheet = Key('moment_publish_sheet');
   static const review = Key('moment_publish_review');
+  static const photoFilter = Key('moment_publish_photo_filter');
+  static const overlayText = Key('moment_publish_overlay_text');
+  static const photoDrawing = Key('moment_publish_photo_draw');
   static const caption = Key('moment_publish_caption');
   static const chooseAudience = Key('moment_publish_choose_audience');
   static const audience = Key('moment_publish_audience');
@@ -104,6 +110,64 @@ class MomentPublishSheet extends StatefulWidget {
 
 class _MomentPublishSheetState extends State<MomentPublishSheet> {
   final TextEditingController _caption = TextEditingController();
+  final TextEditingController _overlayText=TextEditingController();
+  MomentFilter _filter=MomentFilter.natural;
+  bool _drawing=false;
+  final List<MomentDrawStroke> _strokes=[];
+  List<Offset> _activeStroke=[];
+  Uint8List? _editedPreview;
+  Timer? _previewDebounce;
+  int _previewGeneration=0;
+  bool _previewBusy=false;
+
+  Future<Uint8List> _encodeImage() async {
+    if(widget.mediaKind!='image')return widget.photoBytes;
+    final edit=MomentPhotoEdit(filter:_filter,text:_overlayText.text,
+      strokes:List<MomentDrawStroke>.unmodifiable(_strokes));
+    // CPU-heavy image transformations stay off the UI isolate.
+    return compute(_renderMomentEdits,(widget.photoBytes,edit));
+  }
+  void _queuePreview(){
+    if(widget.mediaKind!='image')return;
+    _previewDebounce?.cancel();
+    final generation=++_previewGeneration;
+    _previewDebounce=Timer(const Duration(milliseconds:260),()async{
+      if(!mounted)return;
+      setState(()=>_previewBusy=true);
+      try{
+        final encoded=await _encodeImage();
+        if(mounted && generation==_previewGeneration){
+          setState(()=>_editedPreview=encoded);
+        }
+      }catch(_){
+        if(mounted && generation==_previewGeneration){
+          setState(()=>_editedPreview=null);
+        }
+      }finally{
+        if(mounted && generation==_previewGeneration){
+          setState(()=>_previewBusy=false);
+        }
+      }
+    });
+  }
+  void _beginStroke(Offset position,Size size){
+    if(!_drawing || size.width<=0 || size.height<=0)return;
+    setState(()=>_activeStroke=[_normalized(position,size)]);
+  }
+  void _extendStroke(Offset position,Size size){
+    if(!_drawing || _activeStroke.isEmpty)return;
+    setState(()=>_activeStroke.add(_normalized(position,size)));
+  }
+  Offset _normalized(Offset position,Size size)=>Offset(
+    (position.dx/size.width).clamp(0.0,1.0).toDouble(),
+    (position.dy/size.height).clamp(0.0,1.0).toDouble());
+  void _finishStroke(){
+    if(_activeStroke.length>1){
+      _strokes.add(MomentDrawStroke(List<Offset>.unmodifiable(_activeStroke)));
+      _queuePreview();
+    }
+    if(mounted)setState(()=>_activeStroke=[]);
+  }
   final Set<String> _selectedIds = <String>{};
   _PublishStep _step = _PublishStep.review;
   double _progress = 0;
@@ -146,6 +210,8 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
 
   @override
   void dispose() {
+    _previewDebounce?.cancel();
+    _overlayText.dispose();
     _caption.dispose();
     super.dispose();
   }
@@ -180,8 +246,11 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
           setState(() => _progress = progress);
         }
       } else {
+        final edited=widget.mediaKind=='image'?
+          await _encodeImage():widget.photoBytes;
+        if(!mounted)return;
         final request = MomentPublishRequest(
-          photoBytes: widget.photoBytes,
+          photoBytes: edited,
           mediaFile:widget.mediaFile,
           mediaKind:widget.mediaKind,
           durationMs:widget.durationMs,
@@ -320,12 +389,76 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
                     '${(widget.durationMs!/1000).ceil()} seconds',
                     style:AppTypography.bodyMuted),
                 ]))
-              : Image.memory(
-                  widget.photoBytes,fit:BoxFit.contain,
-                  errorBuilder:(_,error,stack)=>const Center(
-                    child:Text('Unable to preview this photo'))),
+              : LayoutBuilder(builder:(context,size)=>Stack(
+                fit:StackFit.expand,
+                children:[
+                  Image.memory(_editedPreview??widget.photoBytes,
+                    fit:BoxFit.fill,
+                    errorBuilder:(_,error,stack)=>const Center(
+                      child:Text('Unable to preview this photo'))),
+                  if(_drawing)GestureDetector(
+                    behavior:HitTestBehavior.opaque,
+                    onPanStart:(details)=>_beginStroke(
+                      details.localPosition,size.biggest),
+                    onPanUpdate:(details)=>_extendStroke(
+                      details.localPosition,size.biggest),
+                    onPanEnd:(_)=>_finishStroke(),
+                    child:CustomPaint(
+                      painter:_MomentStrokePainter([
+                        ..._strokes,MomentDrawStroke(_activeStroke)]),
+                    )),
+                  if(_previewBusy)const Align(
+                    alignment:Alignment.topRight,
+                    child:Padding(padding:EdgeInsets.all(8),
+                      child:SizedBox(width:14,height:14,
+                        child:CircularProgressIndicator(strokeWidth:2))),
+                  ),
+                ],
+              )),
           ),
         ),
+        if(widget.mediaKind=='image') ...[
+          const SizedBox(height:10),
+          SizedBox(height:43,child:ListView(
+            key:MomentPublishKeys.photoFilter,
+            scrollDirection:Axis.horizontal,
+            children:MomentFilter.values.map((filter)=>Padding(
+              padding:const EdgeInsets.only(right:8),
+              child:ChoiceChip(
+                label:Text(filter.label,style:AppTypography.body),
+                selected:_filter==filter,
+                selectedColor:AppColors.background,
+                onSelected:(_){
+                  setState(()=>_filter=filter);
+                  _queuePreview();
+                }),
+            )).toList(),
+          )),
+          const SizedBox(height:8),
+          TextField(
+            key:MomentPublishKeys.overlayText,
+            controller:_overlayText,
+            maxLength:80,maxLines:1,
+            decoration:const InputDecoration(
+              hintText:'Text on photo (optional)'),
+            style:AppTypography.body,
+            onChanged:(_)=>_queuePreview(),
+          ),
+          Row(children:[
+            OutlinedButton.icon(
+              key:MomentPublishKeys.photoDrawing,
+              onPressed:()=>setState(()=>_drawing=!_drawing),
+              icon:Icon(_drawing?Icons.check:Icons.draw_outlined),
+              label:Text(_drawing?'Finish drawing':'Draw on photo')),
+            const SizedBox(width:8),
+            if(_strokes.isNotEmpty)TextButton(
+              onPressed:(){
+                setState(()=>_strokes.removeLast());
+                _queuePreview();
+              },
+              child:const Text('Undo')),
+          ]),
+        ],
         const SizedBox(height: 16),
         TextField(
           key: MomentPublishKeys.caption,
@@ -590,4 +723,33 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
       ),
     );
   }
+}
+
+
+Uint8List _renderMomentEdits((Uint8List,MomentPhotoEdit) args)=>
+  MomentPhotoProcessor.render(args.$1,args.$2);
+
+class _MomentStrokePainter extends CustomPainter{
+  const _MomentStrokePainter(this.strokes);
+  final List<MomentDrawStroke> strokes;
+  @override
+  void paint(Canvas canvas,Size size){
+    final paint=Paint()
+      ..color=Colors.white
+      ..strokeWidth=3
+      ..style=PaintingStyle.stroke
+      ..strokeCap=StrokeCap.round;
+    for(final stroke in strokes){
+      if(stroke.points.length<2)continue;
+      final path=Path();
+      final first=stroke.points.first;
+      path.moveTo(first.dx*size.width,first.dy*size.height);
+      for(final p in stroke.points.skip(1)){
+        path.lineTo(p.dx*size.width,p.dy*size.height);
+      }
+      canvas.drawPath(path,paint);
+    }
+  }
+  @override
+  bool shouldRepaint(covariant _MomentStrokePainter old)=>true;
 }
