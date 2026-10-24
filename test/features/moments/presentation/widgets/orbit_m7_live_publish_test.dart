@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -93,6 +94,57 @@ void main() {
     expect(saved, isTrue);
     expect(published, isFalse);
     expect(find.text('Photo saved privately'), findsOneWidget);
+  });
+
+  testWidgets('M7 publishing plus M6 private save still exposes real audience choices',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(MaterialApp(home:Scaffold(
+      body:Builder(builder:(context)=>TextButton(
+        onPressed:()=>showMomentPublishingSheet(context,
+          photoBytes:Uint8List.fromList([1,2,3]),
+          circles:const [MomentAudienceCircle(id:'circle1',name:'Approved Circle')],
+          friends:const [],privacyAudience:'My Circle',
+          publisher:(request,progress) async =>
+            const MomentPublishReceipt(momentId:'server-confirmed'),
+          privateSaver:(bytes,progress) async {}),
+        child:const Text('Open'))))));
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(MomentPublishKeys.chooseAudience),findsOneWidget);
+    await tester.ensureVisible(find.byKey(MomentPublishKeys.chooseAudience));
+    await tester.tap(find.byKey(MomentPublishKeys.chooseAudience));
+    await tester.pumpAndSettle();
+    expect(find.text('Selected Circles'),findsOneWidget);
+    expect(find.text('Approved Circle'),findsOneWidget);
+  });
+
+  testWidgets('Video clip remains a video in the existing publish sheet',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 760));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final source=File(Directory.systemTemp.path+'/orbit-m7-widget-video.mp4');
+    await source.writeAsBytes([1,2,3]);
+    addTearDown(() async { if(await source.exists())await source.delete(); });
+    MomentPublishRequest? captured;
+    await tester.pumpWidget(MaterialApp(home:Scaffold(
+      body:Builder(builder:(context)=>TextButton(
+        onPressed:()=>showMomentPublishingSheet(context,
+          photoBytes:Uint8List(0),mediaFile:source,mediaKind:'video',
+          durationMs:5000,circles:const [],privacyAudience:'Nobody',
+          publisher:(request,progress) async {
+            captured=request;
+            return const MomentPublishReceipt(momentId:'server-confirmed');
+          }),child:const Text('Open'))))));
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    expect(find.text('Video ready to encrypt'),findsOneWidget);
+    await tester.tap(find.text('Publish Moment'));
+    await tester.pumpAndSettle();
+    expect(captured?.mediaKind,'video');
+    expect(captured?.durationMs,5000);
+    expect(captured?.mediaFile?.path,source.path);
   });
 
 }
