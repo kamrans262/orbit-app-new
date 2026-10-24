@@ -5,6 +5,7 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_text_field.dart';
 import '../../../../core/widgets/app_screen_header.dart';
+import '../../../../core/popups/orbit_popup_modal.dart';
 import '../widgets/welcome_action_panel.dart';
 import '../widgets/welcome_layout_metrics.dart';
 
@@ -122,17 +123,23 @@ class _CreateCircleScreenState extends State<CreateCircleScreen> {
     setState(() => _saving = true);
     try {
       // Explicit privacy review must precede the server mutation, not follow it.
-      final consent = await showDialog<bool>(context:context,builder:(dialog)=>
-        AlertDialog(backgroundColor:Colors.white,
-          title:const Text('Create private Circle?'),
-          content:const Text('Only invited people can join after accepting. '
+      final consent = await showOrbitPopupModal<bool>(
+        context:context,
+        builder:(dialog)=>OrbitPopupModal(
+          title:'Create private Circle?',
+          description:'Only invited people can join after accepting. '
             'Live location, presence, Moments, Ping, chat and SOS sharing all start OFF. '
-            'You can invite friends after the Circle is created.'),
-          actions:[
-            TextButton(onPressed:()=>Navigator.pop(dialog,false),child:const Text('Cancel')),
-            TextButton(onPressed:()=>Navigator.pop(dialog,true),child:const Text('Create')),
-          ],
-        ));
+            'You can invite friends after the Circle is created.',
+          primaryAction:OrbitPopupPrimaryButton(
+            label:'Create',
+            onPressed:()=>Navigator.of(dialog).pop(true),
+          ),
+          secondaryAction:OrbitPopupTextButton(
+            label:'Cancel',
+            onPressed:()=>Navigator.of(dialog).pop(false),
+          ),
+        ),
+      );
       if(consent != true || !mounted)return;
       final color = _colors[_selectedColorIndex].fill;
       final hex = '#${(color.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}';
