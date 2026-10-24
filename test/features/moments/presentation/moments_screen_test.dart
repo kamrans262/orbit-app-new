@@ -143,37 +143,31 @@ void main() {
         ).first,
       );
       await tester.pumpAndSettle();
-      final like = find.bySemanticsLabel('Like moment');
-      // Scroll precisely to the interactive control in this lazy SliverList,
-      // rather than assuming a fixed card/image height on compact screens.
-      final feedScroll = find.descendant(
-        of: find.byKey(MomentsKeys.feed),
-        matching: find.byType(Scrollable),
-      ).first;
-      await tester.scrollUntilVisible(
-        like,
-        120,
-        maxScrolls: 30,
-        scrollable: feedScroll,
+      // Semantics *nodes* below the image are culled outside the viewport,
+      // while the Semantics widget remains in the mounted image card.
+      // Locate the real accessible action widget, then bring it into view.
+      Finder action(String label) => find.byWidgetPredicate(
+        (widget) => widget is Semantics && widget.properties.label == label,
       );
-      await tester.pumpAndSettle();
+      final like = action('Like moment');
       expect(like, findsOneWidget);
       await tester.ensureVisible(like);
+      await tester.pumpAndSettle();
       await tester.pumpAndSettle();
       expect(like, findsOneWidget);
       await tester.tap(like);
       await tester.pump();
       expect(liked, isTrue);
-      expect(find.bySemanticsLabel('Unlike moment'), findsOneWidget);
+      expect(action('Unlike moment'), findsOneWidget);
 
-      final bookmark = find.bySemanticsLabel('Bookmark moment');
+      final bookmark = action('Bookmark moment');
       expect(bookmark, findsOneWidget);
       await tester.ensureVisible(bookmark);
       await tester.pumpAndSettle();
       await tester.tap(bookmark);
       await tester.pump();
       expect(bookmarked, isTrue);
-      expect(find.bySemanticsLabel('Remove bookmark'), findsOneWidget);
+      expect(action('Remove bookmark'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
