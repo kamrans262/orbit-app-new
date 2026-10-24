@@ -8,6 +8,17 @@ import 'package:orbit_ui/features/moments/presentation/screens/orbit_live_moment
 
 final class _FakeMoments extends OrbitMomentRepository {
   bool authorized=true;
+  String? activeUser;
+  bool removedMoment=false;
+
+  @override
+  Future<String?> currentUserId() async => activeUser;
+
+  @override
+  Future<void> delete(OrbitLiveMoment moment) async {
+    removedMoment=true;
+  }
+
   static final Uint8List _pixel=Uint8List.fromList(base64Decode(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAOEGFykAAAAASUVORK5CYII='));
 
@@ -26,6 +37,35 @@ final class _FakeMoments extends OrbitMomentRepository {
 }
 
 void main() {
+  testWidgets('M7 shows owner-only deletion and never offers self-account report',
+      (tester) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    final repo=_FakeMoments()..activeUser='owner-uuid';
+    final item=OrbitLiveMoment(id:'moment-owned',creatorId:'owner-uuid',
+      mediaId:'media-test-uuid',contextId:'self',
+      publishedAt:DateTime.utc(2026,10,25));
+    await tester.pumpWidget(MaterialApp(home:OrbitLiveMomentViewer(
+      moment:item,repository:repo,author:'You')));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Delete this Moment'),findsOneWidget);
+    expect(find.byTooltip('View Moment viewers'),findsOneWidget);
+    expect(find.byTooltip('Report account'),findsNothing);
+  });
+
+  testWidgets('M7 non-owner sees reporting actions but never deletion',
+      (tester) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    final repo=_FakeMoments()..activeUser='someone-else';
+    final item=OrbitLiveMoment(id:'moment-shared',creatorId:'owner-uuid',
+      mediaId:'media-test-uuid',contextId:'friends',
+      publishedAt:DateTime.utc(2026,10,25));
+    await tester.pumpWidget(MaterialApp(home:OrbitLiveMomentViewer(
+      moment:item,repository:repo,author:'Orbit member')));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Delete this Moment'),findsNothing);
+    expect(find.byTooltip('Report account'),findsOneWidget);
+  });
+
   testWidgets('Stage 4 hides decrypted viewer content on audience revocation',
       (tester) async {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
