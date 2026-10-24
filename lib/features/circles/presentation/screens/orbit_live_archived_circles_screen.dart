@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/orbit_circle_confirmation.dart';
+
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../core/widgets/app_screen_header.dart';
 import '../../../auth/data/orbit_identity_client.dart';
 import '../../data/orbit_circle_repository.dart';
 
@@ -42,15 +45,13 @@ class _OrbitLiveArchivedCirclesScreenState extends State<OrbitLiveArchivedCircle
   }
 
   Future<void> _restore(OrbitCircle circle) async {
-    final confirmed=await showDialog<bool>(context:context,builder:(d)=>
-      AlertDialog(backgroundColor:Colors.white,
-        title:const Text('Restore Circle?'),
-        content:Text('Restore ${circle.name}? Sharing remains OFF, '
-          'and previously revoked invitations will not become valid again.'),
-        actions:[
-          TextButton(onPressed:()=>Navigator.pop(d,false),child:const Text('Cancel')),
-          TextButton(onPressed:()=>Navigator.pop(d,true),child:const Text('Restore')),
-        ]));
+    final confirmed=await showOrbitCircleConfirmation(
+      context:context,
+      title:'Restore Circle?',
+      description:'Restore ${circle.name}? Sharing remains OFF, '
+        'and previously revoked invitations will not become valid again.',
+      confirmLabel:'Restore',
+    );
     if(confirmed!=true)return;
     try{
       await _repo.restore(circle.id);
@@ -65,9 +66,14 @@ class _OrbitLiveArchivedCirclesScreenState extends State<OrbitLiveArchivedCircle
   @override
   Widget build(BuildContext context)=>Scaffold(
     backgroundColor:AppColors.background,
-    appBar:AppBar(backgroundColor:AppColors.background,
-      title:const Text('Archived Circles',style:TextStyle(
-        fontFamily:AppTypography.fontFamily,fontWeight:FontWeight.w600))),
+    appBar:AppBar(
+      automaticallyImplyLeading:false,
+      backgroundColor:AppColors.background,
+      elevation:0,
+      toolbarHeight:68,
+      titleSpacing:20,
+      title:const AppScreenHeader(title:'Archived Circles',prominent:true),
+    ),
     body:_loading ? const Center(child:CircularProgressIndicator())
       : _error!=null ? Center(child:Column(mainAxisSize:MainAxisSize.min,children:[
         Text(_error!,textAlign:TextAlign.center),
