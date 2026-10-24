@@ -57,15 +57,14 @@ void main() {
       expect(tester.getSize(sent).width,
           moreOrLessEquals(original.width / 2));
 
-      // Confirm the header uses the same prominent Orbit treatment as
-      // Friends/Find Friends, including the shadowed white circle.
+      // Confirm the header matches the approved compact Orbit settings header.
       final back = tester.widget<AppCircularIconButton>(
           find.byKey(OrbitFriendRequestsKeys.backButton));
-      expect(back.size, 40);
+      expect(back.size, 30);
       expect(back.iconSize, 24);
       final title = tester.widget<Text>(
           find.byKey(OrbitFriendRequestsKeys.title));
-      expect(title.style?.fontSize, 24);
+      expect(title.style?.fontSize, 16);
 
       expect(find.text('Sender A'), findsOneWidget);
       expect(find.text('Recipient B'), findsNothing);
