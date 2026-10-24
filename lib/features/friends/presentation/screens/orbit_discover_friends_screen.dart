@@ -160,7 +160,7 @@ class _OrbitDiscoverFriendsScreenState extends State<OrbitDiscoverFriendsScreen>
         title: 'Friend invitation',
         description: 'Send a friend request to $who? This does not grant location or Circle access.',
         confirmation: 'Send request',
-      barrierDismissible: true,
+      
       );
       if (accepted != true) return;
       await _repo.redeemInvite(code);
@@ -192,7 +192,7 @@ class _OrbitDiscoverFriendsScreenState extends State<OrbitDiscoverFriendsScreen>
       title: 'Match this contact?',
       description: 'Only the one selected address or number will be checked against people who opted in. Orbit will not upload your address book.',
       confirmation: 'Find friend',
-      barrierDismissible: true,
+      
     );
     if (accepted != true) return;
     try {
