@@ -129,6 +129,8 @@ class OrbitMomentMediaStager {
   /// Uploading bytes is never equivalent to publishing an M7 Moment.
   Future<List<OrbitMediaReceipt>> retryPending({
     void Function(double fraction)? onProgress,
+    Future<void> Function(String transfer,OrbitSealedMedia original,
+      OrbitSealedMedia? derivative,String mediaId)? onRecovered,
   }) async {
     return OrbitMediaTransferGate.run(() async {
     final owner=await _identity.currentLocalSocialOwner();
@@ -191,6 +193,15 @@ class OrbitMomentMediaStager {
         audience:'only_me',recipients:const [],
         keyEnvelopes:allEnvelopes,idempotencyKey:parent.transfer);
       if(granted.isEmpty)throw StateError('Encrypted media grant not confirmed.');
+      // M7 publication uses the OS-vault-preserved account consent; a failed
+      // network commit MUST keep M6 encrypted drafts for another attempt.
+      if(onRecovered!=null){
+        OrbitSealedMedia? derivative;
+        if(refreshedChildren.isNotEmpty){
+          derivative=await _outbox.restore(refreshedChildren.first);
+        }
+        await onRecovered(parent.transfer,sealed,derivative,main.mediaId);
+      }
       for(final child in refreshedChildren){await _outbox.discard(child);}
       await _outbox.discard(parent);
     }
