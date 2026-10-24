@@ -431,13 +431,17 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   }
 
   Future<void> _handleCapturePressed() async {
-    if (_capturedBytes != null || _capturedClip!=null) {
+    if(_recording){
+      await _finishRecording();
+      return;
+    }
+    if (_capturedBytes != null || _capturedClip != null) {
       await _retake();
       return;
     }
     if(_mode!=_OrbitCaptureMode.photo){
-      if(_recording)await _finishRecording();
-      else await _beginRecording();
+      _stopWhenStarted=false;
+      await _beginRecording();
       return;
     }
     await _captureMoment();
@@ -496,6 +500,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         if(mounted && _recording)unawaited(_finishRecording());
       });
     }catch(_){
+      _stopWhenStarted=false;
       if(mounted)ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content:Text('Unable to start recording. Check camera and microphone permissions.')));
     }
@@ -531,12 +536,14 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       if(mounted)ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content:Text('Recording could not be completed.')));
     }finally{
+      _stopWhenStarted=false;
       if(mounted)setState(()=>_recording=false);
     }
   }
 
   Future<void> _pickPhotoFromGallery() async {
-    if(_isCapturing || _publishSheetOpen || _capturedBytes!=null) return;
+    if(_isCapturing || _recording || _publishSheetOpen ||
+       _capturedBytes!=null || _capturedClip!=null) return;
     setState(()=>_isCapturing=true);
     try {
       final picker=widget.galleryPicker;
@@ -644,6 +651,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       return;
     }
 
+    _stopWhenStarted=false;
     final old=_capturedClip;
     if(old!=null)await _deleteClip(old);
     setState(() {
@@ -667,8 +675,12 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     final captured = _capturedBytes;
     if(_recording){await _finishRecording();return;}
     if (captured == null && _capturedClip==null) {
-      if(_mode==_OrbitCaptureMode.photo)await _captureMoment();
-      else await _beginRecording();
+      if(_mode==_OrbitCaptureMode.photo) {
+        await _captureMoment();
+      } else {
+        _stopWhenStarted=false;
+        await _beginRecording();
+      }
       return;
     }
     // Preserve existing explicit Send integrations, including legacy tests.
