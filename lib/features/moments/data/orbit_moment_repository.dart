@@ -8,6 +8,7 @@ import '../../media/data/orbit_media_crypto.dart';
 import '../../media/data/orbit_media_recipient_keys.dart';
 import '../../media/data/orbit_media_repository.dart';
 import '../../media/data/orbit_moment_media_stager.dart';
+import '../../media/data/orbit_encrypted_clip_stager.dart';
 import '../domain/models/moment_publish_models.dart';
 
 class OrbitLiveMoment {
@@ -140,7 +141,7 @@ class OrbitMomentRepository {
     return people.toList();
   }
   Future<List<Map<String,Object?>>> _envelopes(String audience,
-      List<String> targets,OrbitSealedMedia original,OrbitSealedMedia thumbnail) async {
+      List<String> targets,OrbitSealedMedia original,OrbitSealedMedia? thumbnail) async {
     final result=<Map<String,Object?>>[];
     if(audience=='selected_circles'){
       final unique=<String>{};
@@ -153,7 +154,7 @@ class OrbitMomentRepository {
           if(!unique.add(device.id))continue;
           final single=[OrbitMediaRecipient(person.userId,[device])];
           result.addAll(await _keys.encryptEnvelopes(original,single));
-          result.addAll(await _keys.encryptEnvelopes(thumbnail,single));
+          if(thumbnail!=null)result.addAll(await _keys.encryptEnvelopes(thumbnail,single));
         }
       }
     }else{
@@ -165,7 +166,7 @@ class OrbitMomentRepository {
       if(users.isNotEmpty){
         final people=await _keys.discover(audienceKind:'selected_friends',recipientIds:users);
         result.addAll(await _keys.encryptEnvelopes(original,people));
-        result.addAll(await _keys.encryptEnvelopes(thumbnail,people));
+        if(thumbnail!=null)result.addAll(await _keys.encryptEnvelopes(thumbnail,people));
       }
     }
     if(result.isEmpty||result.length>300) {
@@ -218,32 +219,61 @@ class OrbitMomentRepository {
       throw StateError('Update Moment sharing in Privacy Settings first.');
     }
     String? id;
-    await _stager.stagePhoto(request.photoBytes,
-      onProgress:(v)=>progress(v*0.82),
-      onReadyForAudience:(original,thumbnail,mediaId) async {
-        if(audience!='only_me'){
-          final grants=await _media.createGrants(mediaId,
-            audience:audience,recipients:targets,
-            idempotencyKey:request.clientId,
-            keyEnvelopes:await _envelopes(audience,targets,original,thumbnail));
-          if(grants.isEmpty)throw StateError('Recipient grants unavailable.');
-        }
-        final caption=request.caption.trim().isEmpty?null:
-          await _sealText(request.caption.trim(),original.key,mediaId,
-            'caption','self');
-        progress(0.92);
-        final result=await _api('POST','/moments',key:request.clientId,body:{
-          'client_id':request.clientId,'media_id':mediaId,
-          'audience_kind':audience,'target_ids':targets,
-          if(caption!=null)'caption_ciphertext':caption,
-          if(caption!=null)'caption_key_version':'v1',
-        });
-        if(result['published']!=true||result['audience_keys_confirmed']!=true||
-            result['moment_id'] is! String) {
-          throw StateError('Server did not confirm Moment publication.');
-        }
-        id=result['moment_id'] as String;
+    Future<void> commit(OrbitSealedMedia original,OrbitSealedMedia? derivative,
+        String mediaId) async {
+      if(audience!='only_me'){
+        final grants=await _media.createGrants(mediaId,
+          audience:audience,recipients:targets,
+          idempotencyKey:request.clientId,
+          keyEnvelopes:await _envelopes(audience,targets,original,derivative));
+        if(grants.isEmpty)throw StateError('Recipient grants unavailable.');
+      }
+      final caption=request.caption.trim().isEmpty?null:
+        await _sealText(request.caption.trim(),original.key,mediaId,
+          'caption','self');
+      progress(0.92);
+      final result=await _api('POST','/moments',key:request.clientId,body:{
+        'client_id':request.clientId,'media_id':mediaId,
+        'audience_kind':audience,'target_ids':targets,
+        if(caption!=null)'caption_ciphertext':caption,
+        if(caption!=null)'caption_key_version':'v1',
       });
+      if(result['published']!=true||result['audience_keys_confirmed']!=true||
+          result['moment_id'] is! String){
+        throw StateError('Server did not confirm Moment publication.');
+      }
+      id=result['moment_id'] as String;
+    }
+    if(request.mediaKind=='image'){
+      await _stager.stagePhoto(request.photoBytes,
+        onProgress:(v)=>progress(v*0.82),
+        onReadyForAudience:commit);
+    }else{
+      final source=request.mediaFile;
+      if(source==null || !await source.exists()) {
+        throw StateError('Captured clip is no longer available.');
+      }
+      final stager=OrbitEncryptedClipStager(identity:_identity,crypto:_crypto,
+        media:_media);
+      if(request.mediaKind=='video'){
+        await stager.stageVideo(source,
+          onProgress:(v)=>progress(v*0.82),
+          onReadyForAudience:(video,poster,mediaId) async =>
+            commit(video,poster,mediaId));
+      }else if(request.mediaKind=='audio'){
+        final duration=request.durationMs;
+        if(duration==null || duration<1 || duration>60000){
+          throw StateError('Voice Moments must be under 60 seconds.');
+        }
+        await stager.stageAudio(source,
+          mime:'audio/mp4',durationMs:duration,purpose:'moment',
+          onProgress:(v)=>progress(v*0.82),
+          onReadyForAudience:(audio,mediaId) async =>
+            commit(audio,null,mediaId));
+      }else{
+        throw StateError('Unsupported Moment media kind.');
+      }
+    }
     if(id==null)throw StateError('Moment not published.');
     progress(1);
     return MomentPublishReceipt(momentId:id!);
