@@ -37,6 +37,7 @@ class CircleInviteManagementScreen extends StatefulWidget {
     this.initialTab = CircleInviteTab.sent,
     this.onBack,
     this.onInvitePressed,
+    this.canOpenInvite,
     this.onRetry,
     super.key,
   });
@@ -60,6 +61,8 @@ class CircleInviteManagementScreen extends StatefulWidget {
   final CircleInviteTab initialTab;
   final VoidCallback? onBack;
   final CircleInviteTap? onInvitePressed;
+  /// Hide actions for historical or server-denied invitations.
+  final bool Function(CircleInvite invite)? canOpenInvite;
   final ValueChanged<CircleInviteTab>? onRetry;
 
   @override
@@ -195,17 +198,17 @@ class _CircleInviteManagementScreenState
     return ListView.separated(
       key: CircleInviteManagementKeys.list(tab),
       physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(
-        _horizontalPadding,
+      padding: EdgeInsets.fromLTRB(
+        MediaQuery.sizeOf(context).width < 340 ? 12 : _horizontalPadding,
         0,
-        _horizontalPadding,
+        MediaQuery.sizeOf(context).width < 340 ? 12 : _horizontalPadding,
         _horizontalPadding,
       ),
       itemCount: invites.length,
       separatorBuilder: (context, index) => const SizedBox(height: _tileGap),
       itemBuilder: (context, index) {
         final invite = invites[index];
-        return Center(
+        return LayoutBuilder(builder:(context, constraints)=>Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: _maxContentWidth),
             child: OrbitPersonActionTile(
@@ -213,8 +216,11 @@ class _CircleInviteManagementScreenState
               avatarKey: CircleInviteManagementKeys.avatar(invite.id),
               name: invite.userName,
               avatarSource: invite.avatarUrl,
-              semanticLabel: 'Open ${invite.userName} invite details',
-              onTap: () => _openInvite(invite),
+              semanticLabel: widget.canOpenInvite?.call(invite) == false
+                  ? '${invite.userName} invitation status'
+                  : 'Open ${invite.userName} invite details',
+              onTap: widget.canOpenInvite?.call(invite) == false
+                  ? null : () => _openInvite(invite),
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
@@ -222,17 +228,19 @@ class _CircleInviteManagementScreenState
                     key: CircleInviteManagementKeys.status(invite.id),
                     child: InviteStatusBadge(status: invite.status),
                   ),
-                  const SizedBox(width: 8),
-                  const Icon(
-                    Icons.chevron_right_rounded,
-                    size: 24,
-                    color: Color(0xFF94A3B8),
-                  ),
+                  if (constraints.maxWidth >= 300) ...<Widget>[
+                    const SizedBox(width: 8),
+                    const Icon(
+                      Icons.chevron_right_rounded,
+                      size: 24,
+                      color: Color(0xFF94A3B8),
+                    ),
+                  ],
                 ],
               ),
             ),
           ),
-        );
+        ));
       },
     );
   }

@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 
 import 'orbit_offline_profile_snapshot.dart';
+import '../../circles/data/orbit_m5_firebase_change_source.dart';
 
 enum OrbitRestoreState { signedOut, authenticated, deviceRegistration, deletionPending, offlineProfile }
 
@@ -34,6 +35,7 @@ class OrbitIdentityClient {
   static const _profileCacheKey = 'orbit.profile.encrypted_cache.v1';
   static const _friendsCacheKey = 'orbit.social.friends_snapshot.v1';
   static const _launchedKey = 'orbit.app.has_launched.v1';
+  static const _circlesCacheKey = 'orbit.circles.read_only_snapshot.v1';
 
   final http.Client _http;
   final FlutterSecureStorage _storage;
@@ -65,7 +67,9 @@ class OrbitIdentityClient {
         return await load();
       } on OrbitIdentityException catch (error) {
         if (error.statusCode == 401 || error.statusCode == 403 ||
-            error.statusCode == 409) rethrow;
+            error.statusCode == 409) {
+          rethrow;
+        }
         return null;
       } catch (_) {
         return null;
@@ -134,6 +138,7 @@ class OrbitIdentityClient {
     Map<String, Object?>? body,
     bool protected = false,
     bool allowRetry = true,
+    String? idempotencyKey,
   }) async {
     if (protected && _access == null) await refresh();
     final request = http.Request(method, Uri.parse('$_origin$path'))
@@ -142,6 +147,7 @@ class OrbitIdentityClient {
     if (protected && _access != null) {
       request.headers['Authorization'] = 'Bearer $_access';
     }
+    if (idempotencyKey != null) request.headers['Idempotency-Key'] = idempotencyKey;
     if (body != null) request.body = jsonEncode(body);
     late final http.Response response;
     try {
@@ -154,7 +160,8 @@ class OrbitIdentityClient {
     if (protected && response.statusCode == 401 && allowRetry) {
       _access = null;
       await refresh();
-      return _send(method, path, body: body, protected: true, allowRetry: false);
+      return _send(method, path, body: body, protected: true, allowRetry: false,
+        idempotencyKey: idempotencyKey);
     }
     Map<String, dynamic> json;
     try {
@@ -214,11 +221,13 @@ class OrbitIdentityClient {
       final nextUser = user['id'] as String;
       final lastUser = await _storage.read(key: _userIdKey);
       if (lastUser != nextUser) {
+        await OrbitM5FirebaseChangeSource.instance.stop();
         _startupProfile = null;
         _startupNotifications = null;
         _startupPrivacy = null;
         await _storage.delete(key: _profileCacheKey);
         await _storage.delete(key: _friendsCacheKey);
+    await _storage.delete(key: _circlesCacheKey);
       }
       await _storage.write(key: _userIdKey, value: nextUser);
     }
@@ -323,6 +332,7 @@ class OrbitIdentityClient {
   }
 
   Future<void> clearSession() async {
+    await OrbitM5FirebaseChangeSource.instance.stop();
     abandonStandardSignup();
     _access = null;
     _startupProfile = null;
@@ -332,6 +342,7 @@ class OrbitIdentityClient {
     await _storage.delete(key: _userIdKey);
     await _storage.delete(key: _profileCacheKey);
     await _storage.delete(key: _friendsCacheKey);
+    await _storage.delete(key: _circlesCacheKey);
   }
 
   Future<void> signOut() async {
@@ -518,13 +529,29 @@ class OrbitIdentityClient {
 
   Future<void> clearFriendsSnapshot() => _storage.delete(key: _friendsCacheKey);
 
+  /// M5 cached only sanitized Circle names and IDs, never membership lists,
+  /// privacy grants, access tokens, location or invitation credentials.
+  Future<void> storeCirclesSnapshot(String owner, String payload) async {
+    if (await currentLocalSocialOwner() != owner) return;
+    await _storage.write(key: _circlesCacheKey, value: payload);
+  }
+
+  Future<String?> readCirclesSnapshot() async {
+    if (await currentLocalSocialOwner() == null) return null;
+    return _storage.read(key: _circlesCacheKey);
+  }
+
+  Future<void> clearCirclesSnapshot() =>
+      _storage.delete(key: _circlesCacheKey);
+
   Future<Map<String, dynamic>> socialRequest(String method, String path,
-      {Map<String, Object?>? body}) {
+      {Map<String, Object?>? body, String? idempotencyKey}) {
     if (!path.startsWith('/') || path.startsWith('//') ||
         path.contains('..') || path.contains('://')) {
       throw ArgumentError.value(path, 'path', 'Unsafe API path');
     }
-    return _send(method, path, body: body, protected: true);
+    return _send(method, path, body: body, protected: true,
+      idempotencyKey:idempotencyKey);
   }
 
   Future<Map<String, dynamic>> currentUser() =>

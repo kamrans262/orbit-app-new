@@ -9,7 +9,7 @@ class _FakeIdentity extends OrbitIdentityClient {
 
   @override
   Future<Map<String, dynamic>> socialRequest(String method, String path,
-      {Map<String, Object?>? body}) async {
+      {Map<String, Object?>? body, String? idempotencyKey}) async {
     calls.add('$method $path');
     if (path == errorPath) throw OrbitIdentityException('Server unavailable.',503);
     return results[path] ?? {'data': {'items': <Object>[], 'page':1,'has_more':false}};

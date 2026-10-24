@@ -13,7 +13,10 @@ class InviteStatusBadge extends StatelessWidget {
     final palette = _paletteFor(status);
     return Container(
       constraints: const BoxConstraints(minHeight: 35),
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+      padding: EdgeInsets.symmetric(
+        horizontal: MediaQuery.sizeOf(context).width < 340 ? 10 : 18,
+        vertical: 9,
+      ),
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: palette.background,
@@ -47,6 +50,18 @@ class InviteStatusBadge extends StatelessWidget {
           label: 'Accepted',
           foreground: Color(0xFF5ACDAE),
           background: Color(0xFFDFF7F1),
+        );
+      case CircleInviteStatus.revoked:
+        return const _InviteStatusPalette(
+          label: 'Revoked',
+          foreground: Color(0xFF64748B),
+          background: Color(0xFFF1F5F9),
+        );
+      case CircleInviteStatus.expired:
+        return const _InviteStatusPalette(
+          label: 'Expired',
+          foreground: Color(0xFF64748B),
+          background: Color(0xFFF1F5F9),
         );
       case CircleInviteStatus.declined:
         return const _InviteStatusPalette(

@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../features/home/presentation/screens/home_screen.dart';
+import '../features/circles/data/orbit_circle_repository.dart';
+import '../features/circles/presentation/screens/orbit_circle_join_screen.dart';
+import '../features/circles/presentation/screens/orbit_live_circle_detail_screen.dart';
+import '../features/circles/presentation/screens/orbit_onboarding_invite_screen.dart';
 import '../features/friends/presentation/screens/orbit_discover_friends_screen.dart';
 
 import '../core/widgets/app_keyboard_dismiss.dart';
@@ -335,67 +339,106 @@ class _OrbitAppState extends State<OrbitApp> {
                 },
               ),
             );
-          case AppRoutes.createCircle:
+          case AppRoutes.joinCircle:
             return MaterialPageRoute<void>(
               settings: settings,
-              builder: (context) => CreateCircleScreen(
+              builder:(context)=>OrbitCircleJoinScreen(
+                onJoined:()=>Navigator.of(context).pushNamedAndRemoveUntil(
+                  AppRoutes.home, (_) => false,
+                ),
+              ),
+            );
+          case AppRoutes.createCircle:
+            String? createdCircleId;
+            final circleFeatures=OrbitCircleRepository().features();
+            return MaterialPageRoute<void>(
+              settings: settings,
+              builder: (context) => FutureBuilder<Map<String,dynamic>>(
+                future:circleFeatures,
+                builder:(context,featureState)=>CreateCircleScreen(
+                enableTemporary:featureState.data?['temporary_circles']==true,
+                onJoinRequested: () => Navigator.of(context).pushNamed(AppRoutes.joinCircle),
+                onCreateRequested: (name,color,icon,key,expiresAt) async {
+                  final circle=await OrbitCircleRepository()
+                      .create(name,color:color,icon:icon,idempotencyKey:key,
+                        expiresAt:expiresAt);
+                  createdCircleId=circle.id;
+                },
                 onNext: () {
-                  Navigator.of(context).pushNamed(AppRoutes.circlePermission);
+                  if (createdCircleId == null) return;
+                  Navigator.of(context).pushNamed(
+                    AppRoutes.circlePermission,arguments:createdCircleId);
                 },
-                onSkip: () {
-                  Navigator.of(context).pushNamedAndRemoveUntil(
-                    AppRoutes.home, (_) => false,
-                  );
-                },
+                onSkip: () => Navigator.of(context)
+                  .pushNamedAndRemoveUntil(AppRoutes.home, (_) => false),
+                ),
               ),
             );
           case AppRoutes.circlePermission:
+            final createdCircle = settings.arguments is String
+              ? settings.arguments as String : null;
             return MaterialPageRoute<void>(
               settings: settings,
               builder: (context) => CirclePermissionScreen(
+                circleAlreadyCreated: createdCircle != null,
                 onBack: () => Navigator.of(context).pop(),
                 onCreateCircle: () {
-                  Navigator.of(context).pushNamed(AppRoutes.invitePeople);
+                  if (createdCircle == null) {
+                    Navigator.of(context).pushNamedAndRemoveUntil(
+                      AppRoutes.home, (_) => false);
+                  } else {
+                    // A committed Circle must open its real roster, never a
+                    // simulated onboarding member list or a duplicate create.
+                    // Home is the root so Back always exits onboarding safely.
+                    final nav=Navigator.of(context);
+                    nav.pushNamedAndRemoveUntil(AppRoutes.home, (_) => false);
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (nav.mounted) {
+                        nav.push<void>(MaterialPageRoute<void>(
+                          builder:(_) => OrbitLiveCircleDetailScreen(
+                            circleId:createdCircle),
+                        ));
+                      }
+                    });
+                  }
                 },
                 onSkip: () {
                   Navigator.of(context).pushNamedAndRemoveUntil(
-                    AppRoutes.home, (_) => false,
-                  );
+                    AppRoutes.home, (_) => false);
                 },
               ),
             );
           case AppRoutes.invitePeople:
+            if (settings.arguments is String) {
+              final circleId=settings.arguments as String;
+              return MaterialPageRoute<void>(
+                settings:settings,
+                builder:(context)=>OrbitOnboardingInviteScreen(
+                  circleId:circleId,
+                  onCompleted:()=>Navigator.of(context).pushNamedAndRemoveUntil(
+                    AppRoutes.home, (_) => false,
+                  ),
+                ),
+              );
+            }
             return MaterialPageRoute<void>(
               settings: settings,
               builder: (context) => InvitePeopleScreen(
-                // M4 discovery requires the just-verified trusted user session.
-                // Friend invites are NOT automatic Circle membership (M5).
                 onInviteByContacts: () => Navigator.of(context).push<void>(
                   MaterialPageRoute(builder: (_) => const OrbitDiscoverFriendsScreen())),
                 onInviteByQrCode: () => Navigator.of(context).push<void>(
                   MaterialPageRoute(builder: (_) => const OrbitDiscoverFriendsScreen())),
-
                 onInviteByLink: () => Navigator.of(context).push<void>(
                   MaterialPageRoute(builder: (_) => const OrbitDiscoverFriendsScreen())),
                 onInviteByUsername: () => Navigator.of(context).push<void>(
                   MaterialPageRoute(builder: (_) => const OrbitDiscoverFriendsScreen())),
                 onAddPerson: (_) {},
                 nearbyPeople: const [],
-                onOpenLogin: () {
-                  Navigator.of(context).pushNamed(AppRoutes.login);
-                },
-                // Finishes this onboarding step. Sending an actual invitation
-                // is owned by the separate Circles module, not this route.
-                onDone: () {
-                  Navigator.of(context).pushNamedAndRemoveUntil(
-                    AppRoutes.home, (_) => false,
-                  );
-                },
-                onSkip: () {
-                  Navigator.of(context).pushNamedAndRemoveUntil(
-                    AppRoutes.home, (_) => false,
-                  );
-                },
+                onOpenLogin: () => Navigator.of(context).pushNamed(AppRoutes.login),
+                onDone: () => Navigator.of(context).pushNamedAndRemoveUntil(
+                  AppRoutes.home, (_) => false),
+                onSkip: () => Navigator.of(context).pushNamedAndRemoveUntil(
+                  AppRoutes.home, (_) => false),
               ),
             );
           case AppRoutes.home:
@@ -404,6 +447,7 @@ class _OrbitAppState extends State<OrbitApp> {
               builder: (context) => OrbitProtectedHome(
                 startupVerified: settings.arguments is _VerifiedStartupHome,
                 home: HomeScreen.demo(
+                  enableDemoCircleNavigation:false,
                   onTabSelected: (index) {},
                   onAddPressed: () {},
                 ),

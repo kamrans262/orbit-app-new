@@ -15,7 +15,7 @@ import '../../domain/models/profile_models.dart';
 import '../../../more_menu/presentation/screens/more_menu_screen.dart';
 import '../widgets/profile_summary_header.dart';
 import '../widgets/settings_list_item.dart';
-import '../../../circles/presentation/screens/circle_list_screen.dart';
+import '../../../circles/presentation/screens/orbit_live_circles_screen.dart';
 import 'edit_profile_screen.dart';
 import 'notification_screen.dart';
 import 'devices_screen.dart';
@@ -325,7 +325,7 @@ class SettingsScreen extends StatelessWidget {
     }
     if (label == 'My Circles') {
       Navigator.of(context).push<void>(
-        AppFadeSlidePageRoute<void>(builder: (_) => CircleListScreen.demo()),
+        AppFadeSlidePageRoute<void>(builder: (_) => const OrbitLiveCirclesScreen()),
       );
       return;
     }

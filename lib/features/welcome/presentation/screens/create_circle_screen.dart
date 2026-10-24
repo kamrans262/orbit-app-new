@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
@@ -22,11 +23,17 @@ abstract final class CreateCircleKeys {
 class CreateCircleScreen extends StatefulWidget {
   const CreateCircleScreen({
     required this.onNext,
+    this.onCreateRequested,
+    this.onJoinRequested,
+    this.enableTemporary = false,
     this.onSkip,
     super.key,
   });
 
   final VoidCallback onNext;
+  final Future<void> Function(String name, String color, String icon, String key, String? expiresAt)? onCreateRequested;
+  final VoidCallback? onJoinRequested;
+  final bool enableTemporary;
   final VoidCallback? onSkip;
 
   @override
@@ -42,6 +49,10 @@ class _CreateCircleScreenState extends State<CreateCircleScreen> {
   late final TextEditingController _nameController;
   int _selectedColorIndex = 0;
   int _selectedIconIndex = 0;
+  bool _saving = false;
+  DateTime? _expiresAt;
+  String _idempotencyKey = const Uuid().v4();
+  void _newDraft() { if (!_saving) _idempotencyKey = const Uuid().v4(); }
 
   static const List<_CircleColorOption> _colors = <_CircleColorOption>[
     _CircleColorOption(border: Color(0xFFF43F8E), fill: Color(0xFFEE8EB8)),
@@ -65,13 +76,73 @@ class _CreateCircleScreenState extends State<CreateCircleScreen> {
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(text: 'Best Friends');
+    _nameController = TextEditingController(text: widget.onCreateRequested == null ? 'Best Friends' : '');
   }
 
   @override
   void dispose() {
     _nameController.dispose();
     super.dispose();
+  }
+
+  Future<void> _chooseExpiry() async {
+    if (_saving) return;
+    final today=DateTime.now();
+    final date=await showDatePicker(context:context,
+      initialDate:today.add(const Duration(days:1)), firstDate:today,
+      lastDate:today.add(const Duration(days:365)));
+    if(date==null || !mounted)return;
+    final time=await showTimePicker(context:context,
+      initialTime:const TimeOfDay(hour:18,minute:0));
+    if(time==null || !mounted)return;
+    final selected=DateTime(date.year,date.month,date.day,time.hour,time.minute);
+    if(!selected.isAfter(DateTime.now())) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content:Text('Choose a future Circle expiry time.')));
+      return;
+    }
+    _newDraft();
+    setState(()=>_expiresAt=selected);
+  }
+
+  Future<void> _submit() async {
+    final name = _nameController.text.trim();
+    if (_saving) return;
+    if (name.isEmpty || name.length > 80) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Enter a Circle name between 1 and 80 characters.')));
+      return;
+    }
+    final save = widget.onCreateRequested;
+    if (save == null) { widget.onNext(); return; }
+    setState(() => _saving = true);
+    try {
+      // Explicit privacy review must precede the server mutation, not follow it.
+      final consent = await showDialog<bool>(context:context,builder:(dialog)=>
+        AlertDialog(backgroundColor:Colors.white,
+          title:const Text('Create private Circle?'),
+          content:const Text('Only invited people can join after accepting. '
+            'Live location, presence, Moments, Ping, chat and SOS sharing all start OFF. '
+            'You can invite friends after the Circle is created.'),
+          actions:[
+            TextButton(onPressed:()=>Navigator.pop(dialog,false),child:const Text('Cancel')),
+            TextButton(onPressed:()=>Navigator.pop(dialog,true),child:const Text('Create')),
+          ],
+        ));
+      if(consent != true || !mounted)return;
+      final color = _colors[_selectedColorIndex].fill;
+      final hex = '#${(color.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}';
+      const keys = <String>['home','person','star','music','location','sunny'];
+      await save(name,hex,keys[_selectedIconIndex],_idempotencyKey,
+        _expiresAt?.toUtc().toIso8601String());
+      if (mounted) widget.onNext();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Unable to create Circle: $error')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override
@@ -117,12 +188,23 @@ class _CreateCircleScreenState extends State<CreateCircleScreen> {
                               textAlign: TextAlign.center,
                               style: AppTypography.largeHeading,
                             ),
+                            if (widget.onJoinRequested != null)
+                              Align(alignment:Alignment.center,
+                                child:TextButton.icon(
+                                  onPressed:widget.onJoinRequested,
+                                  icon:const Icon(Icons.group_add_outlined,
+                                    size:18,color:Color(0xFF7C3AED)),
+                                  label:const Text('Join with Code',
+                                    style:TextStyle(fontFamily:AppTypography.fontFamily,
+                                      color:Color(0xFF7C3AED))),
+                                )),
                             const SizedBox(height: _headingBottomGap),
                             AppTextField(
                               label: 'Circle Name:',
                               labelKey: CreateCircleKeys.nameLabel,
                               fieldKey: CreateCircleKeys.nameField,
                               controller: _nameController,
+                              onChanged: (_) => _newDraft(),
                               textInputAction: TextInputAction.done,
                               suffixIcon: const Icon(
                                 Icons.favorite_rounded,
@@ -141,6 +223,7 @@ class _CreateCircleScreenState extends State<CreateCircleScreen> {
                               options: _colors,
                               selectedIndex: _selectedColorIndex,
                               onSelected: (index) {
+                                _newDraft();
                                 setState(() => _selectedColorIndex = index);
                               },
                             ),
@@ -155,9 +238,37 @@ class _CreateCircleScreenState extends State<CreateCircleScreen> {
                               icons: _icons,
                               selectedIndex: _selectedIconIndex,
                               onSelected: (index) {
+                                _newDraft();
                                 setState(() => _selectedIconIndex = index);
                               },
                             ),
+                            if(widget.onCreateRequested != null && widget.enableTemporary) ...<Widget>[
+                              const SizedBox(height:_sectionGap),
+                              Row(children:[
+                                Expanded(child:Text(
+                                  _expiresAt == null
+                                    ? 'Permanent Circle'
+                                    : 'Temporary until ${_expiresAt!.toLocal().toString().substring(0,16)}',
+                                  style:const TextStyle(
+                                    fontFamily:AppTypography.fontFamily,
+                                    color:Color(0xFF64748B),fontSize:13),
+                                )),
+                                TextButton(onPressed:_chooseExpiry,
+                                  child:const Text('Set expiry')),
+                                if(_expiresAt != null)
+                                  IconButton(
+                                    tooltip:'Clear expiry',
+                                    onPressed:(){
+                                      _newDraft();setState(()=>_expiresAt=null);
+                                    },icon:const Icon(Icons.close,size:18)),
+                              ]),
+                              if(_expiresAt != null)
+                                const Text('Read-only for 72 hours after expiry, '
+                                  'then archived without automatic deletion.',
+                                  style:TextStyle(
+                                    fontFamily:AppTypography.fontFamily,
+                                    fontSize:12,color:Color(0xFF64748B))),
+                            ],
                           ],
                         ),
                       ),
@@ -171,7 +282,7 @@ class _CreateCircleScreenState extends State<CreateCircleScreen> {
                       child: WelcomeActionPanel(
                         primaryKey: CreateCircleKeys.nextButton,
                         primaryLabel: 'Create Circle',
-                        onPrimaryPressed: widget.onNext,
+                        onPrimaryPressed: _submit,
                         secondaryKey: widget.onSkip == null
                             ? null
                             : CreateCircleKeys.skipButton,

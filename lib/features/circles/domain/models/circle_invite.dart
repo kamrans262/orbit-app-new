@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 
-enum CircleInviteStatus { pending, accepted, declined }
+enum CircleInviteStatus { pending, accepted, declined, revoked, expired }
 
 enum CircleInviteTab { sent, pending, accepted }
 

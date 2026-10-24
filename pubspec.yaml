@@ -48,6 +48,11 @@ dependencies:
   qr_flutter: ^4.1.0
   flutter_contacts: ^2.6.0
   app_links: ^7.2.2
+  # M5 Firebase RTDB transport is compiled but inert until explicit
+  # --dart-define=ORBIT_M5_FIREBASE_ENABLED=true AND backend opt-in.
+  firebase_core: ^4.15.0
+  firebase_auth: ^6.7.0
+  firebase_database: ^12.6.0
   shared_preferences: ^2.5.5
 
 dev_dependencies:
