@@ -150,6 +150,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
                   0,
                 ),
                 child: OrbitSearchableHeader(
+                  compactTitle: true,
                   title: 'Friends',
                   placeholder: 'Search friends',
                   controller: _searchController,
