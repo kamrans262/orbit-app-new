@@ -59,12 +59,38 @@ class OrbitMomentRepository {
     if(d is! Map)throw const FormatException('Unexpected private Moments response.');
     return Map<String,dynamic>.from(d);
   }
-  Future<List<OrbitLiveMoment>> feed({bool rail=false}) async {
-    final r=await _api('GET',rail?'/moments/rail':'/moments?limit=30');
-    final data=r['items'];
-    if(data is! List)throw const FormatException('Private Moments feed malformed.');
-    return data.map((e)=>OrbitLiveMoment.fromJson(Map<String,dynamic>.from(e as Map)))
-      .toList(growable:false);
+  Future<List<OrbitLiveMoment>> feed({
+    bool rail=false,String? circleId,String? profileId,int maxItems=120,
+  }) async {
+    if(circleId!=null && profileId!=null)throw ArgumentError('Choose one feed scope.');
+    final root=rail?'/moments/rail':circleId!=null
+      ? '/circles/${Uri.encodeComponent(circleId)}/moments'
+      : profileId!=null?'/users/${Uri.encodeComponent(profileId)}/moments':'/moments';
+    final result=<OrbitLiveMoment>[];
+    final seen=<String>{};
+    String? before,beforeId;
+    for(var page=0;page<8 && result.length<maxItems;page++){
+      final query=<String,String>{'limit':rail?'20':'30'};
+      if(before!=null&&beforeId!=null){
+        query['before']=before;query['before_id']=beforeId;
+      }
+      final response=await _api('GET',root+'?'+Uri(queryParameters:query).query);
+      final raw=response['items'];
+      if(raw is! List)throw const FormatException('Private Moments feed malformed.');
+      for(final entry in raw){
+        final moment=OrbitLiveMoment.fromJson(Map<String,dynamic>.from(entry as Map));
+        if(seen.add(moment.id+'|'+moment.contextId))result.add(moment);
+        if(result.length>=maxItems)break;
+      }
+      final cursor=response['next_cursor'];
+      if(cursor is! Map||cursor['before'] is! String ||
+         cursor['before_id'] is! String||raw.isEmpty)break;
+      final nextBefore=cursor['before'] as String;
+      final nextId=cursor['before_id'] as String;
+      if(nextBefore==before&&nextId==beforeId)break;
+      before=nextBefore;beforeId=nextId;
+    }
+    return result;
   }
   Future<OrbitMomentAudienceOptions> audienceOptions() async {
     final privacy=await _api('GET','/me/preferences/privacy');
@@ -271,6 +297,47 @@ class OrbitMomentRepository {
         'key_version':'v1',if(parent!=null)'parent_id':parent,
       });
   }
+  Future<void> deleteComment(OrbitLiveMoment item,String commentId) async {
+    await _identity.socialRequest('DELETE',
+      '/moments/${Uri.encodeComponent(item.id)}/comments/${Uri.encodeComponent(commentId)}',
+      body:{'context_id':item.contextId});
+  }
+
+  Future<List<Map<String,dynamic>>> authorizedViewers(OrbitLiveMoment item) async {
+    final data=await _api('GET','/moments/${Uri.encodeComponent(item.id)}/viewers');
+    final raw=data['viewers'];
+    if(raw is! List)throw const FormatException('View receipts malformed.');
+    return raw.map((e)=>Map<String,dynamic>.from(e as Map)).toList();
+  }
+
+  Future<List<({String id,String author,String body,String? parent})>>
+      allComments(OrbitLiveMoment item,{int max=150}) async {
+    final out=<({String id,String author,String body,String? parent})>[];
+    final key=await _key(item.mediaId);
+    String? before;
+    for(var page=0;page<6 && out.length<max;page++){
+      final query=<String,String>{'context_id':item.contextId,'limit':'30'};
+      if(before!=null)query['before']=before;
+      final data=await _api('GET',
+        '/moments/${Uri.encodeComponent(item.id)}/comments?'
+        +Uri(queryParameters:query).query);
+      final raw=data['items'];
+      if(raw is! List)throw const FormatException('Encrypted comments malformed.');
+      for(final entry in raw){
+        final r=Map<String,dynamic>.from(entry as Map);
+        out.add((id:r['id'] as String,author:r['author_id'] as String,
+          body:await _openText(r['body_ciphertext'] as String,key,
+            item.mediaId,'comment',item.contextId),
+          parent:r['parent_id'] as String?));
+        if(out.length>=max)break;
+      }
+      final next=data['next_before'];
+      if(next is! String||next==before||raw.isEmpty)break;
+      before=next;
+    }
+    return out;
+  }
+
   Future<void> report(OrbitLiveMoment item,String reason) async {
     await _api('POST','/moments/'+Uri.encodeComponent(item.id)+'/reports',
       key:_uuid.v4(),body:{'context_id':item.contextId,
