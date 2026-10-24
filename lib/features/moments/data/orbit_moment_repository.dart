@@ -635,7 +635,7 @@ class OrbitMomentRepository {
 
   /// A caption edit changes only encrypted text, not keys, media or audience.
   /// Backend enforces creator ownership and optimistic publish_version.
-  Future<int> updateCaption(OrbitLiveMoment item,String text) async {
+  Future<int> updateCaption(OrbitLiveMoment item,String text,{int? version}) async {
     final owner=await currentUserId();
     if(owner==null || owner!=item.creatorId)throw StateError('Not the Moment owner.');
     final value=text.trim();
@@ -643,11 +643,11 @@ class OrbitMomentRepository {
     final cipher=value.isEmpty?null:
       await _sealText(value,await _key(item.mediaId),item.mediaId,'caption','self');
     final response=await _api('PATCH','/moments/${Uri.encodeComponent(item.id)}',
-      body:{'revision':item.publishVersion,
+      body:{'revision':version??item.publishVersion,
         'caption_ciphertext':cipher,
         'caption_key_version':cipher==null?null:'v1'});
     final revision=response['publish_version'];
-    if(revision is! num || revision.toInt()<=item.publishVersion) {
+    if(revision is! num || revision.toInt()<=(version??item.publishVersion)) {
       throw StateError('Caption revision was not confirmed.');
     }
     return revision.toInt();
