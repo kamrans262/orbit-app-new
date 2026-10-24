@@ -121,6 +121,9 @@ class _OrbitLiveCircleDetailScreenState extends State<OrbitLiveCircleDetailScree
     if(_circle==null) return;
     await showModalBottomSheet<void>(context:context,
       backgroundColor:AppColors.background,
+      shape:const RoundedRectangleBorder(
+        borderRadius:BorderRadius.vertical(top:Radius.circular(28)),
+      ),
       builder:(context)=>SafeArea(child:Padding(
         padding:const EdgeInsets.all(20),
         child:Column(mainAxisSize:MainAxisSize.min,
