@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../domain/orbit_connection_probe.dart';
+import '../../media/data/orbit_media_recovery_coordinator.dart';
 import 'widgets/offline_popup.dart';
 
 /// App-wide offline monitor for Orbit.
@@ -145,6 +146,9 @@ class OrbitConnectivityNavigatorObserver extends NavigatorObserver
     if (isOnline) {
       _consecutiveFailures = 0;
       _dismissedForCurrentOfflineEpisode = false;
+      // Use the existing network monitor: only previously queued, encrypted
+      // M6 drafts are retried. Never publish or send a Moment automatically.
+      unawaited(OrbitMediaRecoveryCoordinator.instance.tryResume());
       return;
     }
 
