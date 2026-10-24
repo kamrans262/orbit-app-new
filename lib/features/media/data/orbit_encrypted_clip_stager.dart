@@ -153,6 +153,7 @@ class OrbitEncryptedClipStager {
               original,onProgress:onProgress)
           : throw StateError('Selected video processor cannot mute audio.'))
       : _processor.prepare(original,onProgress:onProgress));
+    try {
     final root=Directory((await _temp()).path+'/orbit-m6-transcode');
     await root.create(recursive:true);
     final videoId=const Uuid().v4(),posterId=const Uuid().v4();
@@ -170,8 +171,6 @@ class OrbitEncryptedClipStager {
       mime:'image/jpeg',parentTransferId:videoId);
     if(onQueued!=null)await onQueued(videoId);
     try {
-      if(await prepared.file.exists() &&
-          prepared.file.path!=original.path)await prepared.file.delete();
       await video.file.delete();
       await poster.file.delete();
       final receipt=await _media.upload(await _outbox.restore(first),
@@ -207,6 +206,16 @@ class OrbitEncryptedClipStager {
     } catch (_) {
       // Ciphertext-only drafts remain in the offline outbox for explicit retry.
       rethrow;
+    }
+    } finally {
+      // This native transcode is plaintext until its encrypted queue copy is
+      // durably saved. Clean it up even when sealing or enqueue fails before
+      // the upload/catch block starts. Never delete the user's gallery source.
+      if(prepared.file.path!=original.path){
+        try {
+          if(await prepared.file.exists())await prepared.file.delete();
+        } catch (_) { /* Keep original failure; OS temporary cleanup is best effort. */ }
+      }
     }
     });
   }
