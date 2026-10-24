@@ -6,6 +6,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_circular_icon_button.dart';
 import '../../../../core/widgets/app_primary_button.dart';
 import '../../../../core/widgets/app_screen_header.dart';
+import '../../../../core/popups/orbit_popup_variants.dart';
 import '../../data/orbit_moment_repository.dart';
 import '../widgets/orbit_private_moment_player.dart';
 
@@ -31,6 +32,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
   String? _error;
   bool _loading=true, _liked=false, _sending=false, _paused=false;
   bool _allCaughtUp=false;
+  bool _isOwner=false;
   bool _reauthorizing=false;
   Timer? _advance;
   Timer? _revalidation;
@@ -168,10 +170,13 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
           : Uint8List(0);
       final caption=await widget.repository.caption(current);
       await widget.repository.view(current);
+      String? viewer;
+      try { viewer=await widget.repository.currentUserId(); } catch (_) {}
       if(mounted && epoch==_loadEpoch && _current.id==current.id){
         setState((){
           _photo=photo;
           _caption=caption;
+          _isOwner=viewer!=null && viewer==current.creatorId;
           _loading=false;
         });
         _schedule();
@@ -295,6 +300,66 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
       if(mounted)_notice('Your report has been submitted.');
     }catch(_){if(mounted)_notice('Unable to submit this report.');}
   }
+  Future<void> _ownerDelete() async {
+    if(!_isOwner || !mounted)return;
+    final item=_current;
+    await showDeleteMomentPopup(context,onDelete:() async {
+      try {
+        await widget.repository.delete(item);
+        if(mounted)Navigator.of(context).maybePop();
+      }catch(_){
+        if(mounted)_notice('Moment deletion could not be confirmed.');
+      }
+    });
+  }
+
+  Future<void> _ownerViewers() async {
+    if(!_isOwner || !mounted)return;
+    final item=_current;
+    try {
+      // M3 read-receipt privacy and M7 context authorization are enforced
+      // by the server. No public viewer count or cross-Circle roster.
+      final receipts=await widget.repository.authorizedViewers(item);
+      if(!mounted || _current.id!=item.id)return;
+      final labels=<String>[];
+      for(final receipt in receipts.take(30)){
+        final id=receipt['viewer_id'] as String?;
+        if(id==null)continue;
+        try {labels.add(await widget.repository.name(id));}
+        catch(_){labels.add('Orbit member');}
+      }
+      if(!mounted || _current.id!=item.id)return;
+      await showModalBottomSheet<void>(
+        context:context,useSafeArea:true,isScrollControlled:true,
+        backgroundColor:AppColors.background,
+        shape:const RoundedRectangleBorder(
+          borderRadius:BorderRadius.vertical(top:Radius.circular(28))),
+        builder:(sheetContext)=>Padding(
+          padding:const EdgeInsets.fromLTRB(20,20,20,24),
+          child:Column(mainAxisSize:MainAxisSize.min,
+            crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+              Text('Moment viewers',style:AppTypography.smallHeading),
+              const SizedBox(height:8),
+              Text('Only people who enabled read receipts appear here.',
+                style:AppTypography.bodyMuted),
+              const SizedBox(height:12),
+              if(labels.isEmpty)
+                Padding(padding:const EdgeInsets.symmetric(vertical:24),
+                  child:Text('No eligible viewer receipts.',
+                    style:AppTypography.bodyMuted)),
+              if(labels.isNotEmpty)
+                ConstrainedBox(constraints:const BoxConstraints(maxHeight:320),
+                  child:ListView.builder(shrinkWrap:true,
+                    itemCount:labels.length,itemBuilder:(_,index)=>ListTile(
+                      leading:const Icon(Icons.person_outline_rounded,
+                        color:AppColors.primaryEnd),
+                      title:Text(labels[index],style:AppTypography.body)))),
+            ]),
+        ),
+      );
+    }catch(_){if(mounted)_notice('Viewer receipts are unavailable.');}
+  }
+
   @override
   Widget build(BuildContext context){
     return Scaffold(backgroundColor:AppColors.background,
@@ -357,6 +422,18 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
                 icon:Icons.chat_bubble_outline_rounded,
                 iconSize:20,size:40),
               const Spacer(),
+              if(_isOwner) ...[
+                AppCircularIconButton(
+                  semanticLabel:'View Moment viewers',
+                  onPressed:()=>unawaited(_ownerViewers()),
+                  icon:Icons.visibility_outlined,iconSize:20,size:40),
+                const SizedBox(width:8),
+                AppCircularIconButton(
+                  semanticLabel:'Delete this Moment',
+                  onPressed:()=>unawaited(_ownerDelete()),
+                  icon:Icons.delete_outline_rounded,iconSize:20,size:40),
+                const SizedBox(width:8),
+              ],
               AppCircularIconButton(
                 semanticLabel:'Report Moment',
                 onPressed:()=>unawaited(_reportSheet()),
