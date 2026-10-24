@@ -130,6 +130,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
   final Set<String> _taggedPeople={};
 
   MomentFilter _filter=MomentFilter.natural;
+  double _beautyStrength=0;
   bool _drawing=false;
   final List<MomentDrawStroke> _strokes=[];
   List<Offset> _activeStroke=[];
@@ -140,7 +141,8 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
 
   Future<Uint8List> _encodeImage() async {
     if(widget.mediaKind!='image')return widget.photoBytes;
-    final edit=MomentPhotoEdit(filter:_filter,text:_overlayText.text,
+    final edit=MomentPhotoEdit(filter:_filter,
+      beautyStrength:_beautyStrength,text:_overlayText.text,
       strokes:List<MomentDrawStroke>.unmodifiable(_strokes));
     // CPU-heavy image transformations stay off the UI isolate.
     return compute(_renderMomentEdits,(widget.photoBytes,edit));
@@ -476,6 +478,18 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
                 }),
             )).toList(),
           )),
+          const SizedBox(height:8),
+          Row(children:[
+            Expanded(child:Text('Subtle smoothing (optional)',
+              style:AppTypography.body)),
+            Text(_beautyStrength==0?'Off':'On',style:AppTypography.bodyMuted),
+          ]),
+          Slider(value:_beautyStrength,min:0,max:0.25,divisions:5,
+            activeColor:AppColors.primaryEnd,
+            onChanged:(value){
+              setState(()=>_beautyStrength=value);
+              _queuePreview();
+            }),
           const SizedBox(height:8),
           TextField(
             key:MomentPublishKeys.overlayText,
