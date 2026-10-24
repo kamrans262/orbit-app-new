@@ -49,7 +49,8 @@ class OrbitMomentMediaStager {
   Future<OrbitStagedPhoto> stagePhoto(Uint8List captured,
       {void Function(double fraction)? onProgress,
        Future<void> Function(OrbitSealedMedia original, OrbitSealedMedia thumbnail,
-         String mediaId)? onReadyForAudience}) async {
+         String mediaId)? onReadyForAudience,
+       Future<void> Function(String originalTransfer)? onQueued}) async {
     return OrbitMediaTransferGate.run(() async {
     final owner=await _identity.currentLocalSocialOwner();
     if(owner==null)throw OrbitIdentityException('Please sign in first.',401);
@@ -72,6 +73,7 @@ class OrbitMomentMediaStager {
     var thumbDraft=await _outbox.enqueue(thumb,kind:'image',
       mime:'image/jpeg',parentTransferId:originalId,width:320,
       height:(prepared.height*320/prepared.width).round());
+    if(onQueued!=null)await onQueued(originalId);
     try {
       if(await original.file.exists())await original.file.delete();
       if(await thumb.file.exists())await thumb.file.delete();

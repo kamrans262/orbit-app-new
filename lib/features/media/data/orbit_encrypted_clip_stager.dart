@@ -126,7 +126,8 @@ class OrbitEncryptedClipStager {
   Future<OrbitStagedClip> stageVideo(File original,
       {void Function(double progress)? onProgress,
        Future<void> Function(OrbitSealedMedia original, OrbitSealedMedia poster,
-         String mediaId)? onReadyForAudience}) async {
+         String mediaId)? onReadyForAudience,
+       Future<void> Function(String originalTransfer)? onQueued}) async {
     return OrbitMediaTransferGate.run(() async {
     final owner=await _identity.currentLocalSocialOwner();
     if(owner==null)throw OrbitIdentityException('Please sign in.',401);
@@ -148,6 +149,7 @@ class OrbitEncryptedClipStager {
       durationMs:prepared.durationMs);
     var second=await _outbox.enqueue(poster,kind:'image',
       mime:'image/jpeg',parentTransferId:videoId);
+    if(onQueued!=null)await onQueued(videoId);
     try {
       if(await prepared.file.exists() &&
           prepared.file.path!=original.path)await prepared.file.delete();
@@ -196,6 +198,7 @@ class OrbitEncryptedClipStager {
     required String mime, required int durationMs,
     String purpose='message',
     Future<void> Function(OrbitSealedMedia original,String mediaId)? onReadyForAudience,
+    Future<void> Function(String originalTransfer)? onQueued,
     void Function(double progress)? onProgress,
   }) async {
     return OrbitMediaTransferGate.run(() async {
@@ -214,6 +217,7 @@ class OrbitEncryptedClipStager {
       maxInputBytes:OrbitMediaFormat.audioLimit);
     final draft=await _outbox.enqueue(sealed,kind:'audio',mime:mime,
       durationMs:durationMs);
+    if(onQueued!=null)await onQueued(id);
     try {
       await sealed.file.delete();
       final uploaded=await _media.upload(await _outbox.restore(draft),
