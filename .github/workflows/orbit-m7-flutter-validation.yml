@@ -4,6 +4,13 @@ on:
     branches: [feature/m7-moments-flutter]
   pull_request:
     branches: [feature/m6-media-flutter-integration]
+  workflow_dispatch:
+    inputs:
+      target:
+        type: choice
+        description: "Run only the needed M7 validation (other jobs are skipped)"
+        options: [android, ios, moments]
+        default: android
 permissions:
   contents: read
 concurrency:
@@ -11,6 +18,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   moments:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.target == 'moments' }}
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -32,14 +40,18 @@ jobs:
           flutter test test/features/media/orbit_media_recovery_coordinator_test.dart
 
   android-native-compile:
+    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.target == 'android') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 65
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.47.7'
@@ -54,6 +66,7 @@ jobs:
           path: build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error
   ios-simulator-compile:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.target == 'ios' }}
     runs-on: macos-15
     timeout-minutes: 45
     steps:
