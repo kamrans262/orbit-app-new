@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/orbit_circle_confirmation.dart';
+
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../core/widgets/app_screen_header.dart';
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../../auth/data/orbit_identity_client.dart';
 import '../../data/orbit_circle_repository.dart';
@@ -67,14 +70,14 @@ class _OrbitLiveCircleManageScreenState extends State<OrbitLiveCircleManageScree
     )));
   }
 
-  Future<bool> _confirm(String title,String text,String action) async =>
-      await showDialog<bool>(context:context,builder:(d)=>AlertDialog(
-        backgroundColor:Colors.white,title:Text(title),
-        content:Text(text),actions:[
-          TextButton(onPressed:()=>Navigator.pop(d,false),child:const Text('Cancel')),
-          TextButton(onPressed:()=>Navigator.pop(d,true),child:Text(action)),
-        ],
-      )) ?? false;
+  Future<bool> _confirm(String title,String text,String action) =>
+    showOrbitCircleConfirmation(
+      context:context,
+      title:title,
+      description:text,
+      confirmLabel:action,
+      destructive: const <String>{'Leave','Remove','Transfer','Archive'}.contains(action),
+    );
 
   Future<void> _editIcon() async {
     if(!_circle.can('edit'))return;
@@ -205,9 +208,14 @@ class _OrbitLiveCircleManageScreenState extends State<OrbitLiveCircleManageScree
   @override
   Widget build(BuildContext context)=>Scaffold(
     backgroundColor:AppColors.background,
-    appBar:AppBar(backgroundColor:AppColors.background,
-      title:const Text('Manage Circle',style:TextStyle(
-        fontFamily:AppTypography.fontFamily,fontWeight:FontWeight.w600))),
+    appBar:AppBar(
+      automaticallyImplyLeading:false,
+      backgroundColor:AppColors.background,
+      elevation:0,
+      toolbarHeight:68,
+      titleSpacing:20,
+      title:const AppScreenHeader(title:'Manage Circle',prominent:true),
+    ),
     body:_busy ? const Center(child:CircularProgressIndicator())
       : _error!=null ? Center(child:Column(
           mainAxisSize:MainAxisSize.min,children:[
