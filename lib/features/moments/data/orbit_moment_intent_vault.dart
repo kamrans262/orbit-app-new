@@ -10,15 +10,21 @@ class OrbitStoredMomentIntent {
   const OrbitStoredMomentIntent({
     required this.owner,required this.transfer,required this.clientId,
     required this.audienceKind,required this.targetIds,required this.caption,
-    required this.createdAt,
+    required this.createdAt,this.placeLabel='',this.locationConsent=false,
+    this.taggedUserIds=const [],
   });
   final String owner,transfer,clientId,audienceKind,caption;
   final List<String> targetIds;
+  final String placeLabel;
+  final bool locationConsent;
+  final List<String> taggedUserIds;
   final DateTime createdAt;
   Map<String,dynamic> toJson()=> {
     'owner':owner,'transfer':transfer,'client_id':clientId,
     'audience_kind':audienceKind,'target_ids':targetIds,
     'caption':caption,'created_at':createdAt.toUtc().toIso8601String(),
+    'place_label':placeLabel,'location_consent':locationConsent,
+    'tagged_user_ids':taggedUserIds,
   };
   factory OrbitStoredMomentIntent.fromJson(Map<String,dynamic> j) =>
     OrbitStoredMomentIntent(
@@ -26,6 +32,9 @@ class OrbitStoredMomentIntent {
       clientId:j['client_id'] as String,audienceKind:j['audience_kind'] as String,
       targetIds:List<String>.from(j['target_ids'] as List),
       caption:j['caption'] as String,
+      placeLabel:j['place_label'] as String? ?? '',
+      locationConsent:j['location_consent']==true,
+      taggedUserIds:List<String>.from(j['tagged_user_ids'] as List? ?? const []),
       createdAt:DateTime.parse(j['created_at'] as String).toUtc());
 }
 

@@ -17,18 +17,25 @@ class MomentPublishRequest {
     this.mediaFile,
     this.mediaKind='image',
     this.durationMs,
+    this.placeLabel='',
+    this.locationConsent=false,
+    Iterable<String> taggedUserIds=const [],
     required Iterable<String> circleIds,
     required this.caption,
     this.audienceKind='selected_circles',
     Iterable<String>? targetIds,
     String? clientId,
-  }) : targetIds=Set<String>.unmodifiable(targetIds??circleIds),
+  }) : taggedUserIds=Set<String>.unmodifiable(taggedUserIds),
+       targetIds=Set<String>.unmodifiable(targetIds??circleIds),
        clientId=clientId??const Uuid().v4(), circleIds = Set<String>.unmodifiable(circleIds);
 
   final Uint8List photoBytes;
   final File? mediaFile;
   final String mediaKind;
   final int? durationMs;
+  final String placeLabel;
+  final bool locationConsent;
+  final Set<String> taggedUserIds;
   final Set<String> circleIds;
   final String caption;
   final String audienceKind;

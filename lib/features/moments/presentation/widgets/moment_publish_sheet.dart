@@ -111,6 +111,10 @@ class MomentPublishSheet extends StatefulWidget {
 class _MomentPublishSheetState extends State<MomentPublishSheet> {
   final TextEditingController _caption = TextEditingController();
   final TextEditingController _overlayText=TextEditingController();
+  final TextEditingController _placeLabel=TextEditingController();
+  bool _locationConsent=false;
+  final Set<String> _taggedPeople={};
+
   MomentFilter _filter=MomentFilter.natural;
   bool _drawing=false;
   final List<MomentDrawStroke> _strokes=[];
@@ -212,6 +216,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
   void dispose() {
     _previewDebounce?.cancel();
     _overlayText.dispose();
+    _placeLabel.dispose();
     _caption.dispose();
     super.dispose();
   }
@@ -221,6 +226,8 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
     if (privateOnly && !_canSavePrivate) return;
     if (!privateOnly && !_hasAudience) return;
     if (!previewOnly && !privateOnly && !_canPublish) return;
+    if(_locationConsent && _placeLabel.text.trim().isEmpty)return;
+    if(_taggedPeople.length>20)return;
     FocusScope.of(context).unfocus();
     setState(() {
       _busy = true;
@@ -254,6 +261,9 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
           mediaFile:widget.mediaFile,
           mediaKind:widget.mediaKind,
           durationMs:widget.durationMs,
+          placeLabel:_locationConsent?_placeLabel.text.trim():'',
+          locationConsent:_locationConsent && _placeLabel.text.trim().isNotEmpty,
+          taggedUserIds:_taggedPeople,
           circleIds: _audienceKind=='selected_circles' ? _selectedIds : const <String>{},
           caption: _caption.text.trim(),
           audienceKind:_audienceKind,
@@ -481,6 +491,44 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
             ),
           ),
         ),
+        if(_canPublish) ...[
+          const SizedBox(height:8),
+          TextField(
+            controller:_placeLabel,
+            maxLength:90,maxLines:1,
+            style:AppTypography.body,
+            decoration:const InputDecoration(
+              hintText:'Place (optional; entered manually)'),
+            onChanged:(_){
+              if(_locationConsent)setState(()=>_locationConsent=false);
+            },
+          ),
+          if(_placeLabel.text.trim().isNotEmpty)
+            CheckboxListTile(
+              value:_locationConsent,
+              title:Text('Include this place for the selected audience',
+                style:AppTypography.body),
+              subtitle:Text('Optional consent. Orbit does not collect GPS.',
+                style:AppTypography.bodyMuted),
+              activeColor:AppColors.primaryEnd,
+              contentPadding:EdgeInsets.zero,
+              onChanged:(value)=>setState(()=>_locationConsent=value==true),
+            ),
+          if(widget.friends.isNotEmpty) ...[
+            Text('Tag eligible friends (optional)',style:AppTypography.body),
+            const SizedBox(height:8),
+            Wrap(spacing:6,runSpacing:6,
+              children:widget.friends.map((friend)=>FilterChip(
+                label:Text(friend.name,style:AppTypography.body),
+                selected:_taggedPeople.contains(friend.id),
+                onSelected:(selected)=>setState((){
+                  if(selected)_taggedPeople.add(friend.id);
+                  else _taggedPeople.remove(friend.id);
+                }),
+              )).toList(),
+            ),
+          ],
+        ],
         const SizedBox(height: 6),
         if (_canPublish || !_canSavePrivate)
           Text(

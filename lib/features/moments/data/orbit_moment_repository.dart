@@ -237,6 +237,9 @@ class OrbitMomentRepository {
       await _intents.save(OrbitStoredMomentIntent(
         owner:owner,transfer:transfer,clientId:request.clientId,
         audienceKind:audience,targetIds:targets,caption:request.caption,
+        placeLabel:request.placeLabel,
+        locationConsent:request.locationConsent,
+        taggedUserIds:request.taggedUserIds.toList(),
         createdAt:DateTime.now().toUtc()));
     }
     String? id;
@@ -254,12 +257,18 @@ class OrbitMomentRepository {
       final caption=request.caption.trim().isEmpty?null:
         await _sealText(request.caption.trim(),original.key,mediaId,
           'caption','self');
+      final place=request.locationConsent && request.placeLabel.trim().isNotEmpty?
+        await _sealText(request.placeLabel.trim(),original.key,mediaId,'place','self'):null;
       progress(0.92);
       final result=await _api('POST','/moments',key:request.clientId,body:{
         'client_id':request.clientId,'media_id':mediaId,
         'audience_kind':audience,'target_ids':targets,
         if(caption!=null)'caption_ciphertext':caption,
         if(caption!=null)'caption_key_version':'v1',
+        if(place!=null)'place_ciphertext':place,
+        if(place!=null)'place_key_version':'v1',
+        if(place!=null)'location_consent':true,
+        'tagged_user_ids':request.taggedUserIds.toList(),
       });
       if(result['published']!=true||result['audience_keys_confirmed']!=true||
           result['moment_id'] is! String){
@@ -379,11 +388,17 @@ class OrbitMomentRepository {
         final cipher=intent.caption.trim().isEmpty?null:
           await _sealText(intent.caption.trim(),original.key,mediaId,
             'caption','self');
+        final place=intent.locationConsent && intent.placeLabel.trim().isNotEmpty?
+          await _sealText(intent.placeLabel.trim(),original.key,mediaId,'place','self'):null;
         final r=await _api('POST','/moments',key:intent.clientId,body:{
           'client_id':intent.clientId,'media_id':mediaId,
           'audience_kind':intent.audienceKind,'target_ids':intent.targetIds,
           if(cipher!=null)'caption_ciphertext':cipher,
           if(cipher!=null)'caption_key_version':'v1',
+          if(place!=null)'place_ciphertext':place,
+          if(place!=null)'place_key_version':'v1',
+          if(place!=null)'location_consent':true,
+          'tagged_user_ids':intent.taggedUserIds,
         });
         if(r['published']!=true||r['audience_keys_confirmed']!=true||
             r['moment_id'] is! String){
