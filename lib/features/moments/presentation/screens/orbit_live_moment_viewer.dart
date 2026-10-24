@@ -7,6 +7,7 @@ import '../../../../core/widgets/app_circular_icon_button.dart';
 import '../../../../core/widgets/app_primary_button.dart';
 import '../../../../core/widgets/app_screen_header.dart';
 import '../../data/orbit_moment_repository.dart';
+import '../widgets/orbit_private_moment_player.dart';
 
 /// Private viewer reuses the existing Orbit detail scaffold, action icons and
 /// approved modal-sheet shapes. No share/public URL, preview mock, or new theme.
@@ -146,7 +147,9 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
       if(!await widget.repository.remainsAuthorized(current)){
         throw StateError('Audience authorization expired');
       }
-      final photo=await widget.repository.photo(current,variant:'original');
+      final photo=current.mediaKind=='image'
+        ? await widget.repository.photo(current,variant:'original')
+        : Uint8List(0);
       final caption=await widget.repository.caption(current);
       await widget.repository.view(current);
       if(mounted && epoch==_loadEpoch && _current.id==current.id){
@@ -288,7 +291,11 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
                 : _error!=null
                   ? Text(_error!,textAlign:TextAlign.center,style:AppTypography.bodyMuted)
                   : ClipRRect(borderRadius:BorderRadius.circular(16),
-                    child:Image.memory(_photo!,fit:BoxFit.contain))),
+                    child:_current.mediaKind=='image'
+                      ? Image.memory(_photo!,fit:BoxFit.contain)
+                      : OrbitPrivateMomentPlayer(
+                          key:ValueKey<String>('m7_clip_${_current.id}'),
+                          item:_current,repository:widget.repository))),
             ))),
           if(_error==null && !_loading && _caption!=null&&_caption!.isNotEmpty &&
               WidgetsBinding.instance.lifecycleState!=AppLifecycleState.paused &&
