@@ -47,6 +47,7 @@ Future<void> showMomentPublishingSheet(
   String mediaKind='image',
   int? durationMs,
   List<double> waveformLevels=const [],
+  bool enableNativePreview=true,
   required List<MomentAudienceCircle> circles,
   List<MomentAudienceCircle> friends = const [],
   String privacyAudience = 'Nobody',
@@ -73,6 +74,7 @@ Future<void> showMomentPublishingSheet(
         mediaKind:mediaKind,
         durationMs:durationMs,
         waveformLevels:waveformLevels,
+        enableNativePreview:enableNativePreview,
         circles: circles,
         friends: friends,
         privacyAudience: privacyAudience,
@@ -91,6 +93,7 @@ class MomentPublishSheet extends StatefulWidget {
     this.mediaKind='image',
     this.durationMs,
     this.waveformLevels=const [],
+    this.enableNativePreview=true,
     this.friends = const [],
     this.privacyAudience = 'Nobody',
     this.publisher,
@@ -103,6 +106,7 @@ class MomentPublishSheet extends StatefulWidget {
   final String mediaKind;
   final int? durationMs;
   final List<double> waveformLevels;
+  final bool enableNativePreview;
   final List<MomentAudienceCircle> circles;
   final List<MomentAudienceCircle> friends;
   final String privacyAudience;
@@ -399,10 +403,14 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
           child: SizedBox(
             height: compact ? 160 : 255,
             child: widget.mediaKind!='image'
-              ? OrbitMomentDraftPlayer(
-                  file:widget.mediaFile!,kind:widget.mediaKind,
-                  muted:_muteVideo,
-                )
+              ? (widget.enableNativePreview
+                  ? OrbitMomentDraftPlayer(
+                      file:widget.mediaFile!,kind:widget.mediaKind,
+                      muted:_muteVideo)
+                  : Center(child:Text(
+                      widget.mediaKind=='video'
+                        ? 'Video ready to encrypt':'Voice ready to encrypt',
+                      style:AppTypography.body)))
               : LayoutBuilder(builder:(context,size)=>Stack(
                 fit:StackFit.expand,
                 children:[

@@ -138,7 +138,8 @@ void main() {
       body:Builder(builder:(context)=>TextButton(
         onPressed:()=>showMomentPublishingSheet(context,
           photoBytes:Uint8List(0),mediaFile:source,mediaKind:'video',
-          durationMs:5000,circles:const [],privacyAudience:'Nobody',
+          durationMs:5000,enableNativePreview:false,
+          circles:const [],privacyAudience:'Nobody',
           publisher:(request,progress) async {
             captured=request;
             return const MomentPublishReceipt(momentId:'server-confirmed');
