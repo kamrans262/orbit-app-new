@@ -323,7 +323,7 @@ class _OrbitLiveCircleManageScreenState extends State<OrbitLiveCircleManageScree
             trailing:member.role!='owner' &&
               (_circle.can('remove_members') ||
                _circle.can('change_roles') ||
-               _circle.can('transfer_owner'))
+               (_circle.can('transfer_owner') && member.role != 'restricted'))
               ? AppCircularIconButton(
                   key: Key('circle_member_more_${member.id}'),
                   semanticLabel: 'Manage ${member.name}',
