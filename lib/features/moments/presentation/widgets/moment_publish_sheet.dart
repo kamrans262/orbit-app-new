@@ -335,7 +335,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
           onPressed: () => setState(() => _step = _PublishStep.audience),
           icon: const Icon(Icons.people_outline_rounded, size: 20),
           label: Text(
-            _hasAudience ? _audienceLabel : 'Choose audience',
+            _hasAudience ? '$_audienceLabel selected' : 'Choose audience',
           ),
           style: OutlinedButton.styleFrom(
             minimumSize: const Size(double.infinity, 48),
