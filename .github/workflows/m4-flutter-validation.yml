@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - feature/m4-social-graph-flutter
-      - integration/m2-m4-flutter-consolidated-2026-10-24
+      - integration/m2-m5-flutter-consolidated-2026-10-24
       - feature/m5-circles-flutter-integration
   pull_request:
     branches:
