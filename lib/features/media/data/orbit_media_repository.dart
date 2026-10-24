@@ -213,12 +213,19 @@ class OrbitMediaRepository {
     required String deviceId, required List<int> privateKey,
     required List<int> publicKey, String variant='original',
     OrbitMediaCrypto? crypto,
+    int? maxPlainBytes,
   }) async {
     final scope='/media/'+Uri.encodeComponent(mediaId);
     final access=await control('POST',scope+'/access',
         body:{'variant':variant,'device_id':deviceId});
     final envelope=await control('GET',scope+'/key-envelope?device_id='+
         Uri.encodeComponent(deviceId)+'&variant='+Uri.encodeComponent(variant));
+    // Clip limits are explicitly caller-bounded; images keep the strict M6
+    // image limit. No URL or plaintext is ever published or cached remotely.
+    final maxBytes=maxPlainBytes??OrbitMediaFormat.imageLimit;
+    if(maxBytes<=0||maxBytes>64*1024*1024) {
+      throw StateError('Private media exceeds safe in-memory playback budget.');
+    }
     late final Uint8List ciphertext;
     if(access['download_mode']=='authenticated') {
       final path=access['download_path'];
@@ -226,7 +233,7 @@ class OrbitMediaRepository {
         throw const FormatException('Invalid private ciphertext path.');
       }
       ciphertext=await _identity.mediaBinaryRequest('GET',path,
-          maxResponseBytes:OrbitMediaFormat.imageLimit+2048);
+          maxResponseBytes:maxBytes+262144);
     } else {
       final raw=access['ciphertext_url'];
       final url=raw is String ? Uri.tryParse(raw):null;
@@ -235,7 +242,7 @@ class OrbitMediaRepository {
       }
       final response=await _http.get(url).timeout(const Duration(seconds:60));
       if(response.statusCode!=200 ||
-         response.bodyBytes.length>OrbitMediaFormat.imageLimit+2048) {
+         response.bodyBytes.length>maxBytes+262144) {
         throw StateError('Private media cannot be downloaded.');
       }
       ciphertext=response.bodyBytes;
@@ -250,6 +257,6 @@ class OrbitMediaRepository {
     return processor.openInMemory(ciphertext,
       key:material.key,noncePrefix:material.prefix,
       ownerId:material.owner,transferId:material.transfer,
-      purpose:material.purpose,variant:material.variant);
+      purpose:material.purpose,variant:material.variant,maxPlainBytes:maxBytes);
   }
 }

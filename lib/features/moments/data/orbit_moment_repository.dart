@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
@@ -14,15 +16,19 @@ import '../domain/models/moment_publish_models.dart';
 class OrbitLiveMoment {
   const OrbitLiveMoment({required this.id,required this.creatorId,
     required this.mediaId,required this.contextId,required this.publishedAt,
-    this.captionCiphertext});
+    this.captionCiphertext,this.mediaKind='image',this.durationMs});
   final String id, creatorId, mediaId, contextId;
   final DateTime publishedAt;
   final String? captionCiphertext;
+  final String mediaKind;
+  final int? durationMs;
   factory OrbitLiveMoment.fromJson(Map<String,dynamic> d) =>
     OrbitLiveMoment(id:d['id'] as String,creatorId:d['creator_id'] as String,
       mediaId:d['media_id'] as String,contextId:d['context_id'] as String,
       publishedAt:DateTime.parse(d['published_at'] as String),
-      captionCiphertext:d['caption_ciphertext'] as String?);
+      captionCiphertext:d['caption_ciphertext'] as String?,
+      mediaKind:d['media_kind'] as String? ?? 'image',
+      durationMs:(d['duration_ms'] as num?)?.toInt());
 }
 
 class OrbitMomentAudienceOptions {
@@ -294,9 +300,48 @@ class OrbitMomentRepository {
   }
 
   Future<Uint8List> photo(OrbitLiveMoment item,{String variant='thumbnail'}) async {
+    if(item.mediaKind=='audio'){
+      throw StateError('Voice Moments have no photo thumbnail.');
+    }
     final d=await _identity.trustedMediaDevice();
+    final v=variant=='thumbnail' && item.mediaKind=='video'?'poster':variant;
     return _media.downloadPhoto(item.mediaId,deviceId:d.id,
-      privateKey:d.privateKey,publicKey:d.publicKey,variant:variant);
+      privateKey:d.privateKey,publicKey:d.publicKey,variant:v);
+  }
+
+  /// Native players receive only a temporary decrypted app-cache file. It is
+  /// deleted when its viewer closes/backgrounds. No remote plaintext URL.
+  Future<File> openPrivateClip(OrbitLiveMoment item) async {
+    if(!['video','audio'].contains(item.mediaKind)) {
+      throw StateError('This Moment is not playable media.');
+    }
+    if(!await remainsAuthorized(item)) {
+      throw StateError('Moment access was revoked.');
+    }
+    final device=await _identity.trustedMediaDevice();
+    const safeMax=64*1024*1024;
+    final bytes=await _media.downloadPhoto(item.mediaId,
+      deviceId:device.id,privateKey:device.privateKey,
+      publicKey:device.publicKey,maxPlainBytes:safeMax);
+    if(!await remainsAuthorized(item)) {
+      bytes.fillRange(0,bytes.length,0);
+      throw StateError('Moment access changed while decrypting.');
+    }
+    final dir=Directory('${(await getTemporaryDirectory()).path}/orbit-m7-playback');
+    await dir.create(recursive:true);
+    final path='${dir.path}/${_uuid.v4()}.${item.mediaKind=='video'?'mp4':'m4a'}';
+    final file=File(path);
+    try{
+      await file.writeAsBytes(bytes,flush:true);
+      return file;
+    }finally{
+      bytes.fillRange(0,bytes.length,0);
+    }
+  }
+
+  Future<void> erasePrivateClip(File? file) async {
+    if(file==null)return;
+    try{if(await file.exists())await file.delete();}catch(_){}
   }
   Future<String?> caption(OrbitLiveMoment item) async {
     final encrypted=item.captionCiphertext;
