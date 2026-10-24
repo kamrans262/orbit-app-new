@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../widgets/orbit_circle_confirmation.dart';
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../../auth/data/orbit_identity_client.dart';
 import '../../data/orbit_circle_repository.dart';
@@ -178,21 +179,12 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
     try {
       final preview = await _repo.previewCode(code);
       if (!mounted) return;
-      final answer = await showDialog<bool>(
-        context: context,
-        builder: (d) => AlertDialog(
-          backgroundColor: Colors.white,
-          title: const Text('Join Circle?', style: TextStyle(
-            fontFamily: AppTypography.fontFamily)),
-          content: Text('Join ${preview['circle_name']}? You will not share '
-            'your location, presence or Moments by joining.'),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(d, false),
-              child: const Text('Cancel')),
-            TextButton(onPressed: () => Navigator.pop(d, true),
-              child: const Text('Join Circle')),
-          ],
-        ),
+      final answer = await showOrbitCircleConfirmation(
+        context:context,
+        title:'Join Circle?',
+        description:'Join ${preview['circle_name']}? You will not share '
+          'your location, presence or Moments by joining.',
+        confirmLabel:'Join Circle',
       );
       if (answer != true) return;
       await _repo.redeemCode(code);
@@ -262,19 +254,13 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
                     }),
                   IconButton(icon: const Icon(Icons.check),
                     tooltip: 'Accept', onPressed: () async {
-                      final confirm=await showDialog<bool>(context:sheet,
-                        builder:(dialog)=>AlertDialog(
-                          backgroundColor:Colors.white,
-                          title:const Text('Accept Circle invitation?'),
-                          content:Text('Join "${invite.circleName ?? 'Circle'}"? '
-                            'No location, presence, Moment or messaging permissions are granted.'),
-                          actions:[
-                            TextButton(onPressed:()=>Navigator.pop(dialog,false),
-                              child:const Text('Cancel')),
-                            TextButton(onPressed:()=>Navigator.pop(dialog,true),
-                              child:const Text('Accept')),
-                          ],
-                        ));
+                      final confirm=await showOrbitCircleConfirmation(
+                        context:sheet,
+                        title:'Accept Circle invitation?',
+                        description:'Join "${invite.circleName ?? 'Circle'}"? '
+                          'No location, presence, Moment or messaging permissions are granted.',
+                        confirmLabel:'Accept',
+                      );
                       if(confirm != true) return;
                       try {
                         await _repo.answer(invite.id,accept:true);
