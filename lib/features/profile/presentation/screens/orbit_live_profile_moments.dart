@@ -61,9 +61,14 @@ class _OrbitLiveProfileMomentsState extends State<OrbitLiveProfileMoments> {
   Future<void> _open(OrbitLiveMoment moment) async {
     if(!mounted)return;
     final current=_authorized.indexWhere((m)=>m.id==moment.id);
+    // Only one's own profile should display "You". A foreign user's
+    // accessible Moments must show the real authorized author identity.
+    String author='Orbit member';
+    try {author=await _repo.name(moment.creatorId);}catch(_){}
+    if(!mounted)return;
     await Navigator.of(context).push<void>(MaterialPageRoute(
       builder:(_)=>OrbitLiveMomentViewer(
-        moment:moment,repository:_repo,author:'You',
+        moment:moment,repository:_repo,author:author,
         playlist:List<OrbitLiveMoment>.from(_authorized),
         initialIndex:current),
     ));
