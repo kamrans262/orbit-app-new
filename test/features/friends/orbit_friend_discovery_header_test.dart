@@ -27,7 +27,7 @@ class _FakeDiscoveryRepository extends OrbitSocialRepository {
 }
 
 void main() {
-  testWidgets('Friend Discovery uses existing prominent Orbit header style',
+  testWidgets('Friend Discovery matches compact Notification/Privacy Orbit header',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(390, 844));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -44,13 +44,13 @@ void main() {
 
     final back = tester.widget<AppCircularIconButton>(
         find.byKey(OrbitDiscoveryHeaderKeys.back));
-    expect(back.size, 40);
+    expect(back.size, 30);
     expect(back.iconSize, 24);
 
     final title = tester.widget<Text>(
         find.byKey(OrbitDiscoveryHeaderKeys.title));
     expect(title.data, 'Friend Discovery');
-    expect(title.style?.fontSize, 24);
+    expect(title.style?.fontSize, 16);
     expect(title.style?.fontWeight, FontWeight.w600);
     expect(find.byType(AppScreenHeader), findsOneWidget);
     expect(tester.takeException(), isNull);
