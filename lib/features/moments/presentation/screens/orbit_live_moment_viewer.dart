@@ -177,6 +177,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
         setState((){
           _photo=photo;
           _caption=caption;
+          _liked=current.myReaction=='like';
           _ownerPublishVersion=current.publishVersion;
           _isOwner=viewer!=null && viewer==current.creatorId;
           _loading=false;
