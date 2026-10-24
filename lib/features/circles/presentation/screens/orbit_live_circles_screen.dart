@@ -41,6 +41,8 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
   late final OrbitCircleSnapshotStore _store = widget.store ?? OrbitCircleSnapshotStore();
   List<OrbitCircle> _circles = const [];
   bool _busy = true, _offline = false, _hasArchivedCircles = false;
+  bool _joining = false;
+  DateTime? _qrBlockedUntil;
   String? _error;
   int _serial = 0;
   Timer? _membershipRefresh;
@@ -179,37 +181,66 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
     if (mounted) await _load();
   }
 
+  // Camera decoding is local. An authenticated preview is requested exactly
+  // once per intentional join attempt, never for each QR detection frame.
   Future<void> _join(String code) async {
-    if (_offline || _busy) return;
+    if (_offline || _busy || _joining) return;
+    if (_qrBlockedUntil != null && DateTime.now().isBefore(_qrBlockedUntil!)) {
+      _notify('Too many invitation checks. Please try again in about a minute.');
+      return;
+    }
+    setState(() => _joining = true);
     try {
       final preview = await _repo.previewCode(code);
       if (!mounted) return;
+      final name = preview['circle_name'];
+      if (name is! String || name.isEmpty) {
+        throw const FormatException('This Circle invitation could not be verified.');
+      }
       final answer = await showOrbitCircleConfirmation(
-        context:context,
-        title:'Join Circle?',
-        description:'Join ${preview['circle_name']}? You will not share '
-          'your location, presence or Moments by joining.',
-        confirmLabel:'Join Circle',
+        context: context,
+        title: 'Join Circle?',
+        description: 'Join $name? You will not share your '
+          'location, presence or Moments by joining.',
+        confirmLabel: 'Join Circle',
       );
-      if (answer != true) return;
+      if (answer != true || !mounted) return;
       await _repo.redeemCode(code);
       if (!mounted) return;
       _notify('You joined the Circle.');
       await _load();
     } catch (e) {
-      _notify(e is OrbitIdentityException ? e.message :
-        e is FormatException ? e.message : 'Unable to join this Circle.');
+      if (e is OrbitIdentityException && e.statusCode == 429) {
+        _qrBlockedUntil = DateTime.now().add(const Duration(seconds: 65));
+        _notify('Too many invitation checks. Please try again in about a minute.');
+      } else {
+        _notify(e is OrbitIdentityException ? e.message :
+          e is FormatException ? e.message : 'Unable to join this Circle.');
+      }
+    } finally {
+      if (mounted) setState(() => _joining = false);
     }
   }
 
   Future<void> _scan() async {
-    if(_offline || _busy) return;
-    final code = await Navigator.of(context).push<String>(
-      AppFadeSlidePageRoute<String>(
-        builder:(_) => OrbitCircleQrScanScreen(repository:_repo),
-      ),
-    );
-    if(mounted && code != null) await _join(code);
+    if (_offline || _busy || _joining) return;
+    if (_qrBlockedUntil != null && DateTime.now().isBefore(_qrBlockedUntil!)) {
+      _notify('Too many invitation checks. Please try again in about a minute.');
+      return;
+    }
+    // Prevent opening stacked scanner routes from rapid taps.
+    setState(() => _joining = true);
+    String? code;
+    try {
+      code = await Navigator.of(context).push<String>(
+        AppFadeSlidePageRoute<String>(
+          builder: (_) => OrbitCircleQrScanScreen(repository: _repo),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _joining = false);
+    }
+    if (mounted && code != null) await _join(code);
   }
 
   Future<void> _archived() async {
@@ -333,7 +364,7 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
       showMemberCounts: !_offline,
       onCreatePressed: _offline || _busy ? () => _notify('Reconnect to create a Circle.') : _create,
       onJoinRequested: _offline || _busy ? (_) => _notify('Reconnect to join a Circle.') : _join,
-      onScanQrPressed: _offline || _busy ? null : _scan,
+      onScanQrPressed: _offline || _busy || _joining ? null : _scan,
       onInvitationsPressed: _offline || _busy ? null : _incoming,
       onArchivedPressed: _offline || _busy || !_hasArchivedCircles ? null : _archived,
       onCirclePressed: _offline ? (_) => _notify('Reconnect to view Circle members.')
