@@ -71,6 +71,10 @@ class OrbitMomentRepository {
   final OrbitMomentIntentVault _intents;
   final OrbitMomentSeenVault _seenVault;
   static const Uuid _uuid=Uuid();
+  // Track app-session native players; opening another Moment must not remove
+  // a different still-playing clip. Files from crashed sessions are not in
+  // this set and are evicted on the next authorized open.
+  static final Set<String> _activePrivateClipPaths=<String>{};
 
   Future<Map<String,dynamic>> _api(String method,String path,
       {Map<String,Object?>? body,String? key}) async {
@@ -479,10 +483,10 @@ class OrbitMomentRepository {
     }
     final dir=Directory('${(await getTemporaryDirectory()).path}/orbit-m7-playback');
     await dir.create(recursive:true);
-    // Previous-session playback caches contain local decrypted clips. They
-    // must not survive another playback session or become an offline archive.
+    // Purge orphaned cleartext from a previous crashed session without
+    // disrupting other currently-playing clips in this process.
     for(final entry in await dir.list().toList()){
-      if(entry is File){
+      if(entry is File && !_activePrivateClipPaths.contains(entry.path)){
         try{await entry.delete();}catch(_){}
       }
     }
@@ -490,7 +494,12 @@ class OrbitMomentRepository {
     final file=File(path);
     try{
       await file.writeAsBytes(bytes,flush:true);
+      _activePrivateClipPaths.add(file.path);
       return file;
+    }catch(_){
+      // A failed write must not leave a partial playable plaintext artifact.
+      try{if(await file.exists())await file.delete();}catch(_){}
+      rethrow;
     }finally{
       bytes.fillRange(0,bytes.length,0);
     }
@@ -498,6 +507,7 @@ class OrbitMomentRepository {
 
   Future<void> erasePrivateClip(File? file) async {
     if(file==null)return;
+    _activePrivateClipPaths.remove(file.path);
     try{if(await file.exists())await file.delete();}catch(_){}
   }
   Future<String?> caption(OrbitLiveMoment item) async {
