@@ -1,5 +1,9 @@
 plugins {
     id("com.android.application")
+    // AGP 9 is explicitly in legacy Kotlin mode (android.builtInKotlin=false).
+    // Apply KGP before the Flutter Gradle Plugin; otherwise Kotlin sources and
+    // the kotlin.compilerOptions extension are not consistently configured.
+    id("org.jetbrains.kotlin.android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
