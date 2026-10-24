@@ -46,9 +46,11 @@ abstract final class MomentPhotoProcessor {
         interpolation:img.Interpolation.linear);
     }
     final w=image.width, h=image.height;
+    final originalPixels=image;
+    image=img.Image(width:w,height:h);
     for(var y=0;y<h;y++){
       for(var x=0;x<w;x++){
-        final p=image.getPixel(x,y);
+        final p=originalPixels.getPixel(x,y);
         final r=p.r.toInt(),g=p.g.toInt(),b=p.b.toInt();
         final l=(r*0.299+g*0.587+b*0.114).round();
         int rr=r,gg=g,bb=b;
