@@ -136,10 +136,17 @@ class OrbitMomentMediaStager {
       final allEnvelopes=<Map<String,Object?>>[];
       final children=drafts.where((x)=>x.parentTransferId==parent.transfer)
           .toList();
+      // A crash between enqueuing original and derivative is NOT a complete
+      // photo/video upload. Never grant/discard a Moment without its variant.
+      if(parent.purpose=='moment' &&
+          (parent.kind=='image' || parent.kind=='video') &&
+          children.isEmpty) continue;
       final refreshedChildren=<OrbitQueuedMedia>[];
       var complete=true;
       for(var child in children) {
-        if(child.parentMediaId==null) {
+        // The backend can issue a fresh parent UUID after a 2+ hour
+        // expired-session recovery. Rebind a previously saved child as well.
+        if(child.parentMediaId!=main.mediaId) {
           child=await _outbox.bindVariantParent(child,main.mediaId);
         }
         final sent=await _repo.upload(await _outbox.restore(child),
