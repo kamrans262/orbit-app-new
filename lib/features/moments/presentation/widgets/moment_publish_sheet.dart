@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -35,13 +36,17 @@ enum _PublishStep { review, audience, uploading, failed, finished }
 Future<void> showMomentPublishingSheet(
   BuildContext context, {
   required Uint8List photoBytes,
+  File? mediaFile,
+  String mediaKind='image',
+  int? durationMs,
   required List<MomentAudienceCircle> circles,
   List<MomentAudienceCircle> friends = const [],
   String privacyAudience = 'Nobody',
   MomentPublisher? publisher,
   OrbitPrivatePhotoSaver? privateSaver,
 }) async {
-  if (photoBytes.isEmpty) return;
+  if(mediaKind=='image' && photoBytes.isEmpty)return;
+  if(mediaKind!='image' && (mediaFile==null || !['video','audio'].contains(mediaKind)))return;
   await showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -56,6 +61,9 @@ Future<void> showMomentPublishingSheet(
       heightFactor: 0.97,
       child: MomentPublishSheet(
         photoBytes: photoBytes,
+        mediaFile:mediaFile,
+        mediaKind:mediaKind,
+        durationMs:durationMs,
         circles: circles,
         friends: friends,
         privacyAudience: privacyAudience,
@@ -70,6 +78,9 @@ class MomentPublishSheet extends StatefulWidget {
   const MomentPublishSheet({
     required this.photoBytes,
     required this.circles,
+    this.mediaFile,
+    this.mediaKind='image',
+    this.durationMs,
     this.friends = const [],
     this.privacyAudience = 'Nobody',
     this.publisher,
@@ -78,6 +89,9 @@ class MomentPublishSheet extends StatefulWidget {
   });
 
   final Uint8List photoBytes;
+  final File? mediaFile;
+  final String mediaKind;
+  final int? durationMs;
   final List<MomentAudienceCircle> circles;
   final List<MomentAudienceCircle> friends;
   final String privacyAudience;
@@ -168,6 +182,9 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
       } else {
         final request = MomentPublishRequest(
           photoBytes: widget.photoBytes,
+          mediaFile:widget.mediaFile,
+          mediaKind:widget.mediaKind,
+          durationMs:widget.durationMs,
           circleIds: _audienceKind=='selected_circles' ? _selectedIds : const <String>{},
           caption: _caption.text.trim(),
           audienceKind:_audienceKind,
@@ -290,14 +307,23 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
           borderRadius: BorderRadius.circular(22),
           child: SizedBox(
             height: compact ? 160 : 255,
-            child: Image.memory(
-              widget.photoBytes,
-              fit: BoxFit.contain,
-              errorBuilder: (_, error, stack) => const ColoredBox(
-                color: Colors.black12,
-                child: Center(child: Text('Unable to preview this photo')),
-              ),
-            ),
+            child: widget.mediaKind!='image'
+              ? Center(child:Column(mainAxisSize:MainAxisSize.min,children:[
+                  Icon(widget.mediaKind=='video'
+                    ? Icons.videocam_outlined : Icons.mic_none_outlined,
+                    size:54,color:AppColors.primaryEnd),
+                  const SizedBox(height:8),
+                  Text(widget.mediaKind=='video'
+                    ? 'Video ready to encrypt' : 'Voice ready to encrypt',
+                    style:AppTypography.body),
+                  if(widget.durationMs!=null)Text(
+                    '${(widget.durationMs!/1000).ceil()} seconds',
+                    style:AppTypography.bodyMuted),
+                ]))
+              : Image.memory(
+                  widget.photoBytes,fit:BoxFit.contain,
+                  errorBuilder:(_,error,stack)=>const Center(
+                    child:Text('Unable to preview this photo'))),
           ),
         ),
         const SizedBox(height: 16),
@@ -360,7 +386,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
               ),
             ),
           ),
-        if (_canSavePrivate)
+        if (_canSavePrivate && widget.mediaKind=='image')
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: Text(
@@ -378,7 +404,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
             previewOnly: !_canPublish && !_canSavePrivate,
           )),
         ),
-        if(_canPublish && _canSavePrivate)
+        if(_canPublish && _canSavePrivate && widget.mediaKind=='image')
           TextButton(
             onPressed:()=>unawaited(_submit(privateOnly:true)),
             child:const Text('Save privately without publishing'),

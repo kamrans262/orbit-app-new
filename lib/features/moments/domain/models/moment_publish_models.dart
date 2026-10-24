@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:uuid/uuid.dart';
 
@@ -13,6 +14,9 @@ class MomentAudienceCircle {
 class MomentPublishRequest {
   MomentPublishRequest({
     required this.photoBytes,
+    this.mediaFile,
+    this.mediaKind='image',
+    this.durationMs,
     required Iterable<String> circleIds,
     required this.caption,
     this.audienceKind='selected_circles',
@@ -22,6 +26,9 @@ class MomentPublishRequest {
        clientId=clientId??const Uuid().v4(), circleIds = Set<String>.unmodifiable(circleIds);
 
   final Uint8List photoBytes;
+  final File? mediaFile;
+  final String mediaKind;
+  final int? durationMs;
   final Set<String> circleIds;
   final String caption;
   final String audienceKind;
