@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -6,6 +7,7 @@ import 'package:orbit_ui/features/moments/domain/models/moment_publish_models.da
 import 'package:orbit_ui/features/moments/presentation/widgets/moment_publish_sheet.dart';
 
 void main() {
+  final realPhoto=base64Decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAOEGFykAAAAASUVORK5CYII=');
   TestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('real M7 Only Me uses confirmed server ID, not a demo success',
@@ -16,7 +18,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(body: Builder(builder: (context) =>
         TextButton(onPressed: () => showMomentPublishingSheet(context,
-          photoBytes: Uint8List.fromList(const [1, 2, 3]),
+          photoBytes: realPhoto,
           circles: const [], privacyAudience: 'Nobody',
           publisher: (request, progress) async {
             seen.add(request);
@@ -46,7 +48,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(body: Builder(builder: (context) =>
         TextButton(onPressed: () => showMomentPublishingSheet(context,
-          photoBytes: Uint8List.fromList(const [1, 2, 3]),
+          photoBytes: realPhoto,
           circles: const [], friends: const [
             MomentAudienceCircle(id: 'actual-id', name: 'Actual Friend'),
           ],
@@ -74,7 +76,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(body: Builder(builder: (context) =>
         TextButton(onPressed: () => showMomentPublishingSheet(context,
-          photoBytes: Uint8List.fromList(const [1, 2, 3]),
+          photoBytes: realPhoto,
           circles: const [], privacyAudience: 'Nobody',
           publisher: (request, progress) async {
             published = true;
@@ -103,7 +105,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(home:Scaffold(
       body:Builder(builder:(context)=>TextButton(
         onPressed:()=>showMomentPublishingSheet(context,
-          photoBytes:Uint8List.fromList([1,2,3]),
+          photoBytes:realPhoto,
           circles:const [MomentAudienceCircle(id:'circle1',name:'Approved Circle')],
           friends:const [],privacyAudience:'My Circle',
           publisher:(request,progress) async =>
