@@ -43,7 +43,9 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
     _index=widget.playlist.isEmpty?0:widget.initialIndex.clamp(0,widget.playlist.length-1);
     _revalidation=Timer.periodic(const Duration(seconds:20),(_){
       if(!mounted || _loading || _error!=null ||
-          WidgetsBinding.instance.lifecycleState!=AppLifecycleState.resumed ||
+          (WidgetsBinding.instance.lifecycleState==AppLifecycleState.paused ||
+           WidgetsBinding.instance.lifecycleState==AppLifecycleState.inactive ||
+           WidgetsBinding.instance.lifecycleState==AppLifecycleState.hidden) ||
           ModalRoute.of(context)?.isCurrent!=true)return;
       unawaited(_checkAuthorization());
     });
@@ -288,7 +290,10 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
                   : ClipRRect(borderRadius:BorderRadius.circular(16),
                     child:Image.memory(_photo!,fit:BoxFit.contain))),
             ))),
-          if(_caption!=null&&_caption!.isNotEmpty)
+          if(_error==null && !_loading && _caption!=null&&_caption!.isNotEmpty &&
+              WidgetsBinding.instance.lifecycleState!=AppLifecycleState.paused &&
+              WidgetsBinding.instance.lifecycleState!=AppLifecycleState.inactive &&
+              WidgetsBinding.instance.lifecycleState!=AppLifecycleState.hidden)
             Padding(padding:const EdgeInsets.symmetric(vertical:12),
               child:Text(_caption!,style:AppTypography.body)),
           if(_error==null&&!_loading)
