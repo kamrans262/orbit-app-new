@@ -48,6 +48,7 @@ Future<void> showMomentPublishingSheet(
   int? durationMs,
   List<double> waveformLevels=const [],
   bool enableNativePreview=true,
+  String initialOverlayText='',
   required List<MomentAudienceCircle> circles,
   List<MomentAudienceCircle> friends = const [],
   String privacyAudience = 'Nobody',
@@ -75,6 +76,7 @@ Future<void> showMomentPublishingSheet(
         durationMs:durationMs,
         waveformLevels:waveformLevels,
         enableNativePreview:enableNativePreview,
+        initialOverlayText:initialOverlayText,
         circles: circles,
         friends: friends,
         privacyAudience: privacyAudience,
@@ -94,6 +96,7 @@ class MomentPublishSheet extends StatefulWidget {
     this.durationMs,
     this.waveformLevels=const [],
     this.enableNativePreview=true,
+    this.initialOverlayText='',
     this.friends = const [],
     this.privacyAudience = 'Nobody',
     this.publisher,
@@ -107,6 +110,7 @@ class MomentPublishSheet extends StatefulWidget {
   final int? durationMs;
   final List<double> waveformLevels;
   final bool enableNativePreview;
+  final String initialOverlayText;
   final List<MomentAudienceCircle> circles;
   final List<MomentAudienceCircle> friends;
   final String privacyAudience;
@@ -195,6 +199,13 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
   @override
   void initState() {
     super.initState();
+    if(widget.initialOverlayText.isNotEmpty){
+      _overlayText.text=widget.initialOverlayText.substring(0,
+        widget.initialOverlayText.length.clamp(0,80));
+      WidgetsBinding.instance.addPostFrameCallback((_){
+        if(mounted)_queuePreview();
+      });
+    }
     // Legacy injected publisher tests and preview flows started with Circles.
     // Authenticated M7 always gets the explicit privacyAudience from server.
     if(widget.publisher!=null && widget.circles.isNotEmpty &&
