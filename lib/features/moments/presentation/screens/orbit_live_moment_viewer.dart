@@ -12,10 +12,14 @@ import '../../data/orbit_moment_repository.dart';
 /// approved modal-sheet shapes. No share/public URL, preview mock, or new theme.
 class OrbitLiveMomentViewer extends StatefulWidget {
   const OrbitLiveMomentViewer({required this.moment,required this.repository,
-    required this.author,super.key});
+    required this.author,this.playlist=const [],this.initialIndex=0,
+    this.authorNames=const {},super.key});
   final OrbitLiveMoment moment;
   final OrbitMomentRepository repository;
   final String author;
+  final List<OrbitLiveMoment> playlist;
+  final int initialIndex;
+  final Map<String,String> authorNames;
   @override
   State<OrbitLiveMomentViewer> createState()=>_OrbitLiveMomentViewerState();
 }
@@ -24,18 +28,62 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> {
   Uint8List? _photo;
   String? _caption;
   String? _error;
-  bool _loading=true, _liked=false, _sending=false;
+  bool _loading=true, _liked=false, _sending=false, _paused=false;
+  Timer? _advance;
+  late int _index;
+  OrbitLiveMoment get _current => widget.playlist.isEmpty
+      ? widget.moment : widget.playlist[_index];
+  String get _name => widget.authorNames[_current.creatorId]??widget.author;
   @override
   void initState(){
     super.initState();
+    _index=widget.playlist.isEmpty?0:widget.initialIndex.clamp(0,widget.playlist.length-1);
     unawaited(_load());
+  }
+  @override
+  void dispose(){
+    _advance?.cancel();
+    _photo=null;
+    super.dispose();
+  }
+  void _schedule(){
+    _advance?.cancel();
+    if(widget.playlist.isEmpty||_paused||_loading||_error!=null)return;
+    _advance=Timer(const Duration(seconds:5),()=>_move(1));
+  }
+  void _move(int amount){
+    if(!mounted || widget.playlist.isEmpty)return;
+    final to=_index+amount;
+    if(to<0)return;
+    if(to>=widget.playlist.length){
+      Navigator.of(context).maybePop();
+      return;
+    }
+    _advance?.cancel();
+    setState(() {
+      _index=to;_photo=null;_caption=null;_loading=true;_liked=false;
+      _error=null;
+    });
+    unawaited(_load());
+  }
+  void _pause(bool value){
+    _paused=value;
+    if(value)_advance?.cancel();else _schedule();
+  }
+  void _navigationTap(TapUpDetails tap,BoxConstraints constraints){
+    if(widget.playlist.isEmpty)return;
+    _move(tap.localPosition.dx<constraints.maxWidth/2?-1:1);
   }
   Future<void> _load() async {
     try{
-      final photo=await widget.repository.photo(widget.moment,variant:'original');
-      final caption=await widget.repository.caption(widget.moment);
-      await widget.repository.view(widget.moment);
-      if(mounted)setState((){_photo=photo;_caption=caption;_loading=false;});
+      final current=_current;
+      final photo=await widget.repository.photo(current,variant:'original');
+      final caption=await widget.repository.caption(current);
+      await widget.repository.view(current);
+      if(mounted && _current.id==current.id){
+        setState((){_photo=photo;_caption=caption;_loading=false;});
+        _schedule();
+      }
     }catch(_){
       if(mounted)setState((){
         _error='This encrypted Moment is unavailable or access has changed.';
@@ -47,7 +95,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> {
     if(_sending)return;
     final liked=!_liked;setState(()=>_sending=true);
     try {
-      await widget.repository.react(widget.moment,liked:liked);
+      await widget.repository.react(_current,liked:liked);
       if(mounted)setState(()=>_liked=liked);
     }catch(_){if(mounted)_notice('The reaction could not be saved.');}
     finally{if(mounted)setState(()=>_sending=false);}
@@ -59,7 +107,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> {
     final controller=TextEditingController();
     var lines=<({String id,String author,String body,String? parent})>[];
     String? error;
-    try {lines=await widget.repository.comments(widget.moment);}
+    try {lines=await widget.repository.allComments(_current);}
     catch(_){error='Comments are unavailable. Please try again.';}
     if(!mounted){controller.dispose();return;}
     await showModalBottomSheet<void>(
@@ -86,7 +134,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> {
               final text=controller.text.trim();
               if(text.isEmpty)return;
               try{
-                await widget.repository.comment(widget.moment,text);
+                await widget.repository.comment(_current,text);
                 if(sheetContext.mounted)Navigator.of(sheetContext).pop();
               }catch(_){
                 if(mounted)_notice('Comment could not be sent.');
@@ -124,7 +172,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> {
     );
     if(code==null)return;
     try{
-      await widget.repository.report(widget.moment,code);
+      await widget.repository.report(_current,code);
       if(mounted)_notice('Your report has been submitted.');
     }catch(_){if(mounted)_notice('Unable to submit this report.');}
   }
@@ -135,16 +183,25 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> {
         padding:const EdgeInsets.symmetric(horizontal:20),
         child:Column(children:[
           const SizedBox(height:20),
-          AppScreenHeader(title:widget.author,prominent:true),
+          AppScreenHeader(title:_name,prominent:true),
           const SizedBox(height:20),
-          Expanded(child:Center(
-            child:_loading
-              ? const CircularProgressIndicator(color:AppColors.primaryEnd)
-              : _error!=null
-                ? Text(_error!,textAlign:TextAlign.center,
-                    style:AppTypography.bodyMuted)
-                : ClipRRect(borderRadius:BorderRadius.circular(16),
-                    child:Image.memory(_photo!,fit:BoxFit.contain)))),
+          Expanded(child:LayoutBuilder(builder:(context,limits)=>
+            GestureDetector(
+              behavior:HitTestBehavior.opaque,
+              onTapUp:(event)=>_navigationTap(event,limits),
+              onLongPressStart:(_)=>_pause(true),
+              onLongPressEnd:(_)=>_pause(false),
+              onVerticalDragEnd:(details){
+                final speed=details.primaryVelocity??0;
+                if(speed>350)Navigator.of(context).maybePop();
+              },
+              child:Center(child:_loading
+                ? const CircularProgressIndicator(color:AppColors.primaryEnd)
+                : _error!=null
+                  ? Text(_error!,textAlign:TextAlign.center,style:AppTypography.bodyMuted)
+                  : ClipRRect(borderRadius:BorderRadius.circular(16),
+                    child:Image.memory(_photo!,fit:BoxFit.contain))),
+            ))),
           if(_caption!=null&&_caption!.isNotEmpty)
             Padding(padding:const EdgeInsets.symmetric(vertical:12),
               child:Text(_caption!,style:AppTypography.body)),
