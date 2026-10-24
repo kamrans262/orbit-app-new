@@ -131,6 +131,8 @@ class OrbitMomentMediaStager {
     void Function(double fraction)? onProgress,
     Future<void> Function(String transfer,OrbitSealedMedia original,
       OrbitSealedMedia? derivative,String mediaId)? onRecovered,
+    bool Function(OrbitQueuedMedia parent)? shouldRetry,
+    Future<void> Function(OrbitQueuedMedia parent)? onRetryStart,
   }) async {
     return OrbitMediaTransferGate.run(() async {
     final owner=await _identity.currentLocalSocialOwner();
@@ -138,6 +140,8 @@ class OrbitMomentMediaStager {
     final results=<OrbitMediaReceipt>[];
     final drafts=await _outbox.pending(owner);
     for(final parent in drafts.where((x)=>x.variant=='original')) {
+      if(shouldRetry!=null && !shouldRetry(parent))continue;
+      if(onRetryStart!=null)await onRetryStart(parent);
       final sealed=await _outbox.restore(parent);
       final main=await _repo.upload(sealed,kind:parent.kind,mime:parent.mime,
         width:parent.width,height:parent.height,durationMs:parent.durationMs,

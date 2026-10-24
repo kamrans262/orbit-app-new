@@ -11,13 +11,15 @@ class OrbitStoredMomentIntent {
     required this.owner,required this.transfer,required this.clientId,
     required this.audienceKind,required this.targetIds,required this.caption,
     required this.createdAt,this.placeLabel='',this.locationConsent=false,
-    this.taggedUserIds=const [],
+    this.taggedUserIds=const [],this.attemptCount=0,this.retryAfter,
   });
   final String owner,transfer,clientId,audienceKind,caption;
   final List<String> targetIds;
   final String placeLabel;
   final bool locationConsent;
   final List<String> taggedUserIds;
+  final int attemptCount;
+  final DateTime? retryAfter;
   final DateTime createdAt;
   Map<String,dynamic> toJson()=> {
     'owner':owner,'transfer':transfer,'client_id':clientId,
@@ -25,6 +27,8 @@ class OrbitStoredMomentIntent {
     'caption':caption,'created_at':createdAt.toUtc().toIso8601String(),
     'place_label':placeLabel,'location_consent':locationConsent,
     'tagged_user_ids':taggedUserIds,
+    'attempt_count':attemptCount,
+    'retry_after':retryAfter?.toUtc().toIso8601String(),
   };
   factory OrbitStoredMomentIntent.fromJson(Map<String,dynamic> j) =>
     OrbitStoredMomentIntent(
@@ -35,6 +39,9 @@ class OrbitStoredMomentIntent {
       placeLabel:j['place_label'] as String? ?? '',
       locationConsent:j['location_consent']==true,
       taggedUserIds:List<String>.from(j['tagged_user_ids'] as List? ?? const []),
+      attemptCount:(j['attempt_count'] as num?)?.toInt()??0,
+      retryAfter:j['retry_after'] is String
+        ? DateTime.parse(j['retry_after'] as String).toUtc():null,
       createdAt:DateTime.parse(j['created_at'] as String).toUtc());
 }
 
@@ -102,6 +109,26 @@ class OrbitMomentIntentVault {
       if(entry!=null)result.add(entry);
     }
     return result;
+  }
+
+  /// Record each attempted upload even if the network fails before any
+  /// response. Limit automatic retries; the user may explicitly retry again.
+  Future<OrbitStoredMomentIntent> markAttempt(String owner,String transfer) async {
+    final old=await read(owner,transfer);
+    if(old==null)throw StateError('Encrypted Moment intent disappeared.');
+    final attempts=old.attemptCount+1;
+    final seconds=(10*(1<<(attempts-1).clamp(0,6))).clamp(10,900);
+    final next=OrbitStoredMomentIntent(
+      owner:old.owner,transfer:old.transfer,clientId:old.clientId,
+      audienceKind:old.audienceKind,targetIds:old.targetIds,
+      caption:old.caption,createdAt:old.createdAt,
+      placeLabel:old.placeLabel,locationConsent:old.locationConsent,
+      taggedUserIds:old.taggedUserIds,
+      attemptCount:attempts,retryAfter:DateTime.now().toUtc()
+        .add(Duration(seconds:seconds)),
+    );
+    await _vault.write(_entry(owner,transfer),jsonEncode(next.toJson()));
+    return next;
   }
 
   Future<void> remove(String owner,String transfer) async {

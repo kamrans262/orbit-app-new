@@ -343,6 +343,7 @@ class OrbitMomentRepository {
   /// worker, and do not treat encrypted upload success as Moment publication.
   Future<int> resumePendingPublishes({
     void Function(double progress)? onProgress,
+    bool force=false,
   }) async {
     final owner=await _identity.currentLocalSocialOwner();
     if(owner==null)return 0;
@@ -352,16 +353,36 @@ class OrbitMomentRepository {
     final encryptedDrafts=await OrbitMediaOutbox().pending(owner);
     final transferIds=encryptedDrafts.where((d)=>d.variant=='original')
       .map((d)=>d.transfer).toSet();
+    final eligible=<String,OrbitStoredMomentIntent>{};
+    final now=DateTime.now().toUtc();
     for(final intent in intents){
+      // A queued intent never extends the server's seven-day visibility TTL.
+      // Old drafts require explicit review; never silently delete ciphertext.
+      if(now.difference(intent.createdAt)>const Duration(days:7) && !force){
+        continue;
+      }
+      if(!force && (intent.attemptCount>=8 ||
+          (intent.retryAfter!=null && now.isBefore(intent.retryAfter!)))){
+        continue;
+      }
       final server=await _existingReceipt(intent.clientId);
       if(server!=null){
+        for(final draft in encryptedDrafts.where((d)=>
+            d.transfer==intent.transfer || d.parentTransferId==intent.transfer)){
+          await OrbitMediaOutbox().discard(draft);
+        }
         await _intents.remove(owner,intent.transfer);
         completed++;
       }else if(!transferIds.contains(intent.transfer)){
         throw StateError('Missing encrypted media: recapture is required.');
+      }else{
+        eligible[intent.transfer]=intent;
       }
     }
     await _stager.retryPending(onProgress:onProgress,
+      shouldRetry:(parent)=>eligible.containsKey(parent.transfer),
+      onRetryStart:(parent)=>
+        _intents.markAttempt(owner,parent.transfer).then((_){ }),
       onRecovered:(transfer,original,derivative,mediaId) async {
         final intent=await _intents.read(owner,transfer);
         if(intent==null)return;
