@@ -62,6 +62,12 @@ class OrbitNativeVideoProcessor implements OrbitVideoProcessor {
     } finally {
       await progress.cancel();
     }
+    // The plugin's never-larger fallback can return the unchanged camera
+    // original. Never upload it: source location tags and non-H.264 codecs
+    // have not been re-encoded or removed in that case.
+    if(result.usedOriginal) {
+      throw const FormatException('A privacy-safe video re-encode is required.');
+    }
     final path=result.outputPath;
     final output=File(path);
     if(!await output.exists() ||
@@ -71,8 +77,13 @@ class OrbitNativeVideoProcessor implements OrbitVideoProcessor {
     }
     final info=await _compressor.getMediaInfo(output.path);
     if(info.durationMs<=0 || info.durationMs>maxDurationMs ||
-        info.widthPx<=0 || info.heightPx<=0) {
-      throw const FormatException('Compressed video metadata is invalid.');
+        info.widthPx<=0 || info.heightPx<=0 ||
+        max(info.widthPx,info.heightPx)>1280 ||
+        (info.frameRateFps != null && info.frameRateFps! > 30.5) ||
+        (info.videoBitrateBps != null && info.videoBitrateBps! > 4500000) ||
+        (info.videoCodec != null && info.videoCodec != 'unknown'
+          && info.videoCodec != 'h264')) {
+      throw const FormatException('Compressed video does not meet Orbit policy.');
     }
     final bytes=await _compressor.getThumbnail(output.path,
       positionMs:min(info.durationMs ~/ 2,1500), quality:78,
