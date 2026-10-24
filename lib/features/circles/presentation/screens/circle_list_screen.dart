@@ -154,6 +154,7 @@ class _CircleListScreenState extends State<CircleListScreen> {
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
               child: OrbitSearchableHeader(
+                  compactTitle: true,
                 title: 'My Circles',
                 placeholder: 'Search circles',
                 controller: _search,
