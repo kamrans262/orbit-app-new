@@ -41,6 +41,7 @@ class _OrbitLiveCircleSettingsScreenState extends State<OrbitLiveCircleSettingsS
     if(!mounted)return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content:Text(e is OrbitIdentityException ? e.message :
+        e is FormatException ? e.message :
         'Could not save Circle changes. Reconnect and try again.')));
   }
 
