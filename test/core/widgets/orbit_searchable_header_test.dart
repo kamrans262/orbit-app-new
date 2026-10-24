@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_ui/core/widgets/orbit_searchable_header.dart';
+import 'package:orbit_ui/core/widgets/app_circular_icon_button.dart';
 
 void main() {
   testWidgets('search header opens, updates, clears and closes', (
@@ -38,6 +39,66 @@ void main() {
 
     expect(find.byType(TextField), findsNothing);
     expect(queries.last, '');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('compact Orbit header matches every right icon to Back',
+      (tester) async {
+    final controller = OrbitSearchController();
+    addTearDown(controller.dispose);
+    var requests = 0;
+
+    await tester.binding.setSurfaceSize(const Size(320, 568));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: SafeArea(child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: OrbitSearchableHeader(
+          compactTitle: true,
+          title: 'Friends',
+          placeholder: 'Search friends',
+          controller: controller,
+          onQueryChanged: (_) {},
+          trailingActions: <Widget>[
+            AppCircularIconButton(
+              semanticLabel: 'Friend requests',
+              icon: Icons.person_add_alt_outlined,
+              size: 30,
+              iconSize: 24,
+              iconColor: Colors.black,
+              onPressed: () => requests++,
+            ),
+          ],
+        ),
+      ))),
+    ));
+
+    final buttons = tester.widgetList<AppCircularIconButton>(
+        find.byType(AppCircularIconButton)).toList();
+    expect(buttons, hasLength(3));
+    for (final button in buttons) {
+      expect(button.size, 30);
+      expect(button.iconSize, 24);
+      expect(button.iconColor, Colors.black);
+    }
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.bySemanticsLabel('Friend requests'));
+    expect(requests, 1);
+    await tester.tap(find.bySemanticsLabel('Search Friends'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextField), findsOneWidget);
+    final searchButtons = tester.widgetList<AppCircularIconButton>(
+        find.byType(AppCircularIconButton)).toList();
+    expect(searchButtons, hasLength(2));
+    for (final button in searchButtons) {
+      expect(button.size, 30);
+      expect(button.iconSize, 24);
+      expect(button.iconColor, Colors.black);
+    }
+    await tester.tap(find.bySemanticsLabel('Close search'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextField), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
