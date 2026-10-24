@@ -574,10 +574,13 @@ class OrbitMomentRepository {
       allComments(OrbitLiveMoment item,{int max=150}) async {
     final out=<({String id,String author,String body,String? parent})>[];
     final key=await _key(item.mediaId);
-    String? before;
+    String? before,beforeId;
     for(var page=0;page<6 && out.length<max;page++){
       final query=<String,String>{'context_id':item.contextId,'limit':'30'};
-      if(before!=null)query['before']=before;
+      if(before!=null && beforeId!=null){
+        query['before']=before;
+        query['before_id']=beforeId;
+      }
       final data=await _api('GET',
         '/moments/${Uri.encodeComponent(item.id)}/comments?'
         +Uri(queryParameters:query).query);
@@ -592,8 +595,11 @@ class OrbitMomentRepository {
         if(out.length>=max)break;
       }
       final next=data['next_before'];
-      if(next is! String||next==before||raw.isEmpty)break;
+      final nextId=data['next_before_id'];
+      if(next is! String||nextId is! String||raw.isEmpty||
+         (next==before && nextId==beforeId))break;
       before=next;
+      beforeId=nextId;
     }
     return out;
   }
