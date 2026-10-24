@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../app/theme/app_typography.dart';
+import '../../../../app/theme/app_colors.dart';
 import '../../domain/models/circle_invite.dart';
 
 class CircleInviteSegmentedControl extends StatelessWidget {
@@ -44,7 +45,7 @@ class CircleInviteSegmentedControl extends StatelessWidget {
                   child: DecoratedBox(
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
-                        colors: <Color>[Color(0xFFC857D6), Color(0xFF7C5CFC)],
+                        colors: <Color>[AppColors.primaryStart, AppColors.primaryEnd],
                       ),
                       borderRadius: BorderRadius.circular(26),
                       boxShadow: const <BoxShadow>[
