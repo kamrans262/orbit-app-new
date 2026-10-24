@@ -7,6 +7,7 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_screen_header.dart';
 import '../../../../core/widgets/app_action_row.dart';
+import '../../../../core/widgets/app_circular_icon_button.dart';
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../../auth/data/orbit_identity_client.dart';
 import '../../data/orbit_circle_repository.dart';
@@ -323,11 +324,12 @@ class _OrbitLiveCircleManageScreenState extends State<OrbitLiveCircleManageScree
               (_circle.can('remove_members') ||
                _circle.can('change_roles') ||
                _circle.can('transfer_owner'))
-              ? IconButton(
+              ? AppCircularIconButton(
                   key: Key('circle_member_more_${member.id}'),
-                  tooltip: 'Manage ${member.name}',
-                  icon: const Icon(Icons.more_horiz_rounded,
-                      color: Color(0xFF0F1724)),
+                  semanticLabel: 'Manage ${member.name}',
+                  icon: Icons.more_horiz_rounded,
+                  iconSize: 24,
+                  iconColor: Colors.black,
                   onPressed: () => _manageMember(member),
                 ) : null,
           )),
