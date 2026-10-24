@@ -29,3 +29,39 @@ jobs:
         run: flutter test test/features/moments test/features/media
       - name: Existing Friends UI regression tests
         run: flutter test test/features/friends
+
+  android-native-compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Compile native recording, media playback and M7 integration
+        run: flutter build apk --debug --no-pub
+      - uses: actions/upload-artifact@v4
+        with:
+          name: orbit-m7-android-debug-ci-only
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+  ios-simulator-compile:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Compile native iOS recording and E2EE video player without signing
+        run: flutter build ios --simulator --no-codesign --no-pub
