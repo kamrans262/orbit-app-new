@@ -194,10 +194,14 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
   Future<void> _openViewer(OrbitLiveMoment item,
       {bool storyGroup=false}) async {
     if(!mounted)return;
-    final playlist=storyGroup
-      ? _items.where((m)=>m.creatorId==item.creatorId &&
-          m.contextId==item.contextId).toList()
-      : List<OrbitLiveMoment>.from(_items);
+    final source=storyGroup
+      ? <OrbitLiveMoment>[..._rail,..._items] : _items;
+    final found=<String>{};
+    final playlist=(storyGroup
+      ? source.where((m)=>m.creatorId==item.creatorId &&
+          m.contextId==item.contextId)
+      : source).where((m)=>found.add(m.id)).toList();
+    if(!playlist.any((m)=>m.id==item.id))playlist.insert(0,item);
     await Navigator.of(context).push<void>(MaterialPageRoute(
       builder:(_)=>OrbitLiveMomentViewer(moment:item,repository:_repo,
         author:_names[item.creatorId]??'Orbit member',
@@ -207,7 +211,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
     if(mounted)unawaited(_load());
   }
   void _openById(String id,{bool storyGroup=false}){
-    for(final moment in _items){
+    for(final moment in [..._rail,..._items]){
       if(moment.id==id){
         unawaited(_openViewer(moment,storyGroup:storyGroup));return;
       }
@@ -244,15 +248,19 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
   @override
   Widget build(BuildContext context){
     final groups=<String,OrbitLiveMoment>{};
+    final groupUnseen=<String,bool>{};
     for(final m in _rail){
       final groupKey=m.contextId+'|'+m.creatorId;
       groups.putIfAbsent(groupKey,()=>m);
+      groupUnseen[groupKey]=(groupUnseen[groupKey]??false) ||
+        !_seen.contains(m.id);
     }
     final stories=<MomentStoryData>[
       const MomentStoryData(id:'add',name:'You',isAddStory:true),
       for(final m in groups.values)MomentStoryData(
         id:m.id,name:_names[m.creatorId]??'Orbit member',
-        imageBytes:_previews[m.id],isUnseen:!_seen.contains(m.id)),
+        imageBytes:_previews[m.id],
+        isUnseen:groupUnseen[m.contextId+'|'+m.creatorId]??false),
     ];
     final feed=<MomentFeedItem>[
       for(final m in _items)MomentImageFeedItem(

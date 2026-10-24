@@ -13,10 +13,11 @@ import '../../data/orbit_moment_repository.dart';
 /// authorization check. No public URI, shared storage or permanent cache.
 class OrbitPrivateMomentPlayer extends StatefulWidget {
   const OrbitPrivateMomentPlayer({
-    required this.item,required this.repository,super.key,
+    required this.item,required this.repository,this.onFinished,super.key,
   });
   final OrbitLiveMoment item;
   final OrbitMomentRepository repository;
+  final VoidCallback? onFinished;
   @override
   State<OrbitPrivateMomentPlayer> createState()=>_OrbitPrivateMomentPlayerState();
 }
@@ -27,6 +28,7 @@ class _OrbitPrivateMomentPlayerState extends State<OrbitPrivateMomentPlayer>
   VideoPlayerController? _video;
   AudioPlayer? _audio;
   StreamSubscription<void>? _audioEnd;
+  Timer? _videoEndedPoll;
   Timer? _revalidate;
   int _epoch=0;
   bool _busy=true, _playing=false;
@@ -48,6 +50,7 @@ class _OrbitPrivateMomentPlayerState extends State<OrbitPrivateMomentPlayer>
   Future<void> _closePlayer() async {
     final video=_video;_video=null;
     final audio=_audio;_audio=null;
+    _videoEndedPoll?.cancel();_videoEndedPoll=null;
     final sub=_audioEnd;_audioEnd=null;
     final temp=_temporary;_temporary=null;
     try{await sub?.cancel();}catch(_){}
@@ -86,11 +89,24 @@ class _OrbitPrivateMomentPlayerState extends State<OrbitPrivateMomentPlayer>
         if(!mounted||current!=_epoch)return;
         await player.setLooping(false);
         await player.play();
+        _videoEndedPoll=Timer.periodic(const Duration(milliseconds:400),(_){
+          if(!mounted || _video!=player)return;
+          if(player.value.isInitialized &&
+             !player.value.isPlaying &&
+             player.value.position>=player.value.duration &&
+             player.value.duration>Duration.zero){
+            _videoEndedPoll?.cancel();
+            widget.onFinished?.call();
+          }
+        });
       }else{
         final player=AudioPlayer();
         _audio=player;
         _audioEnd=player.onPlayerComplete.listen((_){
-          if(mounted)setState(()=>_playing=false);
+          if(mounted){
+            setState(()=>_playing=false);
+            widget.onFinished?.call();
+          }
         });
         await player.play(DeviceFileSource(file.path));
       }

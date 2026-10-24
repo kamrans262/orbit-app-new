@@ -30,6 +30,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
   String? _caption;
   String? _error;
   bool _loading=true, _liked=false, _sending=false, _paused=false;
+  bool _allCaughtUp=false;
   Timer? _advance;
   Timer? _revalidation;
   int _loadEpoch=0;
@@ -105,21 +106,29 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
   }
   void _schedule(){
     _advance?.cancel();
-    if(widget.playlist.isEmpty||_paused||_loading||_error!=null)return;
-    _advance=Timer(const Duration(seconds:5),()=>_move(1));
+    if(widget.playlist.isEmpty||_paused||_loading||_error!=null ||
+        _allCaughtUp)return;
+    if(_current.mediaKind=='image'){
+      _advance=Timer(const Duration(seconds:5),()=>_move(1));
+    }
   }
   void _move(int amount){
     if(!mounted || widget.playlist.isEmpty)return;
     final to=_index+amount;
     if(to<0)return;
     if(to>=widget.playlist.length){
-      Navigator.of(context).maybePop();
+      _advance?.cancel();
+      setState((){
+        _forgetPhoto();
+        _allCaughtUp=true;
+      });
       return;
     }
     _advance?.cancel();
     setState(() {
       _forgetPhoto();
       _index=to;_loading=true;_liked=false;
+      _allCaughtUp=false;
       _error=null;
     });
     unawaited(_load());
@@ -286,7 +295,17 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
                 final speed=details.primaryVelocity??0;
                 if(speed>350)Navigator.of(context).maybePop();
               },
-              child:Center(child:_loading
+              child:Center(child:_allCaughtUp
+                ? Column(mainAxisSize:MainAxisSize.min,children:[
+                    const Icon(Icons.check_circle_outline_rounded,
+                      color:AppColors.primaryEnd,size:54),
+                    const SizedBox(height:10),
+                    Text('All caught up',style:AppTypography.smallHeading),
+                    const SizedBox(height:12),
+                    AppPrimaryButton(label:'Back to Moments',
+                      onPressed:()=>Navigator.of(context).maybePop()),
+                  ])
+                : _loading
                 ? const CircularProgressIndicator(color:AppColors.primaryEnd)
                 : _error!=null
                   ? Text(_error!,textAlign:TextAlign.center,style:AppTypography.bodyMuted)
@@ -295,7 +314,8 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
                       ? Image.memory(_photo!,fit:BoxFit.contain)
                       : OrbitPrivateMomentPlayer(
                           key:ValueKey<String>('m7_clip_${_current.id}'),
-                          item:_current,repository:widget.repository))),
+                          item:_current,repository:widget.repository,
+                          onFinished:()=>_move(1)))),
             ))),
           if(_error==null && !_loading && _caption!=null&&_caption!.isNotEmpty &&
               WidgetsBinding.instance.lifecycleState!=AppLifecycleState.paused &&
