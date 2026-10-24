@@ -102,6 +102,9 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   int? _capturedDurationMs;
   DateTime? _recordStart;
   Timer? _recordLimit;
+  Timer? _recordTicker;
+  int _elapsedSeconds=0;
+  bool _stopWhenStarted=false;
   bool _recording=false;
 
   FlashMode _flashMode = FlashMode.off;
@@ -127,6 +130,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _recordLimit?.cancel();
+    _recordTicker?.cancel();
     if(_recording && _mode==_OrbitCaptureMode.voice)unawaited(_audioRecorder.stop());
     unawaited(_audioRecorder.dispose());
     final captured=_capturedClip;
@@ -472,7 +476,21 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         _capturedClip=File(path);
       }
       _recordStart=DateTime.now();
-      if(mounted)setState(()=>_recording=true);
+      if(mounted)setState((){
+        _recording=true;
+        _elapsedSeconds=0;
+      });
+      _recordTicker?.cancel();
+      _recordTicker=Timer.periodic(const Duration(seconds:1),(_){
+        if(!mounted || !_recording)return;
+        setState(()=>_elapsedSeconds=
+            DateTime.now().difference(_recordStart!).inSeconds.clamp(0,60));
+      });
+      if(_stopWhenStarted){
+        _stopWhenStarted=false;
+        unawaited(_finishRecording());
+        return;
+      }
       _recordLimit?.cancel();
       _recordLimit=Timer(const Duration(seconds:60),(){
         if(mounted && _recording)unawaited(_finishRecording());
@@ -486,6 +504,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   Future<void> _finishRecording() async {
     if(!_recording)return;
     _recordLimit?.cancel();
+    _recordTicker?.cancel();
     _recording=false;
     final duration=DateTime.now().difference(_recordStart??DateTime.now())
       .inMilliseconds.clamp(1,60000);
@@ -648,7 +667,8 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     final captured = _capturedBytes;
     if(_recording){await _finishRecording();return;}
     if (captured == null && _capturedClip==null) {
-      await _captureMoment();
+      if(_mode==_OrbitCaptureMode.photo)await _captureMoment();
+      else await _beginRecording();
       return;
     }
     // Preserve existing explicit Send integrations, including legacy tests.
@@ -744,7 +764,22 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
                           compact: constraints.maxWidth <= 440,
                         ),
                       ),
-                      if (_countdownValue != null)
+                      if (_recording)
+                         Positioned(
+                           bottom:100,left:edgePadding,right:edgePadding,
+                           child:Center(child:Semantics(
+                             liveRegion:true,
+                             label:'Recording ${_elapsedSeconds} of 60 seconds',
+                             child:Text(
+                               'REC  ${(_elapsedSeconds ~/ 60).toString().padLeft(2,'0')}:${(_elapsedSeconds % 60).toString().padLeft(2,'0')} / 01:00',
+                               key:const Key('moment_camera_recording_elapsed'),
+                               style:AppTypography.body.copyWith(
+                                 color:Colors.white,
+                                 fontWeight:FontWeight.w600),
+                             ),
+                           )),
+                         ),
+                       if (_countdownValue != null)
                         Center(
                           child: Text(
                             '${_countdownValue!}',
@@ -987,6 +1022,16 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
             key: MomentCameraKeys.captureButton,
             isBusy: _isCapturing,
             onTap: _handleCapturePressed,
+            recordMode:_mode!=_OrbitCaptureMode.photo,
+            isRecording:_recording,
+            onHoldStart:(){
+              _stopWhenStarted=false;
+              if(!_recording)unawaited(_beginRecording());
+            },
+            onHoldEnd:(){
+              _stopWhenStarted=true;
+              if(_recording)unawaited(_finishRecording());
+            },
           ),
         ),
         Align(
@@ -1182,18 +1227,25 @@ class _CameraTextButton extends StatelessWidget {
 }
 
 class _CaptureButton extends StatelessWidget {
-  const _CaptureButton({required this.isBusy, required this.onTap, super.key});
+  const _CaptureButton({required this.isBusy, required this.onTap,
+    this.recordMode=false,this.isRecording=false,
+    this.onHoldStart,this.onHoldEnd,super.key});
 
   final bool isBusy;
   final VoidCallback onTap;
+  final bool recordMode,isRecording;
+  final VoidCallback? onHoldStart,onHoldEnd;
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
       button: true,
-      label: isBusy ? 'Capturing moment' : 'Capture moment',
+      label: isBusy?'Capturing moment':(isRecording?'Recording moment':
+        (recordMode?'Hold to record moment':'Capture moment')),
       child: InkResponse(
         onTap: isBusy ? null : onTap,
+        onLongPress:recordMode && !isBusy ? onHoldStart : null,
+        onLongPressUp:recordMode && !isBusy ? onHoldEnd : null,
         customBorder: const CircleBorder(),
         radius: 42,
         child: Container(
