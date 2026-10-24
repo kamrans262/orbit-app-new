@@ -81,6 +81,7 @@ class _MomentImage extends StatelessWidget {
           child: ProfileMediaImage(
             assetPath: moment.imagePath,
             imageUrl: moment.imageUrl,
+            bytes: moment.imageBytes,
             fit: BoxFit.cover,
           ),
         ),
@@ -90,6 +91,7 @@ class _MomentImage extends StatelessWidget {
     return ProfileMediaImage(
       assetPath: moment.imagePath,
       imageUrl: moment.imageUrl,
+      bytes: moment.imageBytes,
       width: double.infinity,
       fit: BoxFit.cover,
     );

@@ -8,6 +8,7 @@ import '../../domain/models/profile_models.dart';
 import 'edit_profile_screen.dart';
 import 'orbit_preferences_screens.dart';
 import 'profile_screen.dart';
+import 'orbit_live_profile_moments.dart';
 import 'profile_settings_screen.dart';
 
 /// The signed-in profile. Never use ProfileScreen.demo for account data.
@@ -115,6 +116,7 @@ class _OrbitMyProfileScreenState extends State<OrbitMyProfileScreen> {
             Expanded(child: ProfileScreen(
           isLiveAccount: true,
           profile: profile,
+          liveMomentsBuilder:(_)=>OrbitLiveProfileMoments(profileId:profile.id),
           onTabSelected: widget.onTabSelected,
           onAddPressed: widget.onAddPressed,
           onRetry: _reload,

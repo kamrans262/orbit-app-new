@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 enum ProfileViewState { loading, empty, error, populated }
 
 class ProfileData {
@@ -32,6 +33,7 @@ class ProfileMomentData {
     this.likeCount,
     this.remainingCount,
     this.aspectRatio,
+    this.imageBytes,
   });
 
   final String id;
@@ -45,4 +47,5 @@ class ProfileMomentData {
   /// API data can provide this when known. When null, the image widget is free
   /// to size itself from the source image's intrinsic dimensions.
   final double? aspectRatio;
+  final Uint8List? imageBytes;
 }

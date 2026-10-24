@@ -46,6 +46,7 @@ class ProfileScreen extends StatefulWidget {
     this.isLiveAccount = false,
     this.onSettingsClosed,
     this.momentDetailBuilder,
+    this.liveMomentsBuilder,
     this.onMomentPressed,
     super.key,
   });
@@ -133,6 +134,7 @@ class ProfileScreen extends StatefulWidget {
   final Widget Function(BuildContext context, ProfileMomentData moment)?
   momentDetailBuilder;
   final ValueChanged<ProfileMomentData>? onMomentPressed;
+  final WidgetBuilder? liveMomentsBuilder;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -368,6 +370,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   List<Widget> _gallerySlivers() {
+    if(widget.isLiveAccount && widget.liveMomentsBuilder!=null){
+      return <Widget>[SliverPadding(
+        padding:const EdgeInsets.fromLTRB(14,10,14,20),
+        sliver:SliverToBoxAdapter(child:widget.liveMomentsBuilder!(context)),
+      )];
+    }
     if (widget.profile.moments.isEmpty) {
       return const <Widget>[
         SliverToBoxAdapter(

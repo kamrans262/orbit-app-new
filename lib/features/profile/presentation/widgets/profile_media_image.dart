@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'dart:typed_data';
 
 class ProfileMediaImage extends StatelessWidget {
   const ProfileMediaImage({
     this.assetPath,
     this.imageUrl,
+    this.bytes,
     this.fit = BoxFit.cover,
     this.width,
     this.height,
@@ -13,6 +15,7 @@ class ProfileMediaImage extends StatelessWidget {
 
   final String? assetPath;
   final String? imageUrl;
+  final Uint8List? bytes;
   final BoxFit fit;
   final double? width;
   final double? height;
@@ -20,6 +23,10 @@ class ProfileMediaImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if(bytes!=null && bytes!.isNotEmpty){
+      return Image.memory(bytes!,width:width,height:height,fit:fit,
+        errorBuilder:(_,error,stack)=>_fallback());
+    }
     final localPath = assetPath?.trim();
     if (localPath != null && localPath.isNotEmpty) {
       return Image.asset(
