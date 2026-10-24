@@ -12,6 +12,7 @@ enum OrbitPopupType {
   liveLocation,
   logout,
   deleteAccount,
+  deleteMoment,
   stayConnected,
   cameraPermission,
   momentError,
@@ -112,6 +113,28 @@ Future<void> showDeleteAccountPopup(
     primaryLabel: 'Delete',
     onPrimary: onDelete,
     primaryStyle: OrbitPopupActionStyle.destructive,
+  );
+}
+
+/// Reuses Orbit's existing destructive confirmation presentation. Deleting
+/// a Moment hides it immediately and queues encrypted-media purge; physical
+/// ciphertext erasure is asynchronous and controlled by the M6 worker.
+Future<void> showDeleteMomentPopup(
+  BuildContext context, {required OrbitPopupCallback onDelete},
+) {
+  return _showConfiguredPopup(
+    context,
+    type: OrbitPopupType.deleteMoment,
+    title: 'Delete Moment',
+    description: 'Delete this Moment for everyone? It cannot be restored.',
+    assetPath: 'assets/popup/delete.svg',
+    motion: OrbitPopupIllustrationMotion.scaleIn,
+    illustrationSvgSize: 82,
+    primaryLabel: 'Delete Moment',
+    onPrimary: onDelete,
+    primaryStyle: OrbitPopupActionStyle.destructive,
+    secondaryLabel: 'Cancel',
+    secondaryStyle: OrbitPopupActionStyle.text,
   );
 }
 
