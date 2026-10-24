@@ -256,9 +256,9 @@ class _OrbitDiscoverFriendsScreenState extends State<OrbitDiscoverFriendsScreen>
               AppCircularIconButton(
                 semanticLabel: 'Friend discovery settings',
                 icon: Icons.manage_accounts_outlined,
-                iconSize: 20,
-                iconColor: const Color(0xFF7C3AED),
-                size: 40,
+                iconSize: 24,
+                iconColor: Colors.black,
+                size: 30,
                 onPressed: () => Navigator.of(context).push<void>(
                   AppFadeSlidePageRoute<void>(builder: (_) =>
                     OrbitDiscoveryPreferencesScreen(repository: _repo))),
