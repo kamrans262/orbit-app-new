@@ -13,6 +13,7 @@ import '../../media/data/orbit_moment_media_stager.dart';
 import '../../media/data/orbit_encrypted_clip_stager.dart';
 import '../domain/models/moment_publish_models.dart';
 import 'orbit_moment_intent_vault.dart';
+import 'orbit_moment_seen_vault.dart';
 import '../../media/data/orbit_media_outbox.dart';
 
 class OrbitLiveMoment {
@@ -51,14 +52,16 @@ class OrbitMomentRepository {
   OrbitMomentRepository({OrbitIdentityClient? identity,OrbitMediaRepository? media,
     OrbitMomentMediaStager? stager,OrbitMediaRecipientKeys? recipientKeys,
     OrbitCircleRepository? circles,OrbitMediaCrypto? crypto,
-    OrbitMomentIntentVault? intents})
+    OrbitMomentIntentVault? intents,OrbitMomentSeenVault? seenVault})
     : _identity=identity??OrbitIdentityClient.instance,
       _media=media??OrbitMediaRepository(identity:identity),
       _stager=stager??OrbitMomentMediaStager(identity:identity),
       _keys=recipientKeys??OrbitMediaRecipientKeys(identity:identity),
       _circles=circles??OrbitCircleRepository(identity:identity),
       _crypto=crypto??OrbitMediaCrypto(),
-      _intents=intents??OrbitMomentIntentVault();
+      _intents=intents??OrbitMomentIntentVault(),
+      _seenVault=seenVault??OrbitMomentSeenVault(
+        owner:(identity??OrbitIdentityClient.instance).currentLocalSocialOwner);
   final OrbitIdentityClient _identity;
   final OrbitMediaRepository _media;
   final OrbitMomentMediaStager _stager;
@@ -66,6 +69,7 @@ class OrbitMomentRepository {
   final OrbitCircleRepository _circles;
   final OrbitMediaCrypto _crypto;
   final OrbitMomentIntentVault _intents;
+  final OrbitMomentSeenVault _seenVault;
   static const Uuid _uuid=Uuid();
 
   Future<Map<String,dynamic>> _api(String method,String path,
@@ -509,9 +513,15 @@ class OrbitMomentRepository {
       'place','self');
   }
 
+  Future<Set<String>> seenMomentIds(Iterable<String> ids) async {
+    try{return await _seenVault.seenIds(ids);}
+    catch(_){return <String>{};}
+  }
   Future<void> view(OrbitLiveMoment item) async {
     await _api('POST','/moments/'+Uri.encodeComponent(item.id)+'/views',
       body:{'context_id':item.contextId});
+    // Store only this viewer's local seen state; never disclose it in a feed.
+    try{await _seenVault.markSeen(item.id);}catch(_){}
   }
   Future<void> react(OrbitLiveMoment item,{required bool liked}) async {
     final path='/moments/'+Uri.encodeComponent(item.id)+'/reaction';

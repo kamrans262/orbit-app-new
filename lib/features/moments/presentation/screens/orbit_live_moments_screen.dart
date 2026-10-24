@@ -36,6 +36,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
   OrbitMomentAudienceOptions _options=
     const OrbitMomentAudienceOptions([],[],'Nobody');
   final Set<String> _likes={};
+  final Set<String> _seen={};
   bool _busy=true;
   String? _error;
   int _pendingPublishCount=0;
@@ -76,6 +77,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         _rail=const [];
         _names.clear();
         _likes.clear();
+        _seen.clear();
         _busy=true;
       });
     }else if(state==AppLifecycleState.resumed) {
@@ -121,6 +123,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       OrbitMomentAudienceOptions options;
       try {options=await _repo.audienceOptions();}
       catch(_){options=const OrbitMomentAudienceOptions([],[],'Nobody');}
+      final seen=await _repo.seenMomentIds(rail.map((m)=>m.id));
       final names=<String,String>{};
       final previews=<String,Uint8List>{};
       final captions=<String,String>{};
@@ -148,6 +151,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         _items=moments;_rail=rail;_options=options;
         _previews..clear()..addAll(previews);
         _names..clear()..addAll(names);
+        _seen..clear()..addAll(seen);
         _captions..clear()..addAll(captions);
         _places..clear()..addAll(places);
         _busy=false;
@@ -187,19 +191,26 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
     if(d.inDays<1)return d.inHours.toString()+'h ago';
     return d.inDays.toString()+'d ago';
   }
-  Future<void> _openViewer(OrbitLiveMoment item) async {
+  Future<void> _openViewer(OrbitLiveMoment item,
+      {bool storyGroup=false}) async {
     if(!mounted)return;
+    final playlist=storyGroup
+      ? _items.where((m)=>m.creatorId==item.creatorId &&
+          m.contextId==item.contextId).toList()
+      : List<OrbitLiveMoment>.from(_items);
     await Navigator.of(context).push<void>(MaterialPageRoute(
       builder:(_)=>OrbitLiveMomentViewer(moment:item,repository:_repo,
         author:_names[item.creatorId]??'Orbit member',
         authorNames:Map<String,String>.from(_names),
-        playlist:List<OrbitLiveMoment>.from(_items),
-        initialIndex:_items.indexWhere((m)=>m.id==item.id))));
+        playlist:playlist,
+        initialIndex:playlist.indexWhere((m)=>m.id==item.id))));
     if(mounted)unawaited(_load());
   }
-  void _openById(String id){
+  void _openById(String id,{bool storyGroup=false}){
     for(final moment in _items){
-      if(moment.id==id){unawaited(_openViewer(moment));return;}
+      if(moment.id==id){
+        unawaited(_openViewer(moment,storyGroup:storyGroup));return;
+      }
     }
   }
   Future<void> _react(MomentImageFeedItem item,bool liked) async {
@@ -232,11 +243,16 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
   );
   @override
   Widget build(BuildContext context){
+    final groups=<String,OrbitLiveMoment>{};
+    for(final m in _rail){
+      final groupKey=m.contextId+'|'+m.creatorId;
+      groups.putIfAbsent(groupKey,()=>m);
+    }
     final stories=<MomentStoryData>[
       const MomentStoryData(id:'add',name:'You',isAddStory:true),
-      for(final m in _rail)MomentStoryData(
+      for(final m in groups.values)MomentStoryData(
         id:m.id,name:_names[m.creatorId]??'Orbit member',
-        imageBytes:_previews[m.id]),
+        imageBytes:_previews[m.id],isUnseen:!_seen.contains(m.id)),
     ];
     final feed=<MomentFeedItem>[
       for(final m in _items)MomentImageFeedItem(
@@ -261,7 +277,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       errorMessage:_error??'Moments unavailable.',
       onSearchPressed:(){},onFilterPressed:()=>unawaited(_load()),
       onMessagesPressed:(){},
-      onStoryPressed:(story)=>_openById(story.id),
+      onStoryPressed:(story)=>_openById(story.id,storyGroup:true),
       onLikeChanged:(item,liked)=>unawaited(_react(item,liked)),
       onCommentPressed:(item)=>_openById(item.id),
       onBookmarkChanged:(item,value){},

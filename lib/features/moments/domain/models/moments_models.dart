@@ -22,6 +22,7 @@ class MomentStoryData {
     this.imagePath,
     this.isAddStory = false,
     this.imageBytes,
+    this.isUnseen=false,
   });
 
   final String id;
@@ -29,6 +30,7 @@ class MomentStoryData {
   final String? imagePath;
   final bool isAddStory;
   final Uint8List? imageBytes;
+  final bool isUnseen;
 }
 
 enum MomentFeedItemType { imagePost, promo, textPost, futureVideoPost }

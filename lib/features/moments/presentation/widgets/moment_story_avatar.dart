@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../app/theme/app_typography.dart';
+import '../../../../app/theme/app_colors.dart';
 import '../../domain/models/moments_models.dart';
 import 'moment_media_image.dart';
 
@@ -22,6 +23,7 @@ class MomentStoryAvatar extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
+            Stack(clipBehavior:Clip.none,children:[
             Container(
               width: avatarSize,
               height: avatarSize,
@@ -65,6 +67,16 @@ class MomentStoryAvatar extends StatelessWidget {
                       ),
                     ),
             ),
+            if(data.isUnseen&&!data.isAddStory)Positioned(
+              right:0,bottom:0,
+              child:Semantics(label:'Unseen private Moment',child:Container(
+                width:12,height:12,
+                decoration:BoxDecoration(
+                  color:const Color(0xFF3B82F6),shape:BoxShape.circle,
+                  border:Border.all(color:AppColors.white,width:2)),
+              )),
+            ),
+            ]),
             const SizedBox(height: 5),
             Text(
               data.name,
