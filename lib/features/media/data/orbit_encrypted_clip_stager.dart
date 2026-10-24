@@ -11,6 +11,7 @@ import '../../auth/data/orbit_identity_client.dart';
 import 'orbit_media_crypto.dart';
 import 'orbit_media_outbox.dart';
 import 'orbit_media_repository.dart';
+import 'orbit_media_transfer_gate.dart';
 
 /// M6 codec policy: client-side native encode before any server sees a byte.
 /// The output is still device-local plaintext until sealed and immediately
@@ -113,6 +114,7 @@ class OrbitEncryptedClipStager {
 
   Future<OrbitStagedClip> stageVideo(File original,
       {void Function(double progress)? onProgress}) async {
+    return OrbitMediaTransferGate.run(() async {
     final owner=await _identity.currentLocalSocialOwner();
     if(owner==null)throw OrbitIdentityException('Please sign in.',401);
     final device=await _identity.trustedMediaDevice();
@@ -169,6 +171,7 @@ class OrbitEncryptedClipStager {
       // Ciphertext-only drafts remain in the offline outbox for explicit retry.
       rethrow;
     }
+    });
   }
 
   /// Voice recordings are already AAC/MP4/OGG from the existing capture
@@ -177,6 +180,7 @@ class OrbitEncryptedClipStager {
     required String mime, required int durationMs,
     void Function(double progress)? onProgress,
   }) async {
+    return OrbitMediaTransferGate.run(() async {
     if(!['audio/mp4','audio/aac','audio/ogg'].contains(mime) ||
        durationMs<=0 || durationMs>60000) {
       throw const FormatException('Unsupported encoded voice clip.');
@@ -208,5 +212,6 @@ class OrbitEncryptedClipStager {
       return OrbitStagedClip(mediaId:uploaded.mediaId,
           verified:true,privateGrantConfirmed:true);
     } catch (_) { rethrow; }
+    });
   }
 }
