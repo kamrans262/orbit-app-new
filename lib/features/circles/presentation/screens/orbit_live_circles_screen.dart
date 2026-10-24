@@ -294,15 +294,6 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
           'Reconnect to view members or make changes.',
           style: TextStyle(fontFamily: AppTypography.fontFamily,fontSize:12)),
       ),
-    if (!_offline && !_busy && _archiveEnabled)
-      Align(
-        alignment:Alignment.centerRight,
-        child:TextButton.icon(
-          onPressed:_archived,
-          icon:const Icon(Icons.archive_outlined),
-          label:const Text('Archived'),
-        ),
-      ),
     Expanded(child: CircleListScreen(
       circles: _circles.map((circle) => CircleGroupData(
         id: circle.id, name: circle.name,
@@ -321,6 +312,7 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
       onJoinRequested: _offline || _busy ? (_) => _notify('Reconnect to join a Circle.') : _join,
       onScanQrPressed: _offline || _busy ? null : _scan,
       onInvitationsPressed: _offline || _busy ? null : _incoming,
+      onArchivedPressed: _offline || _busy || !_archiveEnabled ? null : _archived,
       onCirclePressed: _offline ? (_) => _notify('Reconnect to view Circle members.')
         : (c) => _open(_circles.firstWhere((x) => x.id == c.id)),
     )),
