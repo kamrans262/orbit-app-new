@@ -7,7 +7,6 @@ import '../../../auth/presentation/screens/orbit_sessions_screen.dart';
 import '../../../auth/presentation/screens/orbit_link_identity_screen.dart';
 import '../../../../app/routing/app_routes.dart';
 
-import '../../../../app/theme/app_typography.dart';
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../../../core/widgets/app_bottom_navigation_bar.dart';
 import '../../../../core/widgets/app_screen_header.dart';
