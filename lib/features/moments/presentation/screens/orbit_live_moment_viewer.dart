@@ -29,7 +29,9 @@ class OrbitLiveMomentViewer extends StatefulWidget {
 class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with WidgetsBindingObserver {
   Uint8List? _photo;
   String? _caption;
-  int? _ownerPublishVersion;
+  int? _ownerPublishVersion,_ownerAudienceRevision;
+  String _ownerAudienceKind='only_me';
+  Set<String> _ownerTargets=<String>{};
   String? _error;
   bool _loading=true, _liked=false, _sending=false, _paused=false;
   bool _allCaughtUp=false;
@@ -179,6 +181,9 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
           _caption=caption;
           _liked=current.myReaction=='like';
           _ownerPublishVersion=current.publishVersion;
+          _ownerAudienceRevision=current.audienceRevision;
+          _ownerAudienceKind=current.audienceKind;
+          _ownerTargets=current.targetIds.toSet();
           _isOwner=viewer!=null && viewer==current.creatorId;
           _loading=false;
         });
@@ -373,6 +378,129 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
     }
   }
 
+  Future<void> _ownerActions() async {
+    if(!_isOwner || !mounted)return;
+    final action=await showModalBottomSheet<String>(
+      context:context,useSafeArea:true,
+      backgroundColor:AppColors.background,
+      shape:const RoundedRectangleBorder(
+        borderRadius:BorderRadius.vertical(top:Radius.circular(28))),
+      builder:(sheet)=>Padding(padding:const EdgeInsets.all(20),
+        child:Column(mainAxisSize:MainAxisSize.min,
+          crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+          Text('Manage Moment',style:AppTypography.smallHeading),
+          const SizedBox(height:12),
+          ListTile(leading:const Icon(Icons.edit_outlined),
+            title:Text('Edit caption',style:AppTypography.body),
+            onTap:()=>Navigator.of(sheet).pop('caption')),
+          ListTile(leading:const Icon(Icons.people_outline_rounded),
+            title:Text('Change audience',style:AppTypography.body),
+            onTap:()=>Navigator.of(sheet).pop('audience')),
+          ListTile(leading:const Icon(Icons.visibility_outlined),
+            title:Text('View readers',style:AppTypography.body),
+            onTap:()=>Navigator.of(sheet).pop('viewers')),
+          ListTile(leading:const Icon(Icons.delete_outline_rounded),
+            title:Text('Delete Moment',style:AppTypography.body),
+            onTap:()=>Navigator.of(sheet).pop('delete')),
+        ])),
+    );
+    if(!mounted)return;
+    switch(action){
+      case 'caption':await _ownerEditCaption();break;
+      case 'audience':await _ownerChangeAudience();break;
+      case 'viewers':await _ownerViewers();break;
+      case 'delete':await _ownerDelete();break;
+    }
+  }
+
+  Future<void> _ownerChangeAudience() async {
+    if(!_isOwner || !mounted)return;
+    final item=_current;
+    final wasPaused=_paused;
+    _pause(true);
+    try{
+      final options=await widget.repository.audienceOptions();
+      if(!mounted || _current.id!=item.id)return;
+      String kind=_ownerAudienceKind;
+      final selected=<String>{..._ownerTargets};
+      bool saving=false;
+      final types=<({String kind,String label})>[
+        (kind:'only_me',label:'Only Me'),
+        if(options.friendsEnabled && options.friends.isNotEmpty)
+          (kind:'accepted_friends',label:'All Friends'),
+        if(options.friendsEnabled && options.friends.isNotEmpty)
+          (kind:'selected_friends',label:'Selected Friends'),
+        if(options.circlesEnabled && options.circles.isNotEmpty)
+          (kind:'selected_circles',label:'Selected Circles'),
+      ];
+      if(!types.any((entry)=>entry.kind==kind)){
+        kind='only_me';selected.clear();
+      }
+      await showModalBottomSheet<void>(
+        context:context,isScrollControlled:true,useSafeArea:true,
+        backgroundColor:AppColors.background,
+        shape:const RoundedRectangleBorder(
+          borderRadius:BorderRadius.vertical(top:Radius.circular(28))),
+        builder:(sheet)=>StatefulBuilder(builder:(sheet,setSheet){
+          final targets=kind=='selected_circles'?options.circles:options.friends;
+          final valid=kind=='only_me'||kind=='accepted_friends'||selected.isNotEmpty;
+          return Padding(padding:const EdgeInsets.fromLTRB(20,20,20,24),
+            child:ConstrainedBox(constraints:BoxConstraints(
+              maxHeight:MediaQuery.sizeOf(sheet).height*0.75),
+              child:Column(mainAxisSize:MainAxisSize.min,
+                crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+                Text('Change Moment audience',style:AppTypography.smallHeading),
+                const SizedBox(height:12),
+                Flexible(child:ListView(shrinkWrap:true,children:[
+                  for(final choice in types)ListTile(
+                    title:Text(choice.label,style:AppTypography.body),
+                    leading:Icon(kind==choice.kind
+                      ?Icons.radio_button_checked:Icons.radio_button_unchecked,
+                      color:AppColors.primaryEnd),
+                    onTap:saving?null:()=>setSheet((){
+                      kind=choice.kind;selected.clear();
+                    })),
+                  if(kind=='selected_circles'||kind=='selected_friends')
+                    Wrap(spacing:8,runSpacing:6,children:[
+                      for(final target in targets)FilterChip(
+                        label:Text(target.name,style:AppTypography.body),
+                        selected:selected.contains(target.id),
+                        onSelected:saving?null:(value)=>setSheet((){
+                          if(value)selected.add(target.id);
+                          else selected.remove(target.id);
+                        })),
+                    ]),
+                ])),
+                const SizedBox(height:16),
+                AppPrimaryButton(label:saving?'Saving…':'Save audience',
+                  onPressed:() async {
+                    if(saving || !valid)return;
+                    setSheet(()=>saving=true);
+                    try {
+                      final revision=await widget.repository.updateAudience(
+                        item,kind,selected.toList(),
+                        revision:_ownerAudienceRevision);
+                      if(!mounted||_current.id!=item.id)return;
+                      setState((){
+                        _ownerAudienceRevision=revision;
+                        _ownerAudienceKind=kind;
+                        _ownerTargets=selected.toSet();
+                      });
+                      if(sheet.mounted)Navigator.of(sheet).pop();
+                    }catch(_){
+                      if(mounted)_notice('Audience could not be updated. Refresh and try again.');
+                    }finally{
+                      if(sheet.mounted)setSheet(()=>saving=false);
+                    }
+                  }),
+              ])),
+          );
+        }),
+      );
+    }catch(_){if(mounted)_notice('Audience options are unavailable.');}
+    finally{if(mounted)_pause(wasPaused);}
+  }
+
   Future<void> _ownerDelete() async {
     if(!_isOwner || !mounted)return;
     final item=_current;
@@ -497,19 +625,9 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
               const Spacer(),
               if(_isOwner) ...[
                 AppCircularIconButton(
-                  semanticLabel:'Edit Moment caption',
-                  onPressed:()=>unawaited(_ownerEditCaption()),
-                  icon:Icons.edit_outlined,iconSize:20,size:40),
-                const SizedBox(width:8),
-                AppCircularIconButton(
-                  semanticLabel:'View Moment viewers',
-                  onPressed:()=>unawaited(_ownerViewers()),
-                  icon:Icons.visibility_outlined,iconSize:20,size:40),
-                const SizedBox(width:8),
-                AppCircularIconButton(
-                  semanticLabel:'Delete this Moment',
-                  onPressed:()=>unawaited(_ownerDelete()),
-                  icon:Icons.delete_outline_rounded,iconSize:20,size:40),
+                  semanticLabel:'Manage Moment',
+                  onPressed:()=>unawaited(_ownerActions()),
+                  icon:Icons.more_horiz_rounded,iconSize:20,size:40),
               ] else ...[
                 AppCircularIconButton(
                   semanticLabel:'Report Moment',
