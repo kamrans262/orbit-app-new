@@ -18,6 +18,7 @@ class MomentPublishRequest {
     this.mediaKind='image',
     this.durationMs,
     this.muteVideo=false,
+    this.waveformLevels=const [],
     this.placeLabel='',
     this.locationConsent=false,
     Iterable<String> taggedUserIds=const [],
@@ -35,6 +36,7 @@ class MomentPublishRequest {
   final String mediaKind;
   final int? durationMs;
   final bool muteVideo;
+  final List<double> waveformLevels;
   final String placeLabel;
   final bool locationConsent;
   final Set<String> taggedUserIds;

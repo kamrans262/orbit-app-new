@@ -46,6 +46,7 @@ Future<void> showMomentPublishingSheet(
   File? mediaFile,
   String mediaKind='image',
   int? durationMs,
+  List<double> waveformLevels=const [],
   required List<MomentAudienceCircle> circles,
   List<MomentAudienceCircle> friends = const [],
   String privacyAudience = 'Nobody',
@@ -71,6 +72,7 @@ Future<void> showMomentPublishingSheet(
         mediaFile:mediaFile,
         mediaKind:mediaKind,
         durationMs:durationMs,
+        waveformLevels:waveformLevels,
         circles: circles,
         friends: friends,
         privacyAudience: privacyAudience,
@@ -88,6 +90,7 @@ class MomentPublishSheet extends StatefulWidget {
     this.mediaFile,
     this.mediaKind='image',
     this.durationMs,
+    this.waveformLevels=const [],
     this.friends = const [],
     this.privacyAudience = 'Nobody',
     this.publisher,
@@ -99,6 +102,7 @@ class MomentPublishSheet extends StatefulWidget {
   final File? mediaFile;
   final String mediaKind;
   final int? durationMs;
+  final List<double> waveformLevels;
   final List<MomentAudienceCircle> circles;
   final List<MomentAudienceCircle> friends;
   final String privacyAudience;
@@ -268,6 +272,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
           mediaKind:widget.mediaKind,
           durationMs:widget.durationMs,
           muteVideo:_muteVideo,
+          waveformLevels:widget.waveformLevels,
           placeLabel:_locationConsent?_placeLabel.text.trim():'',
           locationConsent:_locationConsent && _placeLabel.text.trim().isNotEmpty,
           taggedUserIds:_taggedPeople,

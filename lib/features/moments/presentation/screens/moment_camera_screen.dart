@@ -775,6 +775,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         mediaKind:_capturedClip==null?'image':
           (_mode==_OrbitCaptureMode.video?'video':'audio'),
         durationMs:_capturedDurationMs,
+        waveformLevels:List<double>.unmodifiable(_waveform),
         // An authenticated account must never show fabricated Circle names.
         circles: widget.momentAudienceCircles,
         friends: widget.momentAudienceFriends,

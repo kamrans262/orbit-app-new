@@ -304,9 +304,10 @@ class OrbitMomentRepository {
         }
         await stager.stageAudio(source,
           mime:'audio/mp4',durationMs:duration,purpose:'moment',
+          waveformLevels:request.waveformLevels,
           onProgress:(v)=>progress(v*0.82),
-          onReadyForAudience:(audio,mediaId) async =>
-            commit(audio,null,mediaId),onQueued:queued);
+          onReadyForAudience:(audio,waveform,mediaId) async =>
+            commit(audio,waveform,mediaId),onQueued:queued);
       }else{
         throw StateError('Unsupported Moment media kind.');
       }
@@ -444,11 +445,12 @@ class OrbitMomentRepository {
   }
 
   Future<Uint8List> photo(OrbitLiveMoment item,{String variant='thumbnail'}) async {
-    if(item.mediaKind=='audio'){
-      throw StateError('Voice Moments have no photo thumbnail.');
+    if(item.mediaKind=='audio' && variant=='original'){
+      throw StateError('Voice audio is available through private playback only.');
     }
     final d=await _identity.trustedMediaDevice();
-    final v=variant=='thumbnail' && item.mediaKind=='video'?'poster':variant;
+    final v=variant=='thumbnail' && item.mediaKind=='video'?'poster':
+      (variant=='thumbnail' && item.mediaKind=='audio'?'waveform':variant);
     return _media.downloadPhoto(item.mediaId,deviceId:d.id,
       privateKey:d.privateKey,publicKey:d.publicKey,variant:v);
   }

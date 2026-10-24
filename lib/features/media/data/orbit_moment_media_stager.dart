@@ -154,7 +154,7 @@ class OrbitMomentMediaStager {
       // A crash between enqueuing original and derivative is NOT a complete
       // photo/video upload. Never grant/discard a Moment without its variant.
       if(parent.purpose=='moment' &&
-          (parent.kind=='image' || parent.kind=='video') &&
+          (parent.kind=='image' || parent.kind=='video' || parent.kind=='audio') &&
           children.isEmpty) continue;
       final refreshedChildren=<OrbitQueuedMedia>[];
       var complete=true;
