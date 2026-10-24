@@ -565,8 +565,8 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     _recording=false;
     final duration=DateTime.now().difference(_recordStart??DateTime.now())
       .inMilliseconds.clamp(1,60000);
+    File? clip;
     try{
-      File? clip;
       if(_mode==_OrbitCaptureMode.video){
         final camera=_controller;
         if(camera==null)return;
@@ -585,6 +585,9 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         _capturedDurationMs=duration;
       });
     }catch(_){
+      // A failed stop/empty-file validation can leave a plaintext native
+      // recording behind before it was assigned to the preview state.
+      if(clip!=null)await _deleteClip(clip);
       if(mounted)ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content:Text('Recording could not be completed.')));
     }finally{
