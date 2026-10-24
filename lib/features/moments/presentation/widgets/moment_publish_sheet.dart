@@ -461,7 +461,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
         )),
         Padding(padding:const EdgeInsets.fromLTRB(20,12,20,20),
           child:AppPrimaryButton(
-            label:_hasAudience ? 'Continue with '+_audienceLabel : 'Choose audience',
+            label:_hasAudience ? 'Continue with '+_audienceLabel : (live?'Choose audience':'Select a circle'),
             enabled:_hasAudience,
             onPressed:()=>setState(()=>_step=_PublishStep.review),
           )),
