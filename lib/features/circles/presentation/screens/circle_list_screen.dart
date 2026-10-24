@@ -5,6 +5,8 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../../../core/widgets/orbit_searchable_header.dart';
+import '../../../../core/widgets/app_primary_button.dart';
+import '../widgets/orbit_circle_sheet.dart';
 import '../../domain/models/friend_details_models.dart';
 import '../widgets/circle_group_card.dart';
 import 'friend_details_screen.dart';
@@ -337,13 +339,9 @@ class _CircleListScreenState extends State<CircleListScreen> {
   }
 
   void _showJoinCircleSheet(BuildContext context) {
-    showModalBottomSheet<void>(
+    showOrbitCircleSheet<void>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.background,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
+      title: 'Join Circle',
       builder: (_) => _JoinCircleSheet(onJoinRequested: widget.onJoinRequested),
     );
   }
@@ -441,75 +439,37 @@ class _JoinCircleSheetState extends State<_JoinCircleSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        20,
-        24,
-        20,
-        MediaQuery.viewInsetsOf(context).bottom + 24,
-      ),
-      child: SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            Text('Join Circle', style: AppTypography.smallHeading),
-            const SizedBox(height: 10),
-            Text(
-              'Enter the invitation code shared with you.',
-              style: AppTypography.body.copyWith(color: AppColors.textMuted),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _controller,
-              textCapitalization: TextCapitalization.characters,
-              textInputAction: TextInputAction.done,
-              onChanged: (_) {
-                if (_validation != null) setState(() => _validation = null);
-              },
-              onSubmitted: (_) => _submit(),
-              decoration: InputDecoration(
-                hintText: 'Invite code',
-                errorText: _validation,
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(15),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              height: 54,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: <Color>[
-                      AppColors.primaryStart,
-                      AppColors.primaryEnd,
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(30),
-                ),
-                child: TextButton(
-                  onPressed: _submit,
-                  child: const Text(
-                    'Join Circle',
-                    style: TextStyle(
-                      fontFamily: AppTypography.fontFamily,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Text(
+          'Enter the invitation code shared with you.',
+          style: AppTypography.body.copyWith(color: AppColors.textMuted),
         ),
-      ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _controller,
+          textCapitalization: TextCapitalization.characters,
+          textInputAction: TextInputAction.done,
+          onChanged: (_) {
+            if (_validation != null) setState(() => _validation = null);
+          },
+          onSubmitted: (_) => _submit(),
+          decoration: InputDecoration(
+            hintText: 'Invite code',
+            errorText: _validation,
+            filled: true,
+            fillColor: AppColors.background,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(15),
+              borderSide: BorderSide.none,
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+        AppPrimaryButton(label: 'Join Circle', onPressed: _submit),
+      ],
     );
   }
 }
