@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../widgets/orbit_circle_confirmation.dart';
+import '../widgets/orbit_circle_sheet.dart';
+import '../../../../core/widgets/app_action_row.dart';
+import '../../../../core/widgets/app_circular_icon_button.dart';
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../../auth/data/orbit_identity_client.dart';
 import '../../data/orbit_circle_repository.dart';
@@ -233,50 +236,68 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
         _notify('You have no pending Circle invitations.');
         return;
       }
-      await showModalBottomSheet<void>(
-        context: context, isScrollControlled: true,
-        backgroundColor: AppColors.background,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-        ),
-        builder: (sheet) => SafeArea(child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: ListView(shrinkWrap: true, children: [
-            const Text('Circle invitations', style: TextStyle(
-              fontFamily: AppTypography.fontFamily, fontWeight: FontWeight.w600, fontSize: 20)),
-            for (final invite in invitations)
-              ListTile(
-                title: Text(invite.circleName ?? 'Circle'),
-                subtitle: const Text('Invitation pending'),
-                trailing: Wrap(spacing: 5, children: [
-                  IconButton(icon: const Icon(Icons.close),
-                    tooltip: 'Decline', onPressed: () async {
-                      try {
-                        await _repo.answer(invite.id,accept:false);
-                        if (sheet.mounted) Navigator.pop(sheet);
-                        if (mounted) await _load();
-                      } catch (_) { if (mounted) _notify('Unable to decline invitation.'); }
-                    }),
-                  IconButton(icon: const Icon(Icons.check),
-                    tooltip: 'Accept', onPressed: () async {
-                      final confirm=await showOrbitCircleConfirmation(
-                        context:sheet,
-                        title:'Accept Circle invitation?',
-                        description:'Join "${invite.circleName ?? 'Circle'}"? '
-                          'No location, presence, Moment or messaging permissions are granted.',
-                        confirmLabel:'Accept',
-                      );
-                      if(confirm != true) return;
-                      try {
-                        await _repo.answer(invite.id,accept:true);
-                        if (sheet.mounted) Navigator.pop(sheet);
-                        if (mounted) await _load();
-                      } catch (_) { if (mounted) _notify('Unable to accept invitation.'); }
-                    }),
-                ]),
+      await showOrbitCircleSheet<void>(
+        context: context,
+        title: 'Circle invitations',
+        builder: (sheet) => Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            for (final invite in invitations) ...<Widget>[
+              AppActionRow(
+                leadingIcon: Icons.mail_outline_rounded,
+                iconBackgroundColor: const Color(0xFFF2EAFE),
+                leadingIconColor: AppColors.primaryEnd,
+                title: invite.circleName ?? 'Circle',
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    AppCircularIconButton(
+                      semanticLabel: 'Decline invitation',
+                      icon: Icons.close_rounded,
+                      iconSize: 20,
+                      onPressed: () async {
+                        try {
+                          await _repo.answer(invite.id, accept: false);
+                          if (sheet.mounted) Navigator.of(sheet).pop();
+                          if (mounted) await _load();
+                        } catch (error) {
+                          if (mounted) _notify(error is OrbitIdentityException
+                              ? error.message : 'Unable to decline invitation.');
+                        }
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    AppCircularIconButton(
+                      semanticLabel: 'Accept invitation',
+                      icon: Icons.check_rounded,
+                      iconSize: 20,
+                      iconColor: AppColors.primaryEnd,
+                      onPressed: () async {
+                        final confirm = await showOrbitCircleConfirmation(
+                          context: sheet,
+                          title: 'Accept Circle invitation?',
+                          description: 'Join "${invite.circleName ?? 'Circle'}"? '
+                              'Location, presence, Moments and messages remain private.',
+                          confirmLabel: 'Accept',
+                        );
+                        if (!confirm) return;
+                        try {
+                          await _repo.answer(invite.id, accept: true);
+                          if (sheet.mounted) Navigator.of(sheet).pop();
+                          if (mounted) await _load();
+                        } catch (error) {
+                          if (mounted) _notify(error is OrbitIdentityException
+                              ? error.message : 'Unable to accept invitation.');
+                        }
+                      },
+                    ),
+                  ],
+                ),
               ),
-          ]),
-        )),
+              const SizedBox(height: 10),
+            ],
+          ],
+        ),
       );
     } catch (e) {
       _notify(e is OrbitIdentityException ? e.message : 'Unable to load invitations.');
