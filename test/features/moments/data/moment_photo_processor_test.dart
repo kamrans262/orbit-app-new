@@ -24,6 +24,18 @@ void main(){
       expect(img.decodeJpg(bytes),isNotNull,reason:filter.label);
     }
   });
+  test('Beauty control is opt-in, finite and bounded before encryption',(){
+    final normal=MomentPhotoProcessor.render(source,const MomentPhotoEdit());
+    final explicitOff=MomentPhotoProcessor.render(source,
+      const MomentPhotoEdit(beautyStrength:0));
+    expect(explicitOff,orderedEquals(normal));
+    final adjusted=MomentPhotoProcessor.render(source,
+      const MomentPhotoEdit(beautyStrength:0.20));
+    expect(img.decodeJpg(adjusted),isNotNull);
+    expect(()=>MomentPhotoProcessor.render(source,
+      const MomentPhotoEdit(beautyStrength:0.5)),throwsFormatException);
+  });
+
   test('Rejects too-long overlay before upload',(){
     expect(()=>MomentPhotoProcessor.render(source,MomentPhotoEdit(
       text:List<String>.filled(81,'x').join())),throwsFormatException);
