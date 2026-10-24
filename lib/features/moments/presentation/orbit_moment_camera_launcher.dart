@@ -6,6 +6,7 @@ import '../../../core/popups/orbit_popup_variants.dart';
 import 'orbit_camera_permission_memory.dart';
 import 'screens/moment_camera_screen.dart';
 import '../domain/models/moment_publish_models.dart';
+import '../../media/data/orbit_moment_media_stager.dart';
 
 /// Central launcher for the global Orbit bottom-bar Add action.
 ///
@@ -59,6 +60,13 @@ abstract final class OrbitMomentCameraLauncher {
       MaterialPageRoute<void>(builder: (_) => MomentCameraScreen(
         publishMoment: publisher,
         momentAudienceCircles: circles,
+        privateSaver: (bytes, progress) async {
+          final saved = await OrbitMomentMediaStager()
+              .stagePhoto(bytes, onProgress: progress);
+          if (!saved.thumbnailVerified || !saved.privateGrantConfirmed) {
+            throw StateError('Private encrypted storage not confirmed.');
+          }
+        },
       )),
     );
   }
