@@ -598,10 +598,16 @@ class OrbitMomentRepository {
     return out;
   }
 
-  Future<void> report(OrbitLiveMoment item,String reason) async {
-    await _api('POST','/moments/'+Uri.encodeComponent(item.id)+'/reports',
-      key:_uuid.v4(),body:{'context_id':item.contextId,
-      'reason':reason,'evidence_consent':false});
+  Future<void> report(OrbitLiveMoment item,String reason,
+      {String? commentId,bool account=false}) async {
+    final path='/moments/'+Uri.encodeComponent(item.id)+
+      (commentId==null?'/reports':
+        '/comments/'+Uri.encodeComponent(commentId)+'/reports');
+    await _api('POST',path,key:_uuid.v4(),
+      body:{'context_id':item.contextId,'reason':reason,
+        'report_target':account?'account':
+          commentId!=null?'comment':'moment',
+        'evidence_consent':false});
   }
   Future<void> delete(OrbitLiveMoment item) async {
     await _api('DELETE','/moments/'+Uri.encodeComponent(item.id));

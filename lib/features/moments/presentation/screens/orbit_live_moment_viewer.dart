@@ -223,6 +223,15 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
                   subtitle:Text(lines[index].parent==null
                       ? 'Reply':'Reply in thread',style:AppTypography.bodyMuted),
                   onTap:()=>setSheet(()=>replyingTo=lines[index].id),
+                  trailing:IconButton(
+                    tooltip:'Report this private comment',
+                    icon:const Icon(Icons.flag_outlined),
+                    onPressed:(){
+                      final commentId=lines[index].id;
+                      Navigator.of(sheetContext).pop();
+                      unawaited(_reportSheet(commentId:commentId));
+                    },
+                  ),
                 )))),
             if(replyingTo!=null)Row(children:[
               Expanded(child:Text('Replying to comment',
@@ -249,7 +258,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
     );
     controller.dispose();
   }
-  Future<void> _reportSheet() async {
+  Future<void> _reportSheet({String? commentId,bool account=false}) async {
     const reasons=<String,String>{
       'spam':'Spam','harassment':'Harassment','threat':'Threats',
       'scam':'Scam','impersonation':'Impersonation',
@@ -264,7 +273,9 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
       builder:(sheet)=>SafeArea(child:Padding(
         padding:const EdgeInsets.fromLTRB(20,16,20,20),
         child:Column(mainAxisSize:MainAxisSize.min,children:[
-          Text('Report Moment',style:AppTypography.smallHeading),
+          Text(account?'Report account':
+            commentId!=null?'Report comment':'Report Moment',
+            style:AppTypography.smallHeading),
           const SizedBox(height:10),
           ...reasons.entries.map((entry)=>ListTile(
             title:Text(entry.value,style:AppTypography.body),
@@ -275,7 +286,8 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
     );
     if(code==null)return;
     try{
-      await widget.repository.report(_current,code);
+      await widget.repository.report(_current,code,
+        commentId:commentId,account:account);
       if(mounted)_notice('Your report has been submitted.');
     }catch(_){if(mounted)_notice('Unable to submit this report.');}
   }
@@ -345,6 +357,11 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
                 semanticLabel:'Report Moment',
                 onPressed:()=>unawaited(_reportSheet()),
                 icon:Icons.flag_outlined,iconSize:20,size:40),
+              const SizedBox(width:8),
+              AppCircularIconButton(
+                semanticLabel:'Report account',
+                onPressed:()=>unawaited(_reportSheet(account:true)),
+                icon:Icons.person_off_outlined,iconSize:20,size:40),
             ]),
           const SizedBox(height:22),
         ]),
