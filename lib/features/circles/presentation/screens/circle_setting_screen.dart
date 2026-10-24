@@ -5,6 +5,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../../../core/popups/orbit_popup_modal.dart';
 import '../../../../core/widgets/app_action_row.dart';
+import '../../../../core/widgets/app_primary_button.dart';
 import '../../../../core/widgets/app_circular_icon_button.dart';
 import '../../../../core/widgets/app_screen_header.dart';
 import '../../../../core/widgets/app_text_field.dart';
@@ -24,6 +25,7 @@ abstract final class CircleSettingKeys {
   static const colorLabel = Key('circle_setting_color_label');
   static const colorSelector = Key('circle_setting_color_selector');
   static const deleteButton = Key('circle_setting_delete_button');
+  static const saveButton = Key('circle_setting_save_button');
   static const deleteConfirmButton = Key('circle_setting_delete_confirm');
   static const retryButton = Key('circle_setting_retry_button');
   static const inviteManagementEntry = Key(
@@ -49,6 +51,9 @@ class CircleSettingScreen extends StatefulWidget {
     this.archiveInsteadOfDelete = false,
     this.showDestructiveAction = true,
     this.onManagePressed,
+    this.onSavePressed,
+    this.saveEnabled = false,
+    this.saving = false,
     super.key,
   }) : assert(
          viewState != CircleSettingsViewState.loaded || settings != null,
@@ -92,6 +97,9 @@ class CircleSettingScreen extends StatefulWidget {
   final bool archiveInsteadOfDelete;
   final bool showDestructiveAction;
   final VoidCallback? onManagePressed;
+  final VoidCallback? onSavePressed;
+  final bool saveEnabled;
+  final bool saving;
 
   @override
   State<CircleSettingScreen> createState() => _CircleSettingScreenState();
@@ -152,10 +160,46 @@ class _CircleSettingScreenState extends State<CircleSettingScreen> {
       onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
       child: Scaffold(
         backgroundColor: AppColors.background,
+        bottomNavigationBar: widget.onSavePressed == null ? null : SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+            child: Center(
+              heightFactor: 1,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: _maxContentWidth),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    KeyedSubtree(
+                      key: CircleSettingKeys.saveButton,
+                      child: AppPrimaryButton(
+                        label: widget.saving ? 'Saving…' : 'Save Changes',
+                        enabled: widget.saveEnabled && !widget.saving,
+                        onPressed: widget.onSavePressed!,
+                      ),
+                    ),
+                    if (widget.showDestructiveAction) ...<Widget>[
+                      const SizedBox(height: 12),
+                      _DeleteCircleButton(
+                        onTap: widget.saving ? () {} : _showDeleteConfirmation,
+                        label: widget.archiveInsteadOfDelete
+                            ? 'Archive Circle' : 'Delete Circle',
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
         body: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              return SingleChildScrollView(
+              return IgnorePointer(
+                ignoring: widget.saving,
+                child: SingleChildScrollView(
                 key: CircleSettingKeys.scrollView,
                 keyboardDismissBehavior:
                     ScrollViewKeyboardDismissBehavior.onDrag,
@@ -190,7 +234,7 @@ class _CircleSettingScreenState extends State<CircleSettingScreen> {
                     ),
                   ),
                 ),
-              );
+              ));
             },
           ),
         ),
@@ -322,7 +366,7 @@ class _CircleSettingScreenState extends State<CircleSettingScreen> {
                 fontSize: 13, color: Color(0xFF64748B)),
             ),
           ),
-        if (widget.showDestructiveAction) ...<Widget>[
+        if (widget.onSavePressed == null && widget.showDestructiveAction) ...<Widget>[
           const SizedBox(height: _rowsToDeleteGap),
           _DeleteCircleButton(
             onTap: _showDeleteConfirmation,
