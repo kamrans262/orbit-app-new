@@ -349,13 +349,13 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
           ),
         ),
         const SizedBox(height: 6),
-        if (!_canSavePrivate)
+        if (_canPublish || !_canSavePrivate)
           Text(
             'Choose who can see your encrypted Moment.',
             style: AppTypography.bodyMuted,
           ),
         const SizedBox(height: 10),
-        if (!_canSavePrivate)
+        if (_canPublish || !_canSavePrivate)
         OutlinedButton.icon(
           key: MomentPublishKeys.chooseAudience,
           onPressed: () => setState(() => _step = _PublishStep.audience),
