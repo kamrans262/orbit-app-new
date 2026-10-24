@@ -246,6 +246,7 @@ class _OrbitDiscoverFriendsScreenState extends State<OrbitDiscoverFriendsScreen>
         Padding(
           padding: const EdgeInsets.fromLTRB(20,20,20,12),
           child: OrbitSearchableHeader(
+                  compactTitle: true,
             title: 'Find Friends',
             placeholder: 'Search by name or username',
             controller: _search,
