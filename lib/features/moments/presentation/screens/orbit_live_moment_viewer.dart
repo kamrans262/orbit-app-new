@@ -204,11 +204,16 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(message)));
   }
   Future<void> _commentSheet() async {
+    final item=_current;
+    final wasPaused=_paused;
+    _pause(true);
     final controller=TextEditingController();
     var lines=<({String id,String author,String body,String? parent})>[];
     String? error;
-    try {lines=await widget.repository.allComments(_current);}
+    String? viewerId;
+    try {lines=await widget.repository.allComments(item);}
     catch(_){error='Comments are unavailable. Please try again.';}
+    try {viewerId=await widget.repository.currentUserId();} catch (_) {}
     if(!mounted){controller.dispose();return;}
     String? replyingTo;
     await showModalBottomSheet<void>(
@@ -232,15 +237,34 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
                   subtitle:Text(lines[index].parent==null
                       ? 'Reply':'Reply in thread',style:AppTypography.bodyMuted),
                   onTap:()=>setSheet(()=>replyingTo=lines[index].id),
-                  trailing:IconButton(
-                    tooltip:'Report this private comment',
-                    icon:const Icon(Icons.flag_outlined),
-                    onPressed:(){
-                      final commentId=lines[index].id;
-                      Navigator.of(sheetContext).pop();
-                      unawaited(_reportSheet(commentId:commentId));
-                    },
-                  ),
+                  trailing:Row(mainAxisSize:MainAxisSize.min,children:[
+                    if(viewerId!=null &&
+                       (lines[index].author==viewerId ||
+                        item.creatorId==viewerId))
+                      IconButton(
+                        tooltip:'Delete comment',
+                        icon:const Icon(Icons.delete_outline_rounded),
+                        onPressed:() async {
+                          final id=lines[index].id;
+                          try {
+                            await widget.repository.deleteComment(item,id);
+                            if(sheetContext.mounted)setSheet((){
+                              lines=lines.where((entry)=>entry.id!=id).toList();
+                              if(replyingTo==id)replyingTo=null;
+                            });
+                          }catch(_){if(mounted)_notice('Comment could not be deleted.');}
+                        },
+                      ),
+                    IconButton(
+                      tooltip:'Report this private comment',
+                      icon:const Icon(Icons.flag_outlined),
+                      onPressed:(){
+                        final commentId=lines[index].id;
+                        Navigator.of(sheetContext).pop();
+                        unawaited(_reportSheet(commentId:commentId));
+                      },
+                    ),
+                  ]),
                 )))),
             if(replyingTo!=null)Row(children:[
               Expanded(child:Text('Replying to comment',
@@ -255,7 +279,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
               final text=controller.text.trim();
               if(text.isEmpty)return;
               try{
-                await widget.repository.comment(_current,text,parent:replyingTo);
+                await widget.repository.comment(item,text,parent:replyingTo);
                 if(sheetContext.mounted)Navigator.of(sheetContext).pop();
               }catch(_){
                 if(mounted)_notice('Comment could not be sent.');
@@ -266,6 +290,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
       )),
     );
     controller.dispose();
+    if(mounted)_pause(wasPaused);
   }
   Future<void> _reportSheet({String? commentId,bool account=false}) async {
     const reasons=<String,String>{
