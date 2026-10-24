@@ -244,7 +244,10 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
       if (privateOnly) {
         // Explicit user action. M6 encrypts and saves to the creator's own
         // trusted device, but does not publish or notify a Circle.
-        await widget.privateSaver!(widget.photoBytes, (fraction) {
+        final edited=widget.mediaKind=='image'?
+          await _encodeImage():widget.photoBytes;
+        if(!mounted)return;
+        await widget.privateSaver!(edited, (fraction) {
           if (!mounted) return;
           setState(() => _progress = fraction.clamp(0.0, 1.0).toDouble());
         });
