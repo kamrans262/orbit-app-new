@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:orbit_ui/core/widgets/app_circular_icon_button.dart';
 import 'package:orbit_ui/features/circles/domain/models/circle_settings.dart';
 import 'package:orbit_ui/features/circles/presentation/screens/circle_setting_screen.dart';
 import 'package:orbit_ui/core/popups/orbit_popup_modal.dart';
@@ -33,6 +34,31 @@ void main() {
     expect(find.text('Ping'), findsOneWidget);
     expect(find.text('SOS Alerts'), findsOneWidget);
     expect(find.text('Delete Circle'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Manage Circle action matches existing Back button', (tester) async {
+    var managed = 0;
+    await tester.pumpWidget(MaterialApp(
+      home: CircleSettingScreen(
+        settings: settings,
+        onManagePressed: () => managed++,
+      ),
+    ));
+    final back = tester.widget<AppCircularIconButton>(
+        find.byKey(CircleSettingKeys.backButton));
+    final manage = tester.widget<AppCircularIconButton>(
+        find.byWidgetPredicate((widget) =>
+            widget is AppCircularIconButton &&
+            widget.semanticLabel == 'Manage Circle'));
+    expect(back.size, 30);
+    expect(manage.size, back.size);
+    expect(manage.iconSize, back.iconSize);
+    expect(manage.iconColor, back.iconColor);
+    await tester.tap(find.byWidgetPredicate((widget) =>
+        widget is AppCircularIconButton &&
+        widget.semanticLabel == 'Manage Circle'));
+    expect(managed, 1);
     expect(tester.takeException(), isNull);
   });
 
