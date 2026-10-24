@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
@@ -14,12 +15,13 @@ import '../../data/orbit_moment_repository.dart';
 class OrbitPrivateMomentPlayer extends StatefulWidget {
   const OrbitPrivateMomentPlayer({
     required this.item,required this.repository,this.onFinished,
-    this.paused=false,super.key,
+    this.paused=false,this.previewBytes,super.key,
   });
   final OrbitLiveMoment item;
   final OrbitMomentRepository repository;
   final VoidCallback? onFinished;
   final bool paused;
+  final Uint8List? previewBytes;
   @override
   State<OrbitPrivateMomentPlayer> createState()=>_OrbitPrivateMomentPlayerState();
 }
@@ -188,6 +190,10 @@ class _OrbitPrivateMomentPlayerState extends State<OrbitPrivateMomentPlayer>
       if(widget.item.mediaKind=='video' && video!=null && video.value.isInitialized)
         AspectRatio(aspectRatio:video.value.aspectRatio,
           child:VideoPlayer(video))
+      else if(widget.previewBytes!=null && widget.previewBytes!.isNotEmpty)
+        Image.memory(widget.previewBytes!,fit:BoxFit.contain,height:90,
+          errorBuilder:(_,error,stack)=>const Icon(
+            Icons.graphic_eq_rounded,color:AppColors.primaryEnd,size:64))
       else
         const Icon(Icons.mic_none_outlined,color:AppColors.primaryEnd,size:64),
       const SizedBox(height:16),

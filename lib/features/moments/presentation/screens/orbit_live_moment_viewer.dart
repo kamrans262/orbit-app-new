@@ -159,7 +159,9 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
       }
       final photo=current.mediaKind=='image'
         ? await widget.repository.photo(current,variant:'original')
-        : Uint8List(0);
+        : current.mediaKind=='audio'
+          ? await widget.repository.photo(current,variant:'thumbnail')
+          : Uint8List(0);
       final caption=await widget.repository.caption(current);
       await widget.repository.view(current);
       if(mounted && epoch==_loadEpoch && _current.id==current.id){
@@ -317,6 +319,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
                           key:ValueKey<String>('m7_clip_${_current.id}'),
                           item:_current,repository:widget.repository,
                           paused:_paused,
+                          previewBytes:_photo,
                           onFinished:()=>_move(1)))),
             ))),
           if(_error==null && !_loading && _caption!=null&&_caption!.isNotEmpty &&
