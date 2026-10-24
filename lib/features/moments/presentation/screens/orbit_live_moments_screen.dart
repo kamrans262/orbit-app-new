@@ -3,6 +3,10 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+import '../../../../app/theme/app_colors.dart';
+import '../../../../app/theme/app_typography.dart';
+import '../../../../core/widgets/app_primary_button.dart';
+
 import '../../data/orbit_moment_repository.dart';
 import '../../../media/data/orbit_moment_media_stager.dart';
 import '../../domain/models/moments_models.dart';
@@ -33,6 +37,9 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
   final Set<String> _likes={};
   bool _busy=true;
   String? _error;
+  int _pendingPublishCount=0;
+  String? _pendingWarning;
+  bool _retrying=false;
   Timer? _authorizationRefresh;
   int _loadEpoch=0;
 
@@ -90,11 +97,19 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
     try {
       // Resume only this account's encrypted outbox while foregrounded.
       // Failures leave the original ciphertext queued without fake success.
-      try {
+
+      String? pendingProblem;
+      try{
         await _repo.resumePendingPublishes();
-      } catch (_) {
-        // An encrypted draft remains for explicit retry on the next refresh.
+      }catch(_){
+        pendingProblem='Waiting for connection or a secure retry';
       }
+      var waiting=0;
+      try{waiting=await _repo.pendingPublishCount();}catch(_){}
+      if(mounted && epoch==_loadEpoch)setState((){
+        _pendingPublishCount=waiting;
+        _pendingWarning=pendingProblem;
+      });
       final moments=await _repo.feed(maxItems:30,
         circleId:widget.circleId,profileId:widget.profileId);
       final rail=widget.circleId!=null||widget.profileId!=null
@@ -141,6 +156,22 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         _busy=false;
         _error='Unable to load encrypted Moments. Check your connection and try again.';
       });
+    }
+  }
+  Future<void> _retryEncryptedDrafts() async {
+    if(!mounted || _retrying)return;
+    setState(()=>_retrying=true);
+    try{
+      await _repo.resumePendingPublishes(force:true);
+      if(mounted)setState(()=>_pendingWarning=null);
+    }catch(_){
+      if(mounted)setState(()=>_pendingWarning=
+        'Encrypted draft was not sent. Retry when connected.');
+    }finally{
+      if(mounted){
+        setState(()=>_retrying=false);
+        unawaited(_load());
+      }
     }
   }
   String _relative(DateTime timestamp) {
@@ -214,7 +245,8 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         isLiked:_likes.contains(m.id),
       ),
     ];
-    return MomentsScreen(
+    return Stack(children:[
+      MomentsScreen(
       key:const Key('orbit_m7_live_moments'),
       stories:stories,feedItems:feed,privateMode:true,
       viewState:_busy?MomentsViewState.loading:
@@ -232,6 +264,28 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       onFeedItemPressed:(item)=>_openById(item.id),
       onTabSelected:widget.onTabSelected,onAddPressed:(){},
       cameraBuilder:(_)=>_camera(),
-    );
+    ),
+    if(_pendingPublishCount>0)Positioned(
+      bottom:90,left:16,right:16,
+      child:Material(
+        color:AppColors.background,
+        elevation:4,
+        borderRadius:BorderRadius.circular(20),
+        child:Padding(
+          padding:const EdgeInsets.all(12),
+          child:Column(mainAxisSize:MainAxisSize.min,children:[
+            Text(
+              _pendingWarning??'$_pendingPublishCount encrypted Moment draft(s) waiting to send',
+              textAlign:TextAlign.center,style:AppTypography.body),
+            const SizedBox(height:8),
+            AppPrimaryButton(
+              label:_retrying?'Sending…':'Retry encrypted draft',
+              enabled:!_retrying,
+              onPressed:()=>unawaited(_retryEncryptedDrafts())),
+          ]),
+        ),
+      ),
+    ),
+    ]);
   }
 }
