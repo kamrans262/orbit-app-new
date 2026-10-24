@@ -31,6 +31,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
   String? _error;
   bool _loading=true, _liked=false, _sending=false, _paused=false;
   bool _allCaughtUp=false;
+  bool _reauthorizing=false;
   Timer? _advance;
   Timer? _revalidation;
   int _loadEpoch=0;
@@ -61,22 +62,24 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
     _caption=null;
   }
   Future<void> _checkAuthorization() async {
-    if(!mounted || _loading)return;
+    if(!mounted || _loading || _reauthorizing || _allCaughtUp)return;
+    _reauthorizing=true;
     final moment=_current;
-    _advance?.cancel();
-    setState(()=>_loading=true); // Hide decrypted content while policy is checked.
+    final epoch=_loadEpoch;
+    // Keep the existing native player mounted during a successful
+    // authorization refresh. Recreating it every 20 seconds would restart
+    // long video/audio playback and lose the viewer's progress.
     final valid=await widget.repository.remainsAuthorized(moment);
-    if(!mounted || _current.id!=moment.id)return;
+    _reauthorizing=false;
+    if(!mounted || epoch!=_loadEpoch || _current.id!=moment.id)return;
     if(!valid){
+      _advance?.cancel();
       setState((){
         ++_loadEpoch;
         _forgetPhoto();
         _loading=false;
         _error='This encrypted Moment is unavailable or access has changed.';
       });
-    }else{
-      setState(()=>_loading=false);
-      _schedule();
     }
   }
 
@@ -107,7 +110,8 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
   void _schedule(){
     _advance?.cancel();
     if(widget.playlist.isEmpty||_paused||_loading||_error!=null ||
-        _allCaughtUp)return;
+        _allCaughtUp ||
+        (MediaQuery.maybeOf(context)?.disableAnimations??false))return;
     if(_current.mediaKind=='image'){
       _advance=Timer(const Duration(seconds:5),()=>_move(1));
     }
