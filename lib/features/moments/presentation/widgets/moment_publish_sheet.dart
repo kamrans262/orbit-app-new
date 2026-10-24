@@ -112,7 +112,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
   // A live repository must inject circles and a publisher together. A missing
   // publisher deliberately never claims a post was published.
   bool get _canPublish => widget.publisher != null;
-  bool get _canSavePrivate => widget.privateSaver != null && !_canPublish;
+  bool get _canSavePrivate => widget.privateSaver != null;
   bool get _hasAudience => _canPublish
       ? (_audienceKind=='only_me' ||
         (_audienceKind=='accepted_friends' && widget.friends.isNotEmpty) ||
@@ -370,15 +370,19 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
             ),
           ),
         AppPrimaryButton(
-          label: _canSavePrivate
-              ? 'Save privately'
-              : (_canPublish ? 'Publish Moment' : 'Preview publishing flow'),
-          enabled: _canSavePrivate || _hasAudience,
+          label: _canPublish ? 'Publish Moment'
+              : (_canSavePrivate ? 'Save privately' : 'Preview publishing flow'),
+          enabled: _canPublish ? _hasAudience : (_canSavePrivate || _hasAudience),
           onPressed: () => unawaited(_submit(
-            privateOnly: _canSavePrivate,
+            privateOnly: !_canPublish && _canSavePrivate,
             previewOnly: !_canPublish && !_canSavePrivate,
           )),
         ),
+        if(_canPublish && _canSavePrivate)
+          TextButton(
+            onPressed:()=>unawaited(_submit(privateOnly:true)),
+            child:const Text('Save privately without publishing'),
+          ),
         const SizedBox(height: 10),
         TextButton(
           onPressed: _back,

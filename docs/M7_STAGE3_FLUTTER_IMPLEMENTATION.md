@@ -25,3 +25,5 @@
 - Comment text is end-to-end encrypted using the already wrapped M6 original media key, a fresh AEAD nonce, and moment-specific authenticated context.
 - Admin never receives the content key. Circle membership / blocking / M3 privacy / consent must be rechecked on every backend read.
 - Full 74-case M7 acceptance, Apple/Android device QA, Hostinger private storage and final production release belong to Stage 4.
+
+- Preserve the separately confirmed M6 **Save privately without publishing** option on the existing review sheet even when M7 publishing is connected. Both actions use existing Orbit buttons and status components.

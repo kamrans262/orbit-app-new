@@ -64,4 +64,35 @@ void main() {
     expect(find.text('Selected Circles'), findsNothing);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('M7 live sheet retains M6 private saving without publishing',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 740));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    var published = false;
+    var saved = false;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: Builder(builder: (context) =>
+        TextButton(onPressed: () => showMomentPublishingSheet(context,
+          photoBytes: Uint8List.fromList(const [1, 2, 3]),
+          circles: const [], privacyAudience: 'Nobody',
+          publisher: (request, progress) async {
+            published = true;
+            return const MomentPublishReceipt(momentId: 'server-confirmed');
+          },
+          privateSaver: (bytes, progress) async {
+            saved = true;
+            progress(1);
+          }), child: const Text('Open')))),
+    ));
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    expect(find.text('Publish Moment'), findsOneWidget);
+    await tester.ensureVisible(find.text('Save privately without publishing'));
+    await tester.tap(find.text('Save privately without publishing'));
+    await tester.pumpAndSettle();
+    expect(saved, isTrue);
+    expect(published, isFalse);
+    expect(find.text('Photo saved privately'), findsOneWidget);
+  });
+
 }

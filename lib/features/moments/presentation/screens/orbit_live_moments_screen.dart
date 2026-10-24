@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import '../../data/orbit_moment_repository.dart';
+import '../../../media/data/orbit_moment_media_stager.dart';
 import '../../domain/models/moments_models.dart';
 import '../screens/moment_camera_screen.dart';
 import '../screens/moments_screen.dart';
@@ -105,6 +106,13 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> {
     }catch(_){if(mounted)unawaited(_load());}
   }
   MomentCameraScreen _camera() => MomentCameraScreen(
+    privateSaver:(bytes,progress) async {
+      final saved=await OrbitMomentMediaStager()
+        .stagePhoto(bytes,onProgress:progress);
+      if(!saved.thumbnailVerified || !saved.privateGrantConfirmed){
+        throw StateError('Private encrypted storage not confirmed.');
+      }
+    },
     momentAudienceCircles:_options.circles,
     momentAudienceFriends:_options.friends,
     momentPrivacyAudience:_options.privacy,
