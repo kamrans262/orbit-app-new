@@ -88,6 +88,9 @@ class _OrbitLiveCircleManageScreenState extends State<OrbitLiveCircleManageScree
     };
     final choice=await showModalBottomSheet<String>(context:context,
       backgroundColor:AppColors.background,
+      shape:const RoundedRectangleBorder(
+        borderRadius:BorderRadius.vertical(top:Radius.circular(28)),
+      ),
       builder:(sheet)=>SafeArea(child:Padding(padding:const EdgeInsets.all(20),
         child:Wrap(spacing:12,runSpacing:12,children:[
           for(final entry in icons.entries)
