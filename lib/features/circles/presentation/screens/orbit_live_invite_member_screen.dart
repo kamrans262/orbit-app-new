@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -7,6 +8,7 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_screen_header.dart';
 import '../../../../core/popups/orbit_popup_modal.dart';
+import '../../../../core/popups/orbit_popup_components.dart';
 import '../../../auth/data/orbit_identity_client.dart';
 import '../../../friends/data/orbit_social_repository.dart';
 import '../../data/orbit_circle_repository.dart';
@@ -31,6 +33,14 @@ class _OrbitLiveInviteMemberScreenState extends State<OrbitLiveInviteMemberScree
   List<OrbitPerson> _people=const [];
   bool _loading=true,_sending=false;
   String? _error;
+  DateTime? _rateLimitedUntil;
+  Timer? _rateLimitTimer;
+
+  bool get _rateLimited => _rateLimitedUntil != null &&
+      DateTime.now().isBefore(_rateLimitedUntil!);
+
+  @override
+  void dispose() { _rateLimitTimer?.cancel(); super.dispose(); }
 
   @override
   void initState() {super.initState();_load();}
@@ -75,7 +85,7 @@ class _OrbitLiveInviteMemberScreenState extends State<OrbitLiveInviteMemberScree
   }
 
   Future<void> _invite(OrbitPerson person) async {
-    if(_sending) return;
+    if(_sending || _rateLimited) return;
     setState(()=>_sending=true);
     try {
       final invite=await _circles.invite(widget.circleId,person.id);
@@ -123,9 +133,22 @@ class _OrbitLiveInviteMemberScreenState extends State<OrbitLiveInviteMemberScree
       }
       if(mounted) Navigator.of(context).pop();
     } catch(e) {
-      if(mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content:Text(e is OrbitIdentityException ? e.message
-          : 'Unable to invite this friend.')));
+      if (e is OrbitIdentityException && e.statusCode == 429) {
+        // Respect the backend's 10-per-minute invitation limit. No retries.
+        _rateLimitedUntil = DateTime.now().add(const Duration(seconds: 65));
+        _rateLimitTimer?.cancel();
+        _rateLimitTimer = Timer(const Duration(seconds: 65), () {
+          if (mounted) setState(() => _rateLimitedUntil = null);
+        });
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Invitation limit reached. Please try again in about a minute.'),
+        ));
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e is OrbitIdentityException ? e.message
+              : 'Unable to invite this friend.'),
+        ));
+      }
     } finally {
       if(mounted) setState(()=>_sending=false);
     }
@@ -158,8 +181,20 @@ class _OrbitLiveInviteMemberScreenState extends State<OrbitLiveInviteMemberScree
               title:Text(p.name,style:const TextStyle(
                 fontFamily:AppTypography.fontFamily,fontWeight:FontWeight.w500)),
               subtitle:Text('@${p.username}'),
-              trailing:TextButton(onPressed:_sending ? null : ()=>_invite(p),
-                child:const Text('Invite')),
+              trailing:TextButton(
+                onPressed:(_sending || _rateLimited) ? null : ()=>_invite(p),
+                child: Opacity(
+                  opacity: (_sending || _rateLimited) ? 0.45 : 1,
+                  child: const OrbitGradientText(
+                    text: 'Invite',
+                    style: TextStyle(
+                      fontFamily: AppTypography.fontFamily,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
             ));
         },
       ),
