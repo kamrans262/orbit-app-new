@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:camera/camera.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:compress_video/compress_video.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'dart:typed_data';
@@ -103,6 +104,8 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   DateTime? _recordStart;
   Timer? _recordLimit;
   Timer? _recordTicker;
+  StreamSubscription<Amplitude>? _amplitudeSubscription;
+  final List<double> _waveform=[];
   int _elapsedSeconds=0;
   bool _stopWhenStarted=false;
   bool _recording=false;
@@ -132,6 +135,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     WidgetsBinding.instance.removeObserver(this);
     _recordLimit?.cancel();
     _recordTicker?.cancel();
+    unawaited(_amplitudeSubscription?.cancel());
     if(_recording && _mode==_OrbitCaptureMode.voice)unawaited(_audioRecorder.stop());
     unawaited(_audioRecorder.dispose());
     final captured=_capturedClip;
@@ -508,6 +512,16 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
           encoder:AudioEncoder.aacLc,bitRate:64000,
           sampleRate:44100,numChannels:1),path:path);
         _capturedClip=File(path);
+        await _amplitudeSubscription?.cancel();
+        _amplitudeSubscription=_audioRecorder.onAmplitudeChanged(
+          const Duration(milliseconds:150)).listen((amplitude){
+          if(!mounted || !_recording)return;
+          final value=((amplitude.current+52)/52).clamp(0.04,1.0).toDouble();
+          setState((){
+            _waveform.add(value);
+            if(_waveform.length>36)_waveform.removeAt(0);
+          });
+        });
       }
       _recordStart=DateTime.now();
       if(mounted)setState((){
@@ -515,6 +529,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         _elapsedSeconds=0;
       });
       _recordTicker?.cancel();
+      _waveform.clear();
       _recordTicker=Timer.periodic(const Duration(seconds:1),(_){
         if(!mounted || !_recording)return;
         setState(()=>_elapsedSeconds=
@@ -531,6 +546,11 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       });
     }catch(_){
       _stopWhenStarted=false;
+      final temp=_capturedClip;
+      if(temp!=null && _mode==_OrbitCaptureMode.voice){
+        await _deleteClip(temp);
+        _capturedClip=null;
+      }
       if(mounted)ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content:Text('Unable to start recording. Check camera and microphone permissions.')));
     }
@@ -540,6 +560,8 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     if(!_recording)return;
     _recordLimit?.cancel();
     _recordTicker?.cancel();
+    await _amplitudeSubscription?.cancel();
+    _amplitudeSubscription=null;
     _recording=false;
     final duration=DateTime.now().difference(_recordStart??DateTime.now())
       .inMilliseconds.clamp(1,60000);
@@ -574,8 +596,30 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   Future<void> _pickPhotoFromGallery() async {
     if(_isCapturing || _recording || _publishSheetOpen ||
        _capturedBytes!=null || _capturedClip!=null) return;
+    if(_mode==_OrbitCaptureMode.voice)return;
     setState(()=>_isCapturing=true);
     try {
+      if(_mode==_OrbitCaptureMode.video && widget.galleryPicker==null){
+        final clip=await ImagePicker().pickVideo(
+          source:ImageSource.gallery,
+          maxDuration:const Duration(seconds:60));
+        if(clip==null)return;
+        if(await clip.length()>500*1024*1024 ||
+           await clip.length()==0) {
+          throw const FormatException('Video exceeds capture size limits.');
+        }
+        final info=await CompressVideo().getMediaInfo(clip.path);
+        if(info.durationMs<1 || info.durationMs>60000){
+          throw const FormatException('Video must be 60 seconds or shorter.');
+        }
+        if(!mounted)return;
+        try{await _controller?.pausePreview();}catch(_){}
+        setState((){
+          _capturedClip=File(clip.path);
+          _capturedDurationMs=info.durationMs;
+        });
+        return;
+      }
       final picker=widget.galleryPicker;
       Uint8List? bytes;
       if(picker!=null){
@@ -806,7 +850,24 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
                           compact: constraints.maxWidth <= 440,
                         ),
                       ),
-                      if (_recording)
+                      if(_mode==_OrbitCaptureMode.voice &&
+                          (_recording || _capturedClip!=null) &&
+                          _waveform.isNotEmpty)
+                         Positioned(
+                           left:edgePadding+14,right:edgePadding+14,
+                           bottom:194,
+                           child:Row(
+                             mainAxisAlignment:MainAxisAlignment.center,
+                             children:_waveform.map((value)=>Container(
+                               width:4,height:5+value*38,
+                               margin:const EdgeInsets.symmetric(horizontal:2),
+                               decoration:BoxDecoration(
+                                 color:Colors.white,
+                                 borderRadius:BorderRadius.circular(2)),
+                             )).toList(),
+                           ),
+                         ),
+                       if (_recording)
                          Positioned(
                            bottom:100,left:edgePadding,right:edgePadding,
                            child:Center(child:Semantics(
@@ -1020,11 +1081,13 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         const SizedBox(height:10),
         _CameraToolItem(
           key: MomentCameraKeys.galleryButton,
-          semanticLabel: 'Choose photo from gallery',
+          semanticLabel: _mode==_OrbitCaptureMode.video
+            ? 'Choose video up to 60 seconds from gallery'
+            : 'Choose photo from gallery',
           assetPath: 'assets/icons/flip.svg',
           icon:Icons.photo_library_outlined,
           label: 'Gallery',
-          onTap: _pickPhotoFromGallery,
+          onTap:_mode==_OrbitCaptureMode.voice?null:_pickPhotoFromGallery,
         ),
         const SizedBox(height: 10),
         _CameraToolItem(
