@@ -175,9 +175,9 @@ class _FriendsScreenState extends State<FriendsScreen> {
                       AppCircularIconButton(
                         semanticLabel: 'Friend requests',
                         icon: Icons.person_add_alt_outlined,
-                        iconSize: 20,
-                        iconColor: const Color(0xFF7C3AED),
-                        size: 40,
+                        iconSize: 24,
+                        iconColor: Colors.black,
+                        size: 30,
                         onPressed: widget.onRequests!,
                       ),
                   ],
