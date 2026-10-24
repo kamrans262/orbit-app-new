@@ -135,6 +135,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
   }
   void _pause(bool value){
     _paused=value;
+    if(mounted)setState((){});
     if(value)_advance?.cancel();else _schedule();
   }
   void _navigationTap(TapUpDetails tap,BoxConstraints constraints){
@@ -315,6 +316,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
                       : OrbitPrivateMomentPlayer(
                           key:ValueKey<String>('m7_clip_${_current.id}'),
                           item:_current,repository:widget.repository,
+                          paused:_paused,
                           onFinished:()=>_move(1)))),
             ))),
           if(_error==null && !_loading && _caption!=null&&_caption!.isNotEmpty &&

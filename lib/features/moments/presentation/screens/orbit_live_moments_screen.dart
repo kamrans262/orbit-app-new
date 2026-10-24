@@ -128,7 +128,9 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       final previews=<String,Uint8List>{};
       final captions=<String,String>{};
       final places=<String,String>{};
-      for(final m in moments){
+      final unique=<String>{};
+      for(final m in [...rail,...moments]){
+        if(!unique.add(m.id))continue;
         try {
           names[m.creatorId]??=await _repo.name(m.creatorId);
         }catch(_){names[m.creatorId]??='Orbit member';}

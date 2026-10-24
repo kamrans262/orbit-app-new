@@ -13,11 +13,13 @@ import '../../data/orbit_moment_repository.dart';
 /// authorization check. No public URI, shared storage or permanent cache.
 class OrbitPrivateMomentPlayer extends StatefulWidget {
   const OrbitPrivateMomentPlayer({
-    required this.item,required this.repository,this.onFinished,super.key,
+    required this.item,required this.repository,this.onFinished,
+    this.paused=false,super.key,
   });
   final OrbitLiveMoment item;
   final OrbitMomentRepository repository;
   final VoidCallback? onFinished;
+  final bool paused;
   @override
   State<OrbitPrivateMomentPlayer> createState()=>_OrbitPrivateMomentPlayerState();
 }
@@ -88,9 +90,9 @@ class _OrbitPrivateMomentPlayerState extends State<OrbitPrivateMomentPlayer>
         await player.initialize();
         if(!mounted||current!=_epoch)return;
         await player.setLooping(false);
-        await player.play();
+        if(!widget.paused)await player.play();
         _videoEndedPoll=Timer.periodic(const Duration(milliseconds:400),(_){
-          if(!mounted || _video!=player)return;
+          if(!mounted || _video!=player || widget.paused)return;
           if(player.value.isInitialized &&
              !player.value.isPlaying &&
              player.value.position>=player.value.duration &&
@@ -108,11 +110,12 @@ class _OrbitPrivateMomentPlayerState extends State<OrbitPrivateMomentPlayer>
             widget.onFinished?.call();
           }
         });
-        await player.play(DeviceFileSource(file.path));
+        await player.setSource(DeviceFileSource(file.path));
+        if(!widget.paused)await player.resume();
       }
       if(mounted && current==_epoch)setState((){
         _busy=false;
-        _playing=true;
+        _playing=!widget.paused;
       });
     }catch(_){
       await _closePlayer();
@@ -120,6 +123,21 @@ class _OrbitPrivateMomentPlayerState extends State<OrbitPrivateMomentPlayer>
         _busy=false;
         _error='This encrypted clip cannot be played.';
       });
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant OrbitPrivateMomentPlayer old){
+    super.didUpdateWidget(old);
+    if(old.paused==widget.paused)return;
+    if(widget.paused){
+      unawaited(_video?.pause());
+      unawaited(_audio?.pause());
+      if(mounted)setState(()=>_playing=false);
+    }else if(!_busy && _error==null){
+      if(_video!=null)unawaited(_video!.play());
+      if(_audio!=null)unawaited(_audio!.resume());
+      if(mounted)setState(()=>_playing=true);
     }
   }
 
