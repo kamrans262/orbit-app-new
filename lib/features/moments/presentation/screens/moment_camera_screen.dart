@@ -442,8 +442,10 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       widget.onCaptured?.call(bytes);
     }catch(_){
       if(mounted){
-        // Use the already-approved Orbit camera error popup, not a new style.
-        _showOrbitMomentErrorPopup();
+        // The app-wide ScaffoldMessenger already renders Orbit's approved
+        // gradient snackbar: no additional color or popup design is used.
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content:Text('Unable to open this gallery photo.')));
       }
     }finally{
       if(mounted)setState(()=>_isCapturing=false);
@@ -787,7 +789,8 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         _CameraToolItem(
           key: MomentCameraKeys.galleryButton,
           semanticLabel: 'Choose photo from gallery',
-          assetPath: 'assets/icons/camera.svg',
+          assetPath: 'assets/icons/flip.svg',
+          icon:Icons.photo_library_outlined,
           label: 'Gallery',
           onTap: _pickPhotoFromGallery,
         ),
@@ -935,11 +938,13 @@ class _CameraToolItem extends StatelessWidget {
     required this.assetPath,
     required this.label,
     required this.onTap,
+    this.icon,
     super.key,
   });
 
   final String semanticLabel;
   final String assetPath;
+  final IconData? icon;
   final String label;
   final VoidCallback onTap;
 
@@ -963,15 +968,13 @@ class _CameraToolItem extends StatelessWidget {
                 border: Border.all(width: 1, color: const Color(0x2EFFFFFF)),
               ),
               child: Center(
-                child: SvgPicture.asset(
-                  assetPath,
-                  width: 22,
-                  height: 22,
-                  colorFilter: const ColorFilter.mode(
-                    Colors.white,
-                    BlendMode.srcIn,
-                  ),
-                ),
+                child: icon != null
+                    ? Icon(icon,size:22,color:Colors.white)
+                    : SvgPicture.asset(
+                        assetPath,width:22,height:22,
+                        colorFilter:const ColorFilter.mode(
+                          Colors.white,BlendMode.srcIn),
+                      ),
               ),
             ),
             const SizedBox(height: 4),
