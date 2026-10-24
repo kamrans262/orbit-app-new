@@ -1,6 +1,7 @@
 import '../../auth/data/orbit_identity_client.dart';
 import 'orbit_media_outbox.dart';
 import 'orbit_moment_media_stager.dart';
+import '../../moments/data/orbit_moment_repository.dart';
 
 /// Retries only ciphertext that the user explicitly queued earlier.
 ///
@@ -19,9 +20,19 @@ class OrbitMediaRecoveryCoordinator {
            OrbitIdentityClient.instance.currentLocalSocialOwner,
        _hasQueued = hasQueuedCiphertext ??
            ((owner) async => (await OrbitMediaOutbox().pending(owner)).isNotEmpty),
-       _restore = restoreQueued ??
-           (() async { await OrbitMomentMediaStager().retryPending(); }),
+       _restore = restoreQueued ?? _resumeSafely,
        _clock = now ?? DateTime.now;
+
+  static Future<void> _resumeSafely() async {
+    // M7 moments carry a separate account-bound publication intent. The
+    // generic M6 retry would discard ciphertext after uploading it, even if
+    // the M7 POST never ran. Recover receipt/publish FIRST; do not let the
+    // generic retry consume a Moment or an orphan Moment ciphertext draft.
+    await OrbitMomentRepository().resumePendingPublishes();
+    await OrbitMomentMediaStager().retryPending(
+      shouldRetry: (entry) => entry.purpose != 'moment',
+    );
+  }
 
   static final OrbitMediaRecoveryCoordinator instance =
       OrbitMediaRecoveryCoordinator();
