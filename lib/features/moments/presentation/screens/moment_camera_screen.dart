@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:camera/camera.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -23,6 +25,7 @@ abstract final class MomentCameraKeys {
   static const stickersButton = Key('moment_camera_stickers_button');
   static const textButton = Key('moment_camera_text_button');
   static const captureButton = Key('moment_camera_capture_button');
+  static const galleryButton = Key('moment_camera_gallery_button');
   static const sendButton = Key('moment_camera_send_button');
   static const countdown = Key('moment_camera_countdown');
   static const capturedPreview = Key('moment_camera_captured_preview');
@@ -37,6 +40,7 @@ class MomentCameraScreen extends StatefulWidget {
     this.onStickersPressed,
     this.onCaptured,
     this.onSendPressed,
+    this.galleryPicker,
     this.momentAudienceCircles = const <MomentAudienceCircle>[],
     this.momentAudienceFriends = const <MomentAudienceCircle>[],
     this.momentPrivacyAudience = 'Nobody',
@@ -54,6 +58,8 @@ class MomentCameraScreen extends StatefulWidget {
   final VoidCallback? onStickersPressed;
   final ValueChanged<Uint8List>? onCaptured;
   final ValueChanged<Uint8List>? onSendPressed;
+  /// Testable native photo-picker adapter; actual device picker is the default.
+  final Future<Uint8List?> Function()? galleryPicker;
 
   /// Inject real memberships and a confirmed publisher with the backend.
   /// Without a publisher the photo flow is explicitly UI-preview only.
@@ -409,6 +415,41 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     await _captureMoment();
   }
 
+  Future<void> _pickPhotoFromGallery() async {
+    if(_isCapturing || _publishSheetOpen || _capturedBytes!=null) return;
+    setState(()=>_isCapturing=true);
+    try {
+      final picker=widget.galleryPicker;
+      Uint8List? bytes;
+      if(picker!=null){
+        bytes=await picker();
+      }else{
+        // System gallery selection does not request whole-library access.
+        final selected=await ImagePicker().pickImage(
+          source:ImageSource.gallery,maxWidth:1440,imageQuality:80);
+        if(selected==null)return;
+        if(await selected.length()>26*1024*1024){
+          throw const FormatException('Image is too large for an encrypted Moment.');
+        }
+        bytes=await selected.readAsBytes();
+      }
+      if(bytes==null || bytes.isEmpty)return;
+      if(bytes.length>26*1024*1024)throw const FormatException('Photo exceeds 26 MB.');
+      if(!mounted)return;
+      final controller=_controller;
+      try {await controller?.pausePreview();}catch(_){}
+      setState(()=>_capturedBytes=bytes);
+      widget.onCaptured?.call(bytes);
+    }catch(_){
+      if(mounted){
+        // Use the already-approved Orbit camera error popup, not a new style.
+        _showOrbitMomentErrorPopup();
+      }
+    }finally{
+      if(mounted)setState(()=>_isCapturing=false);
+    }
+  }
+
   Future<void> _captureMoment() async {
     final controller = _controller;
     if (_isCapturing ||
@@ -741,6 +782,14 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
           assetPath: 'assets/icons/flash.svg',
           label: 'Flash',
           onTap: _toggleFlash,
+        ),
+        const SizedBox(height: 10),
+        _CameraToolItem(
+          key: MomentCameraKeys.galleryButton,
+          semanticLabel: 'Choose photo from gallery',
+          assetPath: 'assets/icons/camera.svg',
+          label: 'Gallery',
+          onTap: _pickPhotoFromGallery,
         ),
         const SizedBox(height: 10),
         _CameraToolItem(
