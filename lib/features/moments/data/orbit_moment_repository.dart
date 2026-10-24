@@ -248,6 +248,21 @@ class OrbitMomentRepository {
     progress(1);
     return MomentPublishReceipt(momentId:id!);
   }
+  /// A cached Moment UUID or decryption key is never an authorization token.
+  /// Re-check the server context before keeping a decoded image on screen.
+  Future<bool> remainsAuthorized(OrbitLiveMoment item) async {
+    try {
+      final data=await _api('GET',
+        '/moments/${Uri.encodeComponent(item.id)}?context_id='
+        '${Uri.encodeQueryComponent(item.contextId)}');
+      return data['media_id']==item.mediaId &&
+        data['context_id']==item.contextId &&
+        data['id']==item.id;
+    } catch (_) {
+      return false; // Offline, revoked or expired: fail closed.
+    }
+  }
+
   Future<Uint8List> photo(OrbitLiveMoment item,{String variant='thumbnail'}) async {
     final d=await _identity.trustedMediaDevice();
     return _media.downloadPhoto(item.mediaId,deviceId:d.id,
