@@ -37,7 +37,7 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
   late final OrbitCircleRepository _repo = widget.repository ?? OrbitCircleRepository();
   late final OrbitCircleSnapshotStore _store = widget.store ?? OrbitCircleSnapshotStore();
   List<OrbitCircle> _circles = const [];
-  bool _busy = true, _offline = false, _archiveEnabled = false;
+  bool _busy = true, _offline = false, _hasArchivedCircles = false;
   String? _error;
   int _serial = 0;
   Timer? _membershipRefresh;
@@ -100,18 +100,20 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
         items.addAll(result.items);
         if (!result.hasMore) break;
       }
-      // Archive is an independently gated backend capability. A disabled
-      // route must not leave an unusable Archived button in the interface.
-      var canArchive=false;
+      // The owner-only archived endpoint is the source of truth.
+      // Hide the Archived action when there are no archived Circles, even
+      // if archiving is enabled on the backend.
+      var hasArchivedCircles = false;
       try {
-        await _repo.archived(page:1);
-        canArchive=true;
+        final archived = await _repo.archived(page: 1);
+        hasArchivedCircles = archived.items.isNotEmpty;
       } catch (_) {
-        canArchive=false;
+        // Route disabled, offline, or access not verified: fail closed.
+        hasArchivedCircles = false;
       }
       if (!mounted || current != _serial) return;
       setState(() {
-        _archiveEnabled=canArchive;
+        _hasArchivedCircles=hasArchivedCircles;
         _circles = items;
         _offline = false;
         _busy = false;
@@ -131,7 +133,7 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
         setState(() {
           _circles = cached?.circles ?? const [];
           _offline = cached != null;
-          _archiveEnabled=false;
+          _hasArchivedCircles=false;
           _error = cached == null
             ? 'Unable to verify Circles. Reconnect and try again.' : null;
           _busy = false;
@@ -142,7 +144,7 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
         setState(() {
           _circles = const [];
           _offline = false;
-          _archiveEnabled=false;
+          _hasArchivedCircles=false;
           _error = error is OrbitIdentityException && error.statusCode == 404
             ? 'Circles are not enabled on the server yet.'
             : 'Circle access could not be verified. Sign in again or retry.';
@@ -312,7 +314,7 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
       onJoinRequested: _offline || _busy ? (_) => _notify('Reconnect to join a Circle.') : _join,
       onScanQrPressed: _offline || _busy ? null : _scan,
       onInvitationsPressed: _offline || _busy ? null : _incoming,
-      onArchivedPressed: _offline || _busy || !_archiveEnabled ? null : _archived,
+      onArchivedPressed: _offline || _busy || !_hasArchivedCircles ? null : _archived,
       onCirclePressed: _offline ? (_) => _notify('Reconnect to view Circle members.')
         : (c) => _open(_circles.firstWhere((x) => x.id == c.id)),
     )),
