@@ -21,7 +21,7 @@ class OrbitLiveMoment {
     required this.mediaId,required this.contextId,required this.publishedAt,
     this.captionCiphertext,this.mediaKind='image',this.durationMs,
     this.placeCiphertext,this.taggedUserIds=const [],
-    this.publishVersion=1,this.audienceRevision=1});
+    this.publishVersion=1,this.audienceRevision=1,this.myReaction});
   final String id, creatorId, mediaId, contextId;
   final DateTime publishedAt;
   final String? captionCiphertext;
@@ -30,6 +30,7 @@ class OrbitLiveMoment {
   final String mediaKind;
   final int? durationMs;
   final int publishVersion,audienceRevision;
+  final String? myReaction;
   factory OrbitLiveMoment.fromJson(Map<String,dynamic> d) =>
     OrbitLiveMoment(id:d['id'] as String,creatorId:d['creator_id'] as String,
       mediaId:d['media_id'] as String,contextId:d['context_id'] as String,
@@ -40,7 +41,8 @@ class OrbitLiveMoment {
       mediaKind:d['media_kind'] as String? ?? 'image',
       durationMs:(d['duration_ms'] as num?)?.toInt(),
       publishVersion:(d['publish_version'] as num?)?.toInt()??1,
-      audienceRevision:(d['audience_revision'] as num?)?.toInt()??1);
+      audienceRevision:(d['audience_revision'] as num?)?.toInt()??1,
+      myReaction:d['my_reaction'] as String?);
 }
 
 class OrbitMomentAudienceOptions {
