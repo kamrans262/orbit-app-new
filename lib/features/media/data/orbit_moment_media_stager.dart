@@ -47,7 +47,9 @@ class OrbitMomentMediaStager {
   /// *before* the first network operation. On failures neither is claimed as
   /// published; the caller can retry the secure outbox.
   Future<OrbitStagedPhoto> stagePhoto(Uint8List captured,
-      {void Function(double fraction)? onProgress}) async {
+      {void Function(double fraction)? onProgress,
+       Future<void> Function(OrbitSealedMedia original, OrbitSealedMedia thumbnail,
+         String mediaId)? onReadyForAudience}) async {
     return OrbitMediaTransferGate.run(() async {
     final owner=await _identity.currentLocalSocialOwner();
     if(owner==null)throw OrbitIdentityException('Please sign in first.',401);

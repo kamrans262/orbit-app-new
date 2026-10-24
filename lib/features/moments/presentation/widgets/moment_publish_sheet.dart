@@ -98,6 +98,15 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
   bool _simulated = false;
   bool _savedPrivate = false;
   String _audienceKind = 'only_me';
+
+  @override
+  void initState() {
+    super.initState();
+    // Legacy injected publisher tests and preview flows started with Circles.
+    // Authenticated M7 always gets the explicit privacyAudience from server.
+    if(widget.publisher!=null && widget.circles.isNotEmpty &&
+       widget.privacyAudience=='Nobody')_audienceKind='selected_circles';
+  }
   final String _clientId = const Uuid().v4();
 
   // A live repository must inject circles and a publisher together. A missing
@@ -110,12 +119,14 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
         _selectedIds.isNotEmpty)
       : _selectedIds.isNotEmpty;
   String get _audienceLabel {
-    if(!_canPublish) return _selectedIds.length.toString()+' circles';
+    if(!_canPublish) return _selectedIds.length.toString()+
+      (_selectedIds.length==1?' circle':' circles');
     switch(_audienceKind){
       case 'only_me': return 'Only Me';
       case 'accepted_friends': return 'All Friends';
       case 'selected_friends': return _selectedIds.length.toString()+' friends';
-      default: return _selectedIds.length.toString()+' circles';
+      default: return _selectedIds.length.toString()+
+        (_selectedIds.length==1?' circle':' circles');
     }
   }
 
