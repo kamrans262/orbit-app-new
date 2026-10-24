@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import '../../data/moment_photo_processor.dart';
+import 'orbit_moment_draft_player.dart';
 
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
@@ -390,18 +391,10 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
           child: SizedBox(
             height: compact ? 160 : 255,
             child: widget.mediaKind!='image'
-              ? Center(child:Column(mainAxisSize:MainAxisSize.min,children:[
-                  Icon(widget.mediaKind=='video'
-                    ? Icons.videocam_outlined : Icons.mic_none_outlined,
-                    size:54,color:AppColors.primaryEnd),
-                  const SizedBox(height:8),
-                  Text(widget.mediaKind=='video'
-                    ? 'Video ready to encrypt' : 'Voice ready to encrypt',
-                    style:AppTypography.body),
-                  if(widget.durationMs!=null)Text(
-                    '${(widget.durationMs!/1000).ceil()} seconds',
-                    style:AppTypography.bodyMuted),
-                ]))
+              ? OrbitMomentDraftPlayer(
+                  file:widget.mediaFile!,kind:widget.mediaKind,
+                  muted:_muteVideo,
+                )
               : LayoutBuilder(builder:(context,size)=>Stack(
                 fit:StackFit.expand,
                 children:[

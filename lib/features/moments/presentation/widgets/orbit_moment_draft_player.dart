@@ -36,6 +36,13 @@ class _OrbitMomentDraftPlayerState extends State<OrbitMomentDraftPlayer>
     unawaited(_init());
   }
   Future<void> _init() async {
+    // A missing/expired local clip must not start a native playback channel.
+    if(!await widget.file.exists()){
+      if(mounted)setState((){
+        _busy=false;_valid=false;
+      });
+      return;
+    }
     try{
       if(widget.kind=='video'){
         final video=VideoPlayerController.file(widget.file);
@@ -48,7 +55,7 @@ class _OrbitMomentDraftPlayerState extends State<OrbitMomentDraftPlayer>
         _ended=audio.onPlayerComplete.listen((_){
           if(mounted)setState(()=>_playing=false);
         });
-        await audio.setSourceDeviceFile(widget.file.path);
+        await audio.setSource(DeviceFileSource(widget.file.path));
       }
       if(mounted)setState(()=>_valid=true);
     }catch(_){
