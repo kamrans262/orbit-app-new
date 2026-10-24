@@ -7,7 +7,7 @@ void main() {
     OrbitQueuedMedia draft(String purpose) => OrbitQueuedMedia(
       owner:'account-a',transfer:'00000000-0000-4000-8000-000000000001',
       purpose:purpose,kind:'image',mime:'image/jpeg',variant:'original',
-      fileName:'encrypted.cipher',cipherSha256:'a'*64,
+      fileName:'encrypted.cipher',cipherSha256:List.filled(64,'a').join(),
       cipherBytes:100,plainBytes:50,noncePrefix:'nonce',
     );
     expect(OrbitMediaRecoveryCoordinator.canGenericRetry(draft('moment')),isFalse);
