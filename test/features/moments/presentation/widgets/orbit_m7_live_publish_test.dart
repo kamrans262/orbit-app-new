@@ -116,7 +116,11 @@ void main() {
     await tester.ensureVisible(find.byKey(MomentPublishKeys.chooseAudience));
     await tester.tap(find.byKey(MomentPublishKeys.chooseAudience));
     await tester.pumpAndSettle();
-    expect(find.text('Selected Circles'),findsOneWidget);
+    final selected=find.text('Selected Circles');
+    expect(selected,findsOneWidget);
+    await tester.tap(selected);
+    await tester.pump();
+    await tester.ensureVisible(find.text('Approved Circle'));
     expect(find.text('Approved Circle'),findsOneWidget);
   });
 
@@ -124,9 +128,9 @@ void main() {
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(390, 760));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    final source=File(Directory.systemTemp.path+'/orbit-m7-widget-video.mp4');
-    await source.writeAsBytes([1,2,3]);
-    addTearDown(() async { if(await source.exists())await source.delete(); });
+    // The sheet only carries the captured file reference; fake async widget
+    // tests must not perform real filesystem I/O (which can deadlock).
+    final source=File('orbit-m7-widget-video-test.mp4');
     MomentPublishRequest? captured;
     await tester.pumpWidget(MaterialApp(home:Scaffold(
       body:Builder(builder:(context)=>TextButton(
@@ -141,7 +145,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Video ready to encrypt'),findsOneWidget);
     await tester.tap(find.text('Publish Moment'));
-    await tester.pumpAndSettle();
+    await tester.pump();
     expect(captured?.mediaKind,'video');
     expect(captured?.durationMs,5000);
     expect(captured?.mediaFile?.path,source.path);

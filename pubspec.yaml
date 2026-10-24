@@ -61,6 +61,12 @@ dependencies:
   firebase_database: ^12.6.0
   shared_preferences: ^2.5.5
 
+# The iOS runner uses Xcode 16. The 2.12.2/2.12.3 rewrite to Swift
+# 6.2's isolation APIs fails to compile there. 2.12.1 predates that
+# rewrite; remove only after an independently verified newer build.
+dependency_overrides:
+  video_player_avfoundation: 2.12.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

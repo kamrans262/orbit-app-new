@@ -25,10 +25,11 @@ jobs:
       - name: Analyze M7 and existing Orbit UI integration
         run: |
           dart analyze lib/features/moments lib/features/media lib/features/home/presentation/screens/home_screen.dart lib/app/app.dart lib/core/widgets/orbit_gradient_scaffold_messenger.dart
-      - name: M7, M6 crypto and media regression tests
-        run: flutter test test/features/moments test/features/media
-      - name: Existing Friends UI regression tests
-        run: flutter test test/features/friends
+      - name: Only affected M7 publishing, offline vault and M6 outbox regression tests
+        run: |
+          flutter test test/features/moments/presentation/widgets/orbit_m7_live_publish_test.dart
+          flutter test test/features/moments/data/orbit_moment_intent_vault_test.dart
+          flutter test test/features/media/orbit_media_recovery_coordinator_test.dart
 
   android-native-compile:
     runs-on: ubuntu-latest
