@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../features/home/presentation/screens/home_screen.dart';
+import '../features/home/presentation/screens/orbit_live_home_screen.dart';
 import '../features/circles/data/orbit_circle_repository.dart';
 import '../features/circles/presentation/screens/orbit_circle_join_screen.dart';
 import '../features/circles/presentation/screens/orbit_live_circle_detail_screen.dart';
@@ -422,11 +423,7 @@ class _OrbitAppState extends State<OrbitApp> {
             return MaterialPageRoute<void>(
               settings: settings,
               builder: (context) => OrbitProtectedHome(
-                home: HomeScreen.demo(
-                  enableDemoCircleNavigation:false,
-                  onTabSelected: (index) {},
-                  onAddPressed: () {},
-                ),
+                home: const OrbitLiveHomeScreen(),
               ),
             );
           default:

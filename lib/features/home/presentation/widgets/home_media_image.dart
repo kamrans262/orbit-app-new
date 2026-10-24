@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:typed_data';
 
 class HomeMediaImage extends StatelessWidget {
   const HomeMediaImage({
@@ -6,10 +7,12 @@ class HomeMediaImage extends StatelessWidget {
     required this.fit,
     this.alignment = Alignment.center,
     this.fallback,
+    this.bytes,
     super.key,
   });
 
   final String path;
+  final Uint8List? bytes;
   final BoxFit fit;
   final AlignmentGeometry alignment;
   final Widget? fallback;
@@ -31,6 +34,11 @@ class HomeMediaImage extends StatelessWidget {
           ),
         );
 
+    if(bytes!=null && bytes!.isNotEmpty){
+      return Image.memory(bytes!,fit:fit,alignment:alignment,
+        width:double.infinity,height:double.infinity,
+        errorBuilder:(_,err,trace)=>errorFallback);
+    }
     if (path.trim().isEmpty) {
       return errorFallback;
     }

@@ -65,6 +65,8 @@ class HomeScreen extends StatefulWidget {
     ValueChanged<int>? onTabSelected,
     VoidCallback? onAddPressed,
     bool enableDemoCircleNavigation = true,
+    List<MomentData>? realRecentMoments,
+    ValueChanged<MomentData>? onRealMomentPressed,
   }) {
     const participants = <ParticipantData>[
       ParticipantData(id: 'emma', name: 'Emma', imagePath: 'assets/Emma.png'),
@@ -147,7 +149,7 @@ class HomeScreen extends StatefulWidget {
           imagePath: 'assets/Sophia.png',
         ),
       ],
-      recentMoments: const <MomentData>[
+      recentMoments: realRecentMoments ?? const <MomentData>[
         MomentData(
           id: 'm1',
           name: 'Finn',
@@ -183,7 +185,7 @@ class HomeScreen extends StatefulWidget {
       onPromoPressed: () {},
       onFavoritePersonPressed: (person) {},
       onFavoriteToggle: (person) {},
-      onMomentPressed: (moment) {},
+      onMomentPressed: onRealMomentPressed ?? (moment) {},
       onTabSelected: onTabSelected ?? (index) {},
       onAddPressed: onAddPressed ?? () {},
       enableDemoCircleNavigation:enableDemoCircleNavigation,

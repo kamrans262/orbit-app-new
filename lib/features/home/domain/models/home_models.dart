@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 @immutable
@@ -110,6 +111,7 @@ class MomentData {
     required this.imagePath,
     this.senderAvatarPath,
     this.isSenderOnline,
+    this.encryptedImageBytes,
   });
 
   final String id;
@@ -118,4 +120,5 @@ class MomentData {
   final String imagePath;
   final String? senderAvatarPath;
   final bool? isSenderOnline;
+  final Uint8List? encryptedImageBytes;
 }
