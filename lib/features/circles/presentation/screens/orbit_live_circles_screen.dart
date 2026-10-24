@@ -234,6 +234,9 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
       await showModalBottomSheet<void>(
         context: context, isScrollControlled: true,
         backgroundColor: AppColors.background,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
         builder: (sheet) => SafeArea(child: Padding(
           padding: const EdgeInsets.all(20),
           child: ListView(shrinkWrap: true, children: [
