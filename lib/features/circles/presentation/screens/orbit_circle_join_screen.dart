@@ -26,11 +26,13 @@ class _OrbitCircleJoinScreenState extends State<OrbitCircleJoinScreen> {
   late final OrbitCircleRepository _repo = widget.repository ?? OrbitCircleRepository();
   final _code = TextEditingController();
   bool _busy = false;
+  DateTime? _rateLimitedUntil;
   String? _error;
   @override
   void dispose() { _code.dispose(); super.dispose(); }
 
   Future<void> _scan() async {
+    if (_busy || _withinCooldown()) return;
     final code = await Navigator.of(context).push<String>(
       AppFadeSlidePageRoute<String>(builder: (_) => OrbitCircleQrScanScreen(repository:_repo)));
     if (!mounted || code == null) return;
@@ -38,8 +40,15 @@ class _OrbitCircleJoinScreenState extends State<OrbitCircleJoinScreen> {
     await _join();
   }
 
+  bool _withinCooldown() {
+    if (_rateLimitedUntil == null || !DateTime.now().isBefore(_rateLimitedUntil!)) return false;
+    if (mounted) setState(() => _error =
+        'Too many invitation checks. Please try again in about a minute.');
+    return true;
+  }
+
   Future<void> _join() async {
-    if (_busy) return;
+    if (_busy || _withinCooldown()) return;
     FocusScope.of(context).unfocus();
     String code;
     try { code = _repo.validateCode(_code.text); }
@@ -68,7 +77,12 @@ class _OrbitCircleJoinScreenState extends State<OrbitCircleJoinScreen> {
         Navigator.of(context).pop(true);
       }
     } catch (e) {
-      if(mounted) setState(()=>_error=e is OrbitIdentityException ? e.message
+      if (e is OrbitIdentityException && e.statusCode == 429) {
+        _rateLimitedUntil = DateTime.now().add(const Duration(seconds: 65));
+      }
+      if(mounted) setState(()=>_error=e is OrbitIdentityException && e.statusCode==429
+        ? 'Too many invitation checks. Please try again in about a minute.'
+        : e is OrbitIdentityException ? e.message
         : e is FormatException ? e.message
         : 'Invitation unavailable. Check the code or reconnect.');
     } finally {
