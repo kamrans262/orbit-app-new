@@ -14,21 +14,26 @@ class AppScreenHeader extends StatelessWidget {
     this.onBack,
     this.backButtonKey,
     this.titleKey,
+    this.prominent = false,
     super.key,
   });
 
   static const double height = 30;
+  static const double prominentHeight = 44;
   static const double backToTitleGap = 10;
 
   final String title;
   final VoidCallback? onBack;
   final Key? backButtonKey;
   final Key? titleKey;
+  /// Matches the 44px, 24pt Friends / Find Friends header when enabled.
+  /// Existing detail headers retain their original 30px, 16pt treatment.
+  final bool prominent;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: height,
+      height: prominent ? prominentHeight : height,
       child: Row(
         children: <Widget>[
           Theme(
@@ -45,6 +50,7 @@ class AppScreenHeader extends StatelessWidget {
               icon: Icons.chevron_left_rounded,
               iconSize: 24,
               iconColor: Colors.black,
+              size: prominent ? 40 : 30,
             ),
           ),
           const SizedBox(width: backToTitleGap),
@@ -54,10 +60,10 @@ class AppScreenHeader extends StatelessWidget {
               key: titleKey,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontFamily: AppTypography.fontFamily,
-                fontSize: 16,
-                height: 1.2,
+                fontSize: prominent ? 24 : 16,
+                height: prominent ? 1.15 : 1.2,
                 fontWeight: FontWeight.w600,
                 color: Color(0xFF0F1724),
               ),
