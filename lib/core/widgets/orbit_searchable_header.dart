@@ -84,7 +84,7 @@ class OrbitSearchableHeader extends StatelessWidget {
   final String? searchSemanticLabel;
   final bool showBack;
   /// Reuses the compact 16pt title and 30px back control of AppScreenHeader.
-  /// Search and trailing actions keep their existing accessible 40px size.
+  /// All compact header icon actions use the same 30px circular button as Back.
   final bool compactTitle;
   final List<Widget> trailingActions;
   final Key? titleKey;
@@ -188,13 +188,13 @@ class OrbitSearchableHeader extends StatelessWidget {
               controller.open();
             },
             icon: Icons.search_rounded,
-            iconSize: 20,
-            iconColor: const Color(0xFF7C3AED),
-            size: 40,
+            iconSize: compactTitle ? 24 : 20,
+            iconColor: compactTitle ? Colors.black : const Color(0xFF7C3AED),
+            size: compactTitle ? 30 : 40,
           ),
         ),
         for (final action in trailingActions) ...<Widget>[
-          const SizedBox(width: 6),
+          SizedBox(width: compactTitle ? 10 : 6),
           action,
         ],
       ],
@@ -235,9 +235,9 @@ class OrbitSearchableHeader extends StatelessWidget {
             semanticLabel: 'Close search',
             onPressed: _closeSearch,
             icon: Icons.close,
-            iconSize: 20,
-            iconColor: const Color(0xFF0F1724),
-            size: 40,
+            iconSize: compactTitle ? 24 : 20,
+            iconColor: compactTitle ? Colors.black : const Color(0xFF0F1724),
+            size: compactTitle ? 30 : 40,
           ),
         ),
       ],
