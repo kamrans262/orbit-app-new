@@ -50,7 +50,7 @@
     <key>NSCameraUsageDescription</key>
     <string>Orbit uses your camera to scan a friend or Circle invitation QR code or capture a Moment.</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Orbit may use the microphone for Moment video capture.</string>
+    <string>Orbit uses the microphone only when you choose to record a video or voice Moment.</string>
     <key>NSContactsUsageDescription</key>
     <string>Orbit may access only a contact you choose to find friends. Contact discovery is optional.</string>
     <key>NSPhotoLibraryUsageDescription</key>
