@@ -144,13 +144,18 @@ void main() {
       );
       await tester.pumpAndSettle();
       final like = find.bySemanticsLabel('Like moment');
-      // The engagement row is below the image fold on compact devices.
-      // Scroll the existing feed to it before querying lazy sliver semantics.
+      // Scroll precisely to the interactive control in this lazy SliverList,
+      // rather than assuming a fixed card/image height on compact screens.
       final feedScroll = find.descendant(
         of: find.byKey(MomentsKeys.feed),
         matching: find.byType(Scrollable),
       ).first;
-      await tester.drag(feedScroll, const Offset(0, -320));
+      await tester.scrollUntilVisible(
+        like,
+        120,
+        maxScrolls: 30,
+        scrollable: feedScroll,
+      );
       await tester.pumpAndSettle();
       expect(like, findsOneWidget);
       await tester.ensureVisible(like);
