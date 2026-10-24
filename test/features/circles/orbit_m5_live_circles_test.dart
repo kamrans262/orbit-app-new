@@ -8,13 +8,22 @@ import 'package:orbit_ui/features/circles/data/orbit_circle_snapshot.dart';
 import 'package:orbit_ui/features/circles/presentation/screens/orbit_live_circles_screen.dart';
 
 class _FakeCircles extends OrbitCircleRepository {
-  _FakeCircles({this.fail=false, this.archiveEnabled=false});
+  _FakeCircles({this.fail=false, this.archiveEnabled=false, this.hasArchived=false});
   final bool fail;
   final bool archiveEnabled;
+  final bool hasArchived;
   @override
   Future<OrbitCirclePage<OrbitCircle>> archived({int page=1}) async {
     if(!archiveEnabled) throw OrbitIdentityException('Feature disabled',404);
-    return const OrbitCirclePage<OrbitCircle>([],1,false);
+    return OrbitCirclePage<OrbitCircle>(
+      hasArchived ? const [
+        OrbitCircle(
+          id:'archive1',name:'Previous Circle',ownerId:'u1',
+          role:'owner',memberCount:2,revision:4,
+        ),
+      ] : const [],
+      1, false,
+    );
   }
   @override
   Future<OrbitCirclePage<OrbitCircle>> list({int page=1}) async {
@@ -75,10 +84,17 @@ void main() {
       expect(find.text('Best Friends'),findsNothing);
       expect(find.textContaining('OFFLINE'),findsNothing);
   });
-  testWidgets('archived shortcut appears only if backend feature is enabled',
+  testWidgets('archived shortcut stays hidden when owner archive is empty',
     (tester) async {
       await tester.pumpWidget(MaterialApp(home:OrbitLiveCirclesScreen(
         repository:_FakeCircles(archiveEnabled:true),store:_FakeStore())));
+      await tester.pumpAndSettle();
+      expect(find.text('Archived'),findsNothing);
+  });
+  testWidgets('archived shortcut appears when owner has an archived Circle',
+    (tester) async {
+      await tester.pumpWidget(MaterialApp(home:OrbitLiveCirclesScreen(
+        repository:_FakeCircles(archiveEnabled:true,hasArchived:true),store:_FakeStore())));
       await tester.pumpAndSettle();
       expect(find.text('Archived'),findsOneWidget);
   });
