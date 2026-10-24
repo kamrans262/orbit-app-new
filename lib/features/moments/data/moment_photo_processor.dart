@@ -60,10 +60,12 @@ abstract final class MomentPhotoProcessor {
             rr=(r*.95+l*.05+9).round();
             gg=(g*.95+l*.05+7).round();
             bb=(b*.95+l*.05+5).round();
+            break;
           case MomentFilter.film:
             rr=(r*.86+l*.14+13).round();
             gg=(g*.83+l*.17+7).round();
             bb=(b*.82+l*.18+2).round();
+            break;
           case MomentFilter.night:rr=(r*.68).round();gg=(g*.76).round();bb=(b*.95+9).round();break;
           case MomentFilter.soft:rr=(r*.78+l*.22+6).round();gg=(g*.78+l*.22+6).round();bb=(b*.78+l*.22+6).round();break;
           case MomentFilter.vibrant:rr=(l+(r-l)*1.30).round();gg=(l+(g-l)*1.30).round();bb=(l+(b-l)*1.30).round();break;
