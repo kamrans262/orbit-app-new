@@ -40,8 +40,8 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> {
   Future<void> _load() async {
     if(mounted)setState((){_busy=true;_error=null;});
     try {
-      final moments=await _repo.feed();
-      final rail=await _repo.feed(rail:true);
+      final moments=await _repo.feed(maxItems:30);
+      final rail=await _repo.feed(rail:true,maxItems:20);
       OrbitMomentAudienceOptions options;
       try {options=await _repo.audienceOptions();}
       catch(_){options=const OrbitMomentAudienceOptions([],[],'Nobody');}
@@ -86,7 +86,10 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> {
     if(!mounted)return;
     await Navigator.of(context).push<void>(MaterialPageRoute(
       builder:(_)=>OrbitLiveMomentViewer(moment:item,repository:_repo,
-        author:_names[item.creatorId]??'Orbit member')));
+        author:_names[item.creatorId]??'Orbit member',
+        authorNames:Map<String,String>.from(_names),
+        playlist:List<OrbitLiveMoment>.from(_items),
+        initialIndex:_items.indexWhere((m)=>m.id==item.id))));
     if(mounted)unawaited(_load());
   }
   void _openById(String id){
