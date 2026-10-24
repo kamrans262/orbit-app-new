@@ -124,7 +124,9 @@ class OrbitEncryptedClipStager {
   final Future<Directory> Function() _temp;
 
   Future<OrbitStagedClip> stageVideo(File original,
-      {void Function(double progress)? onProgress}) async {
+      {void Function(double progress)? onProgress,
+       Future<void> Function(OrbitSealedMedia original, OrbitSealedMedia poster,
+         String mediaId)? onReadyForAudience}) async {
     return OrbitMediaTransferGate.run(() async {
     final owner=await _identity.currentLocalSocialOwner();
     if(owner==null)throw OrbitIdentityException('Please sign in.',401);
@@ -173,6 +175,9 @@ class OrbitEncryptedClipStager {
             'wrapped_key_ciphertext':await _crypto.wrapKey(poster,device.publicKey)},
         ]));
       if(grants.isEmpty)throw StateError('Device grants not confirmed.');
+      if(onReadyForAudience!=null){
+        await onReadyForAudience(video,poster,receipt.mediaId);
+      }
       await _outbox.discard(first);
       await _outbox.discard(second);
       onProgress?.call(1);
@@ -189,6 +194,8 @@ class OrbitEncryptedClipStager {
   /// module. No separate voice record popup or codec fallback is added here.
   Future<OrbitStagedClip> stageAudio(File encoded,{
     required String mime, required int durationMs,
+    String purpose='message',
+    Future<void> Function(OrbitSealedMedia original,String mediaId)? onReadyForAudience,
     void Function(double progress)? onProgress,
   }) async {
     return OrbitMediaTransferGate.run(() async {
@@ -196,13 +203,14 @@ class OrbitEncryptedClipStager {
        durationMs<=0 || durationMs>60000) {
       throw const FormatException('Unsupported encoded voice clip.');
     }
+    if(!['message','moment'].contains(purpose))throw ArgumentError('Invalid audio purpose.');
     final owner=await _identity.currentLocalSocialOwner();
     if(owner==null)throw OrbitIdentityException('Please sign in.',401);
     final device=await _identity.trustedMediaDevice();
     final temp=await _temp(); final id=const Uuid().v4();
     final sealed=await _crypto.sealFile(encoded,
       destination:File(temp.path+'/'+id+'.voice.cipher'),ownerId:owner,
-      transferId:id,purpose:'message',
+      transferId:id,purpose:purpose,
       maxInputBytes:OrbitMediaFormat.audioLimit);
     final draft=await _outbox.enqueue(sealed,kind:'audio',mime:mime,
       durationMs:durationMs);
@@ -219,6 +227,7 @@ class OrbitEncryptedClipStager {
             'wrapped_key_ciphertext':await _crypto.wrapKey(sealed,device.publicKey)},
         ]));
       if(grants.isEmpty)throw StateError('Voice key grant not confirmed.');
+      if(onReadyForAudience!=null)await onReadyForAudience(sealed,uploaded.mediaId);
       await _outbox.discard(draft);
       return OrbitStagedClip(mediaId:uploaded.mediaId,
           verified:true,privateGrantConfirmed:true);
