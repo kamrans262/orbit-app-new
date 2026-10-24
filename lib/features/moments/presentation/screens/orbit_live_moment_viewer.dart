@@ -457,17 +457,17 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
                   semanticLabel:'Delete this Moment',
                   onPressed:()=>unawaited(_ownerDelete()),
                   icon:Icons.delete_outline_rounded,iconSize:20,size:40),
+              ] else ...[
+                AppCircularIconButton(
+                  semanticLabel:'Report Moment',
+                  onPressed:()=>unawaited(_reportSheet()),
+                  icon:Icons.flag_outlined,iconSize:20,size:40),
                 const SizedBox(width:8),
+                AppCircularIconButton(
+                  semanticLabel:'Report account',
+                  onPressed:()=>unawaited(_reportSheet(account:true)),
+                  icon:Icons.person_off_outlined,iconSize:20,size:40),
               ],
-              AppCircularIconButton(
-                semanticLabel:'Report Moment',
-                onPressed:()=>unawaited(_reportSheet()),
-                icon:Icons.flag_outlined,iconSize:20,size:40),
-              const SizedBox(width:8),
-              AppCircularIconButton(
-                semanticLabel:'Report account',
-                onPressed:()=>unawaited(_reportSheet(account:true)),
-                icon:Icons.person_off_outlined,iconSize:20,size:40),
             ]),
           const SizedBox(height:22),
         ]),
