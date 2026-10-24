@@ -592,7 +592,7 @@ class _BlockUsersMessageCard extends StatelessWidget {
           ),
           if (actionLabel != null && onAction != null) ...<Widget>[
             const SizedBox(height: 16),
-            _DialogAction(label: actionLabel!, onTap: onAction!),
+            _DialogAction(label: actionLabel!, onTap: onAction!, destructive: false),
           ],
         ],
       ),
