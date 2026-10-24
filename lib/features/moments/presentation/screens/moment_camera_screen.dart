@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
@@ -429,7 +430,19 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       setState(() => _countdownValue = null);
 
       final file = await controller.takePicture();
-      final bytes = await file.readAsBytes();
+      late final Uint8List bytes;
+      try {
+        bytes = await file.readAsBytes();
+      } finally {
+        // The camera plugin stages an unencrypted temporary original.
+        // Never retain that file after moving the photo into memory.
+        final plaintext = File(file.path);
+        if (await plaintext.exists()) {
+          try { await plaintext.delete(); } on FileSystemException {
+            // OS cleanup remains a separate fallback; no plaintext is uploaded.
+          }
+        }
+      }
 
       try {
         await controller.pausePreview();
@@ -495,17 +508,8 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       await showMomentPublishingSheet(
         context,
         photoBytes: captured,
-        circles:
-            widget.publishMoment == null && widget.momentAudienceCircles.isEmpty
-            ? const <MomentAudienceCircle>[
-                MomentAudienceCircle(
-                  id: 'demo-best-friends',
-                  name: 'Best Friends',
-                ),
-                MomentAudienceCircle(id: 'demo-family', name: 'Family'),
-                MomentAudienceCircle(id: 'demo-weekend', name: 'Weekend Crew'),
-              ]
-            : widget.momentAudienceCircles,
+        // An authenticated account must never show fabricated Circle names.
+        circles: widget.momentAudienceCircles,
         publisher: widget.publishMoment,
       );
     } finally {
