@@ -23,6 +23,10 @@ class OrbitMediaRecoveryCoordinator {
        _restore = restoreQueued ?? _resumeSafely,
        _clock = now ?? DateTime.now;
 
+  /// M7 requires a separate publication receipt. The generic upload retry
+  /// must never consume Moment ciphertext, even when its intent is missing.
+  static bool canGenericRetry(OrbitQueuedMedia entry) => entry.purpose != 'moment';
+
   static Future<void> _resumeSafely() async {
     // M7 moments carry a separate account-bound publication intent. The
     // generic M6 retry would discard ciphertext after uploading it, even if
@@ -30,7 +34,7 @@ class OrbitMediaRecoveryCoordinator {
     // generic retry consume a Moment or an orphan Moment ciphertext draft.
     await OrbitMomentRepository().resumePendingPublishes();
     await OrbitMomentMediaStager().retryPending(
-      shouldRetry: (entry) => entry.purpose != 'moment',
+      shouldRetry: canGenericRetry,
     );
   }
 
