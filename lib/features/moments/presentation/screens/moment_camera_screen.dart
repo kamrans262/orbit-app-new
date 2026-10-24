@@ -39,6 +39,7 @@ class MomentCameraScreen extends StatefulWidget {
     this.onSendPressed,
     this.momentAudienceCircles = const <MomentAudienceCircle>[],
     this.publishMoment,
+    this.privateSaver,
     this.enableCamera = true,
     this.initialCameraDirection = CameraLensDirection.front,
     this.resolutionPreset = ResolutionPreset.high,
@@ -56,6 +57,7 @@ class MomentCameraScreen extends StatefulWidget {
   /// Without a publisher the photo flow is explicitly UI-preview only.
   final List<MomentAudienceCircle> momentAudienceCircles;
   final MomentPublisher? publishMoment;
+  final OrbitPrivatePhotoSaver? privateSaver;
 
   /// Defaults to true in the real app. Tests can turn this off so widget tests
   /// never invoke a platform camera channel.
@@ -511,6 +513,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         // An authenticated account must never show fabricated Circle names.
         circles: widget.momentAudienceCircles,
         publisher: widget.publishMoment,
+        privateSaver: widget.privateSaver,
       );
     } finally {
       _publishSheetOpen = false;
