@@ -1,8 +1,8 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../../auth/data/orbit_identity_client.dart';
+import '../widgets/orbit_circle_confirmation.dart';
 import '../../data/orbit_circle_repository.dart';
 import '../../domain/models/circle_settings.dart';
 import 'circle_setting_screen.dart';
@@ -20,11 +20,8 @@ class OrbitLiveCircleSettingsScreen extends StatefulWidget {
 class _OrbitLiveCircleSettingsScreenState extends State<OrbitLiveCircleSettingsScreen> {
   late final OrbitCircleRepository _repo=widget.repository ?? OrbitCircleRepository();
   late OrbitCircle _circle=widget.circle;
-  Timer? _debounce;
-  Future<void>? _saveInFlight;
   CircleSettings? _pending;
-  @override
-  void dispose(){_debounce?.cancel();super.dispose();}
+  bool _saving = false;
 
   int _color(String? input) {
     final value=input?.replaceFirst('#','') ?? '';
@@ -48,85 +45,97 @@ class _OrbitLiveCircleSettingsScreenState extends State<OrbitLiveCircleSettingsS
   }
 
   void _onChanged(CircleSettings next) {
-    if (!_circle.can('edit')) return;
-    _pending = next;
-    _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds:650), () {
-      _persist();
-    });
+    if (!_circle.can('edit') || _saving) return;
+    final changed = next.name.trim() != _circle.name.trim() ||
+        _hex(next.colorValue) != _hex(_color(_circle.colorValue));
+    setState(() => _pending = changed ? next : null);
   }
 
   Future<bool> _persist() async {
-    final inFlight = _saveInFlight;
-    if (inFlight != null) {
-      try { await inFlight; } catch (_) {}
-    }
-    if (!mounted) return false;
+    if (_saving) return false;
     final next = _pending;
     if (next == null) return true;
-    final name=next.name.trim();
-    if(name.isEmpty || name.length>80) {
+    final name = next.name.trim();
+    if (name.isEmpty || name.length > 80) {
       _error(const FormatException('Circle name must be between 1 and 80 characters.'));
       return false;
     }
-    _pending=null;
-    final task=() async {
-      final updated=await _repo.update(_circle.id,
-        name:name,color:_hex(next.colorValue));
-      if(mounted) setState(()=>_circle=updated);
-    }();
-    _saveInFlight=task;
+    setState(() => _saving = true);
     try {
-      await task;
-    } catch(e) {
-      _pending=null;
-      if (mounted) setState(() {}); // revert to last server-confirmed settings
-      _error(e);
+      final updated = await _repo.update(
+        _circle.id, name: name, color: _hex(next.colorValue));
+      if (!mounted) return false;
+      setState(() {
+        _circle = updated;
+        _pending = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Circle changes saved.')));
+      return true;
+    } catch (error) {
+      // Retain the draft so a failed request never silently discards edits.
+      _error(error);
       return false;
     } finally {
-      if (identical(_saveInFlight,task)) _saveInFlight=null;
+      if (mounted) setState(() => _saving = false);
     }
-    return _pending == null ? true : _persist();
   }
 
   Future<void> _back() async {
-    _debounce?.cancel();
-    if(await _persist() && mounted)Navigator.of(context).maybePop();
+    if (_saving) return;
+    if (_pending != null) {
+      final discard = await showOrbitCircleConfirmation(
+        context: context,
+        title: 'Discard unsaved changes?',
+        description: 'Changes to this Circle have not been saved.',
+        confirmLabel: 'Discard changes',
+        cancelLabel: 'Keep editing',
+        destructive: true,
+      );
+      if (!discard || !mounted) return;
+    }
+    if (mounted) Navigator.of(context).maybePop();
+  }
+
+  bool _checkSaved() {
+    if (_saving) return false;
+    if (_pending != null) {
+      _error(const FormatException('Please save your Circle changes first.'));
+      return false;
+    }
+    return true;
   }
 
   Future<void> _manage() async {
-    _debounce?.cancel();
-    if(!await _persist() || !mounted) return;
-    final outcome=await Navigator.of(context).push<String>(
+    if (!_checkSaved()) return;
+    final outcome = await Navigator.of(context).push<String>(
       AppFadeSlidePageRoute<String>(
-        builder:(_)=>OrbitLiveCircleManageScreen(circle:_circle,repository:_repo)));
-    if(!mounted) return;
+        builder: (_) => OrbitLiveCircleManageScreen(circle: _circle, repository: _repo)));
+    if (!mounted) return;
     if (outcome == 'left' || outcome == 'archived') {
       Navigator.of(context).pop('unavailable');
       return;
     }
     try {
-      final updated=await _repo.detail(_circle.id);
-      if(mounted) setState(()=>_circle=updated);
+      final updated = await _repo.detail(_circle.id);
+      if (mounted) setState(() => _circle = updated);
     } catch (_) {
-      if(mounted) Navigator.of(context).maybePop();
+      if (mounted) Navigator.of(context).maybePop();
     }
   }
 
   Future<void> _invites() async {
-    _debounce?.cancel();
-    if(!await _persist() || !mounted) return;
+    if (!_checkSaved()) return;
     await Navigator.of(context).push<void>(AppFadeSlidePageRoute<void>(
-      builder:(_)=>OrbitLiveCircleInvitesScreen(circle:_circle,repository:_repo)));
+      builder: (_) => OrbitLiveCircleInvitesScreen(circle: _circle, repository: _repo)));
   }
 
   Future<void> _archive() async {
-    _debounce?.cancel();
-    if(!await _persist() || !mounted)return;
+    if (!_checkSaved()) return;
     try {
       await _repo.archive(_circle.id);
-      if(mounted) Navigator.of(context).pop('unavailable');
-    } catch(e){_error(e);}
+      if (mounted) Navigator.of(context).pop('unavailable');
+    } catch (error) { _error(error); }
   }
 
   @override
@@ -136,7 +145,7 @@ class _OrbitLiveCircleSettingsScreenState extends State<OrbitLiveCircleSettingsS
       return OrbitLiveCircleManageScreen(circle:_circle,repository:_repo);
     }
     return CircleSettingScreen(
-      settings:_settings,
+      settings:_pending ?? _settings,
       sharingControlsEnabled:false,
       archiveInsteadOfDelete:true,
       showDestructiveAction:_circle.can('archive'),
@@ -145,6 +154,9 @@ class _OrbitLiveCircleSettingsScreenState extends State<OrbitLiveCircleSettingsS
       onDeleteConfirmed:(_)=>_archive(),
       onInviteManagementPressed:_circle.can('invite') ? _invites : null,
       onManagePressed:_manage,
+      onSavePressed:() { _persist(); },
+      saveEnabled:_pending != null,
+      saving:_saving,
     );
   }
 }
