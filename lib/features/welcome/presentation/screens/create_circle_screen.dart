@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_text_field.dart';
+import '../../../../core/widgets/app_screen_header.dart';
 import '../widgets/welcome_action_panel.dart';
 import '../widgets/welcome_layout_metrics.dart';
 
@@ -26,6 +27,7 @@ class CreateCircleScreen extends StatefulWidget {
     this.onCreateRequested,
     this.onJoinRequested,
     this.enableTemporary = false,
+    this.isOnboarding = true,
     this.onSkip,
     super.key,
   });
@@ -34,6 +36,8 @@ class CreateCircleScreen extends StatefulWidget {
   final Future<void> Function(String name, String color, String icon, String key, String? expiresAt)? onCreateRequested;
   final VoidCallback? onJoinRequested;
   final bool enableTemporary;
+  /// Skip and the first-Circle heading belong only to initial onboarding.
+  final bool isOnboarding;
   final VoidCallback? onSkip;
 
   @override
@@ -182,12 +186,15 @@ class _CreateCircleScreenState extends State<CreateCircleScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: <Widget>[
-                            Text(
-                              'Create Your\nFirst Circle',
-                              key: CreateCircleKeys.heading,
-                              textAlign: TextAlign.center,
-                              style: AppTypography.largeHeading,
-                            ),
+                            if (widget.isOnboarding)
+                              Text(
+                                'Create Your\nFirst Circle',
+                                key: CreateCircleKeys.heading,
+                                textAlign: TextAlign.center,
+                                style: AppTypography.largeHeading,
+                              )
+                            else
+                              const AppScreenHeader(title: 'Create Circle', prominent: true),
                             if (widget.onJoinRequested != null)
                               Align(alignment:Alignment.center,
                                 child:TextButton.icon(
@@ -283,12 +290,12 @@ class _CreateCircleScreenState extends State<CreateCircleScreen> {
                         primaryKey: CreateCircleKeys.nextButton,
                         primaryLabel: 'Create Circle',
                         onPrimaryPressed: _submit,
-                        secondaryKey: widget.onSkip == null
-                            ? null
-                            : CreateCircleKeys.skipButton,
-                        secondaryLabel: widget.onSkip == null ? null : 'Skip',
-                        onSecondaryPressed: widget.onSkip,
-                        reserveSecondarySlot: widget.onSkip == null,
+                        secondaryKey: widget.isOnboarding && widget.onSkip != null
+                            ? CreateCircleKeys.skipButton : null,
+                        secondaryLabel: widget.isOnboarding && widget.onSkip != null
+                            ? 'Skip' : null,
+                        onSecondaryPressed: widget.isOnboarding ? widget.onSkip : null,
+                        reserveSecondarySlot: !widget.isOnboarding || widget.onSkip == null,
                       ),
                     ),
                   ),
