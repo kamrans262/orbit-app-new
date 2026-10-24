@@ -47,9 +47,13 @@ void main() {
     await tester.pumpWidget(MaterialApp(home:OrbitLiveMomentViewer(
       moment:item,repository:repo,author:'You')));
     await tester.pumpAndSettle();
-    expect(find.byTooltip('Delete this Moment'),findsOneWidget);
-    expect(find.byTooltip('View Moment viewers'),findsOneWidget);
+    expect(find.byTooltip('Manage Moment'),findsOneWidget);
     expect(find.byTooltip('Report account'),findsNothing);
+    await tester.tap(find.byTooltip('Manage Moment'));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete Moment'),findsOneWidget);
+    expect(find.text('Change audience'),findsOneWidget);
+    expect(find.text('Edit caption'),findsOneWidget);
   });
 
   testWidgets('M7 non-owner sees reporting actions but never deletion',
