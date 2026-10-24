@@ -21,7 +21,8 @@ class OrbitLiveMoment {
     required this.mediaId,required this.contextId,required this.publishedAt,
     this.captionCiphertext,this.mediaKind='image',this.durationMs,
     this.placeCiphertext,this.taggedUserIds=const [],
-    this.publishVersion=1,this.audienceRevision=1,this.myReaction});
+    this.publishVersion=1,this.audienceRevision=1,this.myReaction,
+    this.audienceKind='only_me',this.targetIds=const []});
   final String id, creatorId, mediaId, contextId;
   final DateTime publishedAt;
   final String? captionCiphertext;
@@ -31,6 +32,8 @@ class OrbitLiveMoment {
   final int? durationMs;
   final int publishVersion,audienceRevision;
   final String? myReaction;
+  final String audienceKind;
+  final List<String> targetIds;
   factory OrbitLiveMoment.fromJson(Map<String,dynamic> d) =>
     OrbitLiveMoment(id:d['id'] as String,creatorId:d['creator_id'] as String,
       mediaId:d['media_id'] as String,contextId:d['context_id'] as String,
@@ -42,7 +45,9 @@ class OrbitLiveMoment {
       durationMs:(d['duration_ms'] as num?)?.toInt(),
       publishVersion:(d['publish_version'] as num?)?.toInt()??1,
       audienceRevision:(d['audience_revision'] as num?)?.toInt()??1,
-      myReaction:d['my_reaction'] as String?);
+      myReaction:d['my_reaction'] as String?,
+      audienceKind:d['audience_kind'] as String? ?? 'only_me',
+      targetIds:List<String>.from(d['target_ids'] as List? ?? const []));
 }
 
 class OrbitMomentAudienceOptions {
@@ -637,6 +642,80 @@ class OrbitMomentRepository {
 
   /// A caption edit changes only encrypted text, not keys, media or audience.
   /// Backend enforces creator ownership and optimistic publish_version.
+  // Re-wrap the existing owner-held M6 keys; never download media plaintext,
+  // generate replacement media keys, or upload a public copy to change audience.
+  Future<OrbitSealedMedia> _ownerSealForGrant(
+      OrbitLiveMoment item,String variant) async {
+    final owner=await currentUserId();
+    final device=await _identity.trustedMediaDevice();
+    final data=await _media.control('GET',
+      '/media/${Uri.encodeComponent(item.mediaId)}/key-envelope?device_id='
+      '${Uri.encodeComponent(device.id)}&variant=${Uri.encodeComponent(variant)}');
+    final material=await _crypto.unwrapKey(
+      data['wrapped_key_ciphertext'] as String,
+      privateKey:device.privateKey,publicKey:device.publicKey);
+    if(owner==null || owner!=item.creatorId || material.owner!=owner ||
+       material.variant!=variant || material.purpose!='moment'){
+      throw StateError('Existing Moment media key is not authorized.');
+    }
+    return OrbitSealedMedia(file:File(''),key:material.key,
+      noncePrefix:material.prefix,plainBytes:0,bytes:0,sha256:'',
+      ownerId:owner,transferId:material.transfer,
+      purpose:material.purpose,variant:variant);
+  }
+
+  Future<int> updateAudience(OrbitLiveMoment item,String kind,
+      List<String> targets,{int? revision}) async {
+    final owner=await currentUserId();
+    if(owner==null || owner!=item.creatorId)throw StateError('Not the Moment owner.');
+    if(!['only_me','accepted_friends','selected_friends','selected_circles'].contains(kind)){
+      throw ArgumentError('Unsupported audience.');
+    }
+    final unique=targets.toSet().toList();
+    if(unique.length>100 || ((kind=='selected_friends'||kind=='selected_circles')
+       && unique.isEmpty) || ((kind=='only_me'||kind=='accepted_friends')
+       && unique.isNotEmpty))throw StateError('Invalid audience selection.');
+    final opts=await audienceOptions();
+    if(kind=='selected_circles' && !opts.circlesEnabled ||
+       (kind=='accepted_friends'||kind=='selected_friends') && !opts.friendsEnabled){
+      throw StateError('Your Moment privacy permissions changed.');
+    }
+    final available=(kind=='selected_circles'?opts.circles:opts.friends)
+      .map((entry)=>entry.id).toSet();
+    if(unique.any((target)=>!available.contains(target))){
+      throw StateError('Selected audience is no longer eligible.');
+    }
+    final derivative= switch(item.mediaKind) {
+      'video'=>'poster','audio'=>'waveform',_=>'thumbnail'
+    };
+    final original=await _ownerSealForGrant(item,'original');
+    final secondary=await _ownerSealForGrant(item,derivative);
+    late final List<Map<String,Object?>> envelopes;
+    if(kind=='only_me'){
+      final own=await _keys.discover(
+        audienceKind:'only_me',recipientIds:[owner]);
+      envelopes=[...await _keys.encryptEnvelopes(original,own),
+        ...await _keys.encryptEnvelopes(secondary,own)];
+    } else {
+      envelopes=await _envelopes(kind,unique,original,secondary);
+    }
+    // M6 grants must already contain verified original/derivative envelopes
+    // when Laravel atomically switches the M7 audience revision.
+    final grants=await _media.createGrants(item.mediaId,audience:kind,
+      recipients:unique,keyEnvelopes:envelopes,
+      idempotencyKey:_uuid.v4());
+    if(grants.isEmpty)throw StateError('Recipient keys were not confirmed.');
+    final response=await _api('POST',
+      '/moments/${Uri.encodeComponent(item.id)}/audience',
+      body:{'audience_kind':kind,'target_ids':unique,
+        'revision':revision??item.audienceRevision});
+    if(response['recipient_keys_confirmed']!=true ||
+       response['audience_revision'] is! num){
+      throw StateError('The new audience has not been confirmed.');
+    }
+    return (response['audience_revision'] as num).toInt();
+  }
+
   Future<int> updateCaption(OrbitLiveMoment item,String text,{int? version}) async {
     final owner=await currentUserId();
     if(owner==null || owner!=item.creatorId)throw StateError('Not the Moment owner.');
