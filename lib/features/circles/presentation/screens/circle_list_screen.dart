@@ -21,6 +21,8 @@ abstract final class CircleListKeys {
   static const retry = Key('circle_list_retry');
   static const create = Key('circle_list_create');
   static const join = Key('circle_list_join');
+  static const scanQr = Key('circle_list_scan_qr');
+  static const invitations = Key('circle_list_invitations');
   static Key circle(String id) => Key('circle_list_circle_$id');
 }
 
@@ -36,6 +38,8 @@ class CircleListScreen extends StatefulWidget {
     this.showMemberCounts = true,
     this.onCreatePressed,
     this.onJoinRequested,
+    this.onScanQrPressed,
+    this.onInvitationsPressed,
     this.onRetry,
     this.onBack,
     this.viewState = CircleListViewState.loaded,
@@ -92,6 +96,8 @@ class CircleListScreen extends StatefulWidget {
   final bool showMemberCounts;
   final VoidCallback? onCreatePressed;
   final ValueChanged<String>? onJoinRequested;
+  final VoidCallback? onScanQrPressed;
+  final VoidCallback? onInvitationsPressed;
   final VoidCallback? onRetry;
   final VoidCallback? onBack;
   final CircleListViewState viewState;
@@ -245,32 +251,65 @@ class _CircleListScreenState extends State<CircleListScreen> {
   }
 
   Widget _buildActions(BuildContext context) {
-    return Row(
+    return Column(
       children: <Widget>[
-        Expanded(
-          child: _CircleActionButton(
-            key: CircleListKeys.create,
-            icon: Icons.add_rounded,
-            label: 'Create Circle',
-            onTap: () {
-              if (widget.onCreatePressed != null) {
-                widget.onCreatePressed!();
-              } else {
-                // Existing UI-only create flow; never simulates an API success.
-                Navigator.of(context).pushNamed(AppRoutes.createCircle);
-              }
-            },
-          ),
+        Row(
+          children: <Widget>[
+            Expanded(
+              child: _CircleActionButton(
+                key: CircleListKeys.create,
+                icon: Icons.add_rounded,
+                label: 'Create Circle',
+                onTap: () {
+                  if (widget.onCreatePressed != null) {
+                    widget.onCreatePressed!();
+                  } else {
+                    // Existing UI-only create flow; never simulates API success.
+                    Navigator.of(context).pushNamed(AppRoutes.createCircle);
+                  }
+                },
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _CircleActionButton(
+                key: CircleListKeys.join,
+                icon: Icons.link_rounded,
+                label: 'Join Circle',
+                onTap: () => _showJoinCircleSheet(context),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _CircleActionButton(
-            key: CircleListKeys.join,
-            icon: Icons.link_rounded,
-            label: 'Join Circle',
-            onTap: () => _showJoinCircleSheet(context),
+        if (widget.onScanQrPressed != null ||
+            widget.onInvitationsPressed != null) ...<Widget>[
+          const SizedBox(height: 10),
+          Row(
+            children: <Widget>[
+              if (widget.onScanQrPressed != null)
+                Expanded(
+                  child: _CircleActionButton(
+                    key: CircleListKeys.scanQr,
+                    icon: Icons.qr_code_scanner,
+                    label: 'Scan QR',
+                    onTap: widget.onScanQrPressed!,
+                  ),
+                ),
+              if (widget.onScanQrPressed != null &&
+                  widget.onInvitationsPressed != null)
+                const SizedBox(width: 10),
+              if (widget.onInvitationsPressed != null)
+                Expanded(
+                  child: _CircleActionButton(
+                    key: CircleListKeys.invitations,
+                    icon: Icons.mail_outline,
+                    label: 'Invitations',
+                    onTap: widget.onInvitationsPressed!,
+                  ),
+                ),
+            ],
           ),
-        ),
+        ],
       ],
     );
   }
