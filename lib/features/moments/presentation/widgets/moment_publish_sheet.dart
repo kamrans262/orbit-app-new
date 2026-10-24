@@ -155,11 +155,12 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
     });
   }
   void _beginStroke(Offset position,Size size){
-    if(!_drawing || size.width<=0 || size.height<=0)return;
+    if(!_drawing || _strokes.length>=48 ||
+        size.width<=0 || size.height<=0)return;
     setState(()=>_activeStroke=[_normalized(position,size)]);
   }
   void _extendStroke(Offset position,Size size){
-    if(!_drawing || _activeStroke.isEmpty)return;
+    if(!_drawing || _activeStroke.isEmpty || _activeStroke.length>=2000)return;
     setState(()=>_activeStroke.add(_normalized(position,size)));
   }
   Offset _normalized(Offset position,Size size)=>Offset(
@@ -499,12 +500,9 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
             style:AppTypography.body,
             decoration:const InputDecoration(
               hintText:'Place (optional; entered manually)'),
-            onChanged:(_){
-              if(_locationConsent)setState(()=>_locationConsent=false);
-            },
+            onChanged:(_)=>setState(()=>_locationConsent=false),
           ),
-          if(_placeLabel.text.trim().isNotEmpty)
-            CheckboxListTile(
+          CheckboxListTile(
               value:_locationConsent,
               title:Text('Include this place for the selected audience',
                 style:AppTypography.body),
@@ -512,9 +510,10 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
                 style:AppTypography.bodyMuted),
               activeColor:AppColors.primaryEnd,
               contentPadding:EdgeInsets.zero,
-              onChanged:(value)=>setState(()=>_locationConsent=value==true),
+              onChanged:_placeLabel.text.trim().isEmpty?null:
+                (value)=>setState(()=>_locationConsent=value==true),
             ),
-          if(widget.friends.isNotEmpty) ...[
+          if(widget.friends.isNotEmpty && _audienceKind!='only_me') ...[
             Text('Tag eligible friends (optional)',style:AppTypography.body),
             const SizedBox(height:8),
             Wrap(spacing:6,runSpacing:6,
@@ -639,6 +638,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
                     onChanged:(v){
                       if(v!=null)setState((){
                         _audienceKind=v;_selectedIds.clear();
+                        _taggedPeople.clear();
                       });
                     },
                   ),

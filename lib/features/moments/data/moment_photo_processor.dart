@@ -73,7 +73,11 @@ abstract final class MomentPhotoProcessor {
           gg.clamp(0,255).toInt(),bb.clamp(0,255).toInt());
       }
     }
+    if(edit.strokes.length>48)throw const FormatException('Too many drawn strokes.');
     for(final stroke in edit.strokes){
+      if(stroke.points.length>2000){
+        throw const FormatException('Drawing is too detailed.');
+      }
       if(stroke.points.length<2)continue;
       for(var i=1;i<stroke.points.length;i++){
         final a=stroke.points[i-1],b=stroke.points[i];

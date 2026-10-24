@@ -26,6 +26,6 @@ void main(){
   });
   test('Rejects too-long overlay before upload',(){
     expect(()=>MomentPhotoProcessor.render(source,MomentPhotoEdit(
-      text:'x'*81)),throwsFormatException);
+      text:List<String>.filled(81,'x').join())),throwsFormatException);
   });
 }
