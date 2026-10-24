@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_circular_icon_button.dart';
+import '../../../../core/widgets/app_screen_header.dart';
 import '../../../home/domain/models/home_models.dart';
 import '../../../home/presentation/widgets/favorite_person_tile.dart';
 import '../../domain/models/friend_details_models.dart';
@@ -267,41 +268,19 @@ class _FriendDetailsScreenState extends State<FriendDetailsScreen> {
   }
 
   Widget _buildHeader() {
-    return SizedBox(
-      height: 30,
-      child: Row(
-        children: <Widget>[
+    return Row(
+      children: <Widget>[
+        Expanded(
+          child: AppScreenHeader(
+            title: widget.headerTitle,
+            onBack: widget.onBack,
+            backButtonKey: FriendDetailsKeys.backButton,
+            titleKey: FriendDetailsKeys.title,
+          ),
+        ),
+        if (widget.showAddMemberButton) ...<Widget>[
+          const SizedBox(width: 10),
           AppCircularIconButton(
-            key: FriendDetailsKeys.backButton,
-            semanticLabel: 'Back',
-            onPressed: widget.onBack,
-            icon: Icons.chevron_left_rounded,
-            iconSize: 24,
-            iconColor: Colors.black,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              widget.headerTitle,
-              key: FriendDetailsKeys.title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontFamily: AppTypography.fontFamily,
-                fontFamilyFallback: const <String>[
-                  'Noto Color Emoji',
-                  'Apple Color Emoji',
-                  'Segoe UI Emoji',
-                ],
-                fontSize: 16,
-                height: 1.2,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF333333),
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          if (widget.showAddMemberButton) AppCircularIconButton(
             key: FriendDetailsKeys.addMemberButton,
             semanticLabel: 'Add member',
             onPressed: _openInvitePeople,
@@ -310,7 +289,7 @@ class _FriendDetailsScreenState extends State<FriendDetailsScreen> {
             iconColor: const Color(0xFF7C3AED),
           ),
         ],
-      ),
+      ],
     );
   }
 
