@@ -151,6 +151,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       setState((){
         _evictDecodedMedia();
         _items=moments;_rail=rail;_options=options;
+        _likes..clear()..addAll(moments.where((item)=>item.myReaction=='like').map((item)=>item.id));
         _previews..clear()..addAll(previews);
         _names..clear()..addAll(names);
         _seen..clear()..addAll(seen);
