@@ -20,6 +20,7 @@ Future<T?> showOrbitCircleSheet<T>({
     builder: (sheet) => Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(sheet).bottom),
       child: Container(
+        key: const Key('orbit_circle_sheet_surface'),
         width: double.infinity,
         constraints: BoxConstraints(
           maxHeight: MediaQuery.sizeOf(sheet).height * 0.85,
