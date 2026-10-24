@@ -93,6 +93,7 @@ class _OrbitLiveCircleSettingsScreenState extends State<OrbitLiveCircleSettingsS
         destructive: true,
       );
       if (!discard || !mounted) return;
+      setState(() => _pending = null);
     }
     if (mounted) Navigator.of(context).maybePop();
   }
@@ -144,7 +145,12 @@ class _OrbitLiveCircleSettingsScreenState extends State<OrbitLiveCircleSettingsS
     if(!_circle.can('edit')){
       return OrbitLiveCircleManageScreen(circle:_circle,repository:_repo);
     }
-    return CircleSettingScreen(
+    return PopScope(
+      canPop: _pending == null && !_saving,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && !_saving) _back();
+      },
+      child: CircleSettingScreen(
       settings:_pending ?? _settings,
       sharingControlsEnabled:false,
       archiveInsteadOfDelete:true,
@@ -157,6 +163,7 @@ class _OrbitLiveCircleSettingsScreenState extends State<OrbitLiveCircleSettingsS
       onSavePressed:() { _persist(); },
       saveEnabled:_pending != null,
       saving:_saving,
+    ),
     );
   }
 }
