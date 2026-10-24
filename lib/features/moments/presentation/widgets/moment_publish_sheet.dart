@@ -8,6 +8,10 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_primary_button.dart';
 import '../../domain/models/moment_publish_models.dart';
 
+typedef OrbitPrivatePhotoSaver = Future<void> Function(
+  Uint8List photoBytes, void Function(double fraction) onProgress,
+);
+
 abstract final class MomentPublishKeys {
   static const sheet = Key('moment_publish_sheet');
   static const review = Key('moment_publish_review');
@@ -32,6 +36,7 @@ Future<void> showMomentPublishingSheet(
   required Uint8List photoBytes,
   required List<MomentAudienceCircle> circles,
   MomentPublisher? publisher,
+  OrbitPrivatePhotoSaver? privateSaver,
 }) async {
   if (photoBytes.isEmpty) return;
   await showModalBottomSheet<void>(
@@ -50,6 +55,7 @@ Future<void> showMomentPublishingSheet(
         photoBytes: photoBytes,
         circles: circles,
         publisher: publisher,
+        privateSaver: privateSaver,
       ),
     ),
   );
@@ -60,12 +66,14 @@ class MomentPublishSheet extends StatefulWidget {
     required this.photoBytes,
     required this.circles,
     this.publisher,
+    this.privateSaver,
     super.key,
   });
 
   final Uint8List photoBytes;
   final List<MomentAudienceCircle> circles;
   final MomentPublisher? publisher;
+  final OrbitPrivatePhotoSaver? privateSaver;
 
   @override
   State<MomentPublishSheet> createState() => _MomentPublishSheetState();
@@ -79,10 +87,12 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
   String? _error;
   bool _busy = false;
   bool _simulated = false;
+  bool _savedPrivate = false;
 
   // A live repository must inject circles and a publisher together. A missing
   // publisher deliberately never claims a post was published.
   bool get _canPublish => widget.publisher != null;
+  bool get _canSavePrivate => widget.privateSaver != null && !_canPublish;
   bool get _hasAudience => _selectedIds.isNotEmpty;
   String get _audienceLabel =>
       '${_selectedIds.length} ${_selectedIds.length == 1 ? 'circle' : 'circles'}';
@@ -93,19 +103,29 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
     super.dispose();
   }
 
-  Future<void> _submit({bool previewOnly = false}) async {
-    if (_busy || !_hasAudience || !mounted) return;
-    if (!previewOnly && !_canPublish) return;
+  Future<void> _submit({bool previewOnly = false, bool privateOnly = false}) async {
+    if (_busy || !mounted) return;
+    if (privateOnly && !_canSavePrivate) return;
+    if (!privateOnly && !_hasAudience) return;
+    if (!previewOnly && !privateOnly && !_canPublish) return;
     FocusScope.of(context).unfocus();
     setState(() {
       _busy = true;
       _simulated = previewOnly;
+      _savedPrivate = privateOnly;
       _step = _PublishStep.uploading;
       _progress = 0;
       _error = null;
     });
     try {
-      if (previewOnly) {
+      if (privateOnly) {
+        // Explicit user action. M6 encrypts and saves to the creator's own
+        // trusted device, but does not publish or notify a Circle.
+        await widget.privateSaver!(widget.photoBytes, (fraction) {
+          if (!mounted) return;
+          setState(() => _progress = fraction.clamp(0.0, 1.0).toDouble());
+        });
+      } else if (previewOnly) {
         // A clearly labelled *visual preview*: no network request, no post.
         for (final progress in <double>[0.25, 0.55, 0.8, 1]) {
           await Future<void>.delayed(const Duration(milliseconds: 220));
@@ -134,7 +154,9 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _error = 'Your Moment could not be published. Nothing was confirmed as sent.';
+        _error = privateOnly
+            ? 'Private save was interrupted. Any encrypted draft stays queued for a safe retry.'
+            : 'Your Moment could not be published. Nothing was confirmed as sent.';
         _step = _PublishStep.failed;
       });
     } finally {
@@ -189,10 +211,12 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
     final title = switch (_step) {
       _PublishStep.review => 'Review Moment',
       _PublishStep.audience => 'Choose Circles',
-      _PublishStep.uploading => 'Publishing Moment',
+      _PublishStep.uploading =>
+        _savedPrivate ? 'Saving privately' : 'Publishing Moment',
       _PublishStep.failed => 'Try Again',
       _PublishStep.finished =>
-        _simulated ? 'Preview Complete' : 'Moment Published',
+        _savedPrivate ? 'Saved Privately' :
+        (_simulated ? 'Preview Complete' : 'Moment Published'),
     };
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
@@ -263,11 +287,13 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
           ),
         ),
         const SizedBox(height: 6),
-        Text(
-          'Share only with circles you choose.',
-          style: AppTypography.bodyMuted,
-        ),
+        if (!_canSavePrivate)
+          Text(
+            'Share only with circles you choose.',
+            style: AppTypography.bodyMuted,
+          ),
         const SizedBox(height: 10),
+        if (!_canSavePrivate)
         OutlinedButton.icon(
           key: MomentPublishKeys.chooseAudience,
           onPressed: () => setState(() => _step = _PublishStep.audience),
@@ -285,7 +311,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
           ),
         ),
         const SizedBox(height: 12),
-        if (!_canPublish)
+        if (!_canPublish && !_canSavePrivate)
           Padding(
             key: MomentPublishKeys.unavailable,
             padding: const EdgeInsets.only(bottom: 12),
@@ -298,10 +324,24 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
               ),
             ),
           ),
+        if (_canSavePrivate)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(
+              'Save this photo as private encrypted media. Only your trusted '
+              'device receives its key; it is not published to any Circle.',
+              style: AppTypography.bodyMuted,
+            ),
+          ),
         AppPrimaryButton(
-          label: _canPublish ? 'Publish Moment' : 'Preview publishing flow',
-          enabled: _hasAudience,
-          onPressed: () => unawaited(_submit(previewOnly: !_canPublish)),
+          label: _canSavePrivate
+              ? 'Save privately'
+              : (_canPublish ? 'Publish Moment' : 'Preview publishing flow'),
+          enabled: _canSavePrivate || _hasAudience,
+          onPressed: () => unawaited(_submit(
+            privateOnly: _canSavePrivate,
+            previewOnly: !_canPublish && !_canSavePrivate,
+          )),
         ),
         const SizedBox(height: 10),
         TextButton(
@@ -407,12 +447,13 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
           const SizedBox(height: 16),
           Text(
             failed
-                ? 'Publishing interrupted'
+                ? (_savedPrivate ? 'Private save interrupted' : 'Publishing interrupted')
                 : finished
-                ? (_simulated ? 'Preview completed' : 'Your Moment is live')
-                : (_simulated
-                      ? 'Previewing upload…'
-                      : 'Uploading your Moment…'),
+                ? (_savedPrivate ? 'Photo saved privately' :
+                    (_simulated ? 'Preview completed' : 'Your Moment is live'))
+                : (_savedPrivate ? 'Encrypting and saving…'
+                    : (_simulated ? 'Previewing upload…'
+                      : 'Uploading your Moment…')),
             textAlign: TextAlign.center,
             style: AppTypography.smallHeading.copyWith(fontSize: 21),
           ),
@@ -444,9 +485,11 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
             ),
           if (finished)
             Text(
-              _simulated
-                  ? 'Nothing was uploaded or sent. Connect a publishing service to enable real sharing.'
-                  : 'The publishing service confirmed this Moment for $_audienceLabel.',
+              _savedPrivate
+                  ? 'Your encrypted photo is stored for your trusted device. Nothing was shared with a Circle.'
+                  : (_simulated
+                      ? 'Nothing was uploaded or sent. Connect a publishing service to enable real sharing.'
+                      : 'The publishing service confirmed this Moment for $_audienceLabel.'),
               textAlign: TextAlign.center,
               style: AppTypography.bodyMuted,
             ),
@@ -454,8 +497,8 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
           if (failed)
             AppPrimaryButton(
               key: MomentPublishKeys.retry,
-              label: 'Retry Publishing',
-              onPressed: () => unawaited(_submit()),
+              label: _savedPrivate ? 'Retry Private Save' : 'Retry Publishing',
+              onPressed: () => unawaited(_submit(privateOnly: _savedPrivate)),
             ),
           if (finished)
             AppPrimaryButton(
