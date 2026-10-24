@@ -9,6 +9,7 @@ import '../../auth/data/orbit_identity_client.dart';
 import 'orbit_media_crypto.dart';
 import 'orbit_media_outbox.dart';
 import 'orbit_media_repository.dart';
+import 'orbit_media_transfer_gate.dart';
 
 /// This is *stored encrypted media*, not an M7 Moment publication receipt.
 /// The current Orbit Moment publishing sheet must remain in its preview-only
@@ -47,6 +48,7 @@ class OrbitMomentMediaStager {
   /// published; the caller can retry the secure outbox.
   Future<OrbitStagedPhoto> stagePhoto(Uint8List captured,
       {void Function(double fraction)? onProgress}) async {
+    return OrbitMediaTransferGate.run(() async {
     final owner=await _identity.currentLocalSocialOwner();
     if(owner==null)throw OrbitIdentityException('Please sign in first.',401);
     final device=await _identity.trustedMediaDevice();
@@ -111,6 +113,7 @@ class OrbitMomentMediaStager {
       // The outbox retains ciphertext and OS-backed keys for explicit retry.
       rethrow;
     }
+    });
   }
 
   /// Resume originals first, then matching thumbnails and private grants.
@@ -118,6 +121,7 @@ class OrbitMomentMediaStager {
   Future<List<OrbitMediaReceipt>> retryPending({
     void Function(double fraction)? onProgress,
   }) async {
+    return OrbitMediaTransferGate.run(() async {
     final owner=await _identity.currentLocalSocialOwner();
     if(owner==null)return [];
     final results=<OrbitMediaReceipt>[];
@@ -175,6 +179,7 @@ class OrbitMomentMediaStager {
       await _outbox.discard(parent);
     }
     return results;
+    });
   }
 
 }
