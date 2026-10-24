@@ -28,3 +28,8 @@ jobs:
         run: flutter test test/features/media
       - name: Regression existing Moment widgets
         run: flutter test test/features/moments
+      - name: Analyze integrated Orbit navigation and approved friend UI
+        run: |
+          dart analyze lib/features/connectivity/presentation/orbit_connectivity_runtime.dart lib/features/home/presentation/screens/home_screen.dart lib/features/friends/presentation/screens/orbit_discover_friends_screen.dart lib/features/friends/presentation/screens/orbit_friend_requests_screen.dart lib/features/friends/presentation/widgets/friend_request_segmented_control.dart
+      - name: Regression friend screens and request control
+        run: flutter test test/features/friends
