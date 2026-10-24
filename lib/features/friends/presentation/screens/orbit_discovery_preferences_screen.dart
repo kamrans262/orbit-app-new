@@ -74,7 +74,7 @@ class _OrbitDiscoveryPreferencesScreenState extends State<OrbitDiscoveryPreferen
         children: [
           const AppScreenHeader(
             title: 'Friend Discovery',
-            prominent: true,
+
             backButtonKey: OrbitDiscoveryHeaderKeys.back,
             titleKey: OrbitDiscoveryHeaderKeys.title,
           ),
