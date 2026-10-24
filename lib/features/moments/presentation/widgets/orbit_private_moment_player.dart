@@ -1,0 +1,168 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/material.dart';
+import 'package:video_player/video_player.dart';
+
+import '../../../../app/theme/app_colors.dart';
+import '../../../../app/theme/app_typography.dart';
+import '../../data/orbit_moment_repository.dart';
+
+/// Playback files are decrypted into the sandbox only after a fresh M7
+/// authorization check. No public URI, shared storage or permanent cache.
+class OrbitPrivateMomentPlayer extends StatefulWidget {
+  const OrbitPrivateMomentPlayer({
+    required this.item,required this.repository,super.key,
+  });
+  final OrbitLiveMoment item;
+  final OrbitMomentRepository repository;
+  @override
+  State<OrbitPrivateMomentPlayer> createState()=>_OrbitPrivateMomentPlayerState();
+}
+
+class _OrbitPrivateMomentPlayerState extends State<OrbitPrivateMomentPlayer>
+    with WidgetsBindingObserver {
+  File? _temporary;
+  VideoPlayerController? _video;
+  AudioPlayer? _audio;
+  StreamSubscription<void>? _audioEnd;
+  Timer? _revalidate;
+  int _epoch=0;
+  bool _busy=true, _playing=false;
+  String? _error;
+
+  @override
+  void initState(){
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    unawaited(_load());
+    _revalidate=Timer.periodic(const Duration(seconds:15),(_){
+      if(mounted && !_busy &&
+          WidgetsBinding.instance.lifecycleState==AppLifecycleState.resumed){
+        unawaited(_check());
+      }
+    });
+  }
+
+  Future<void> _closePlayer() async {
+    final video=_video;_video=null;
+    final audio=_audio;_audio=null;
+    final sub=_audioEnd;_audioEnd=null;
+    final temp=_temporary;_temporary=null;
+    try{await sub?.cancel();}catch(_){}
+    try{await video?.pause();await video?.dispose();}catch(_){}
+    try{await audio?.stop();await audio?.dispose();}catch(_){}
+    await widget.repository.erasePrivateClip(temp);
+  }
+
+  Future<void> _check() async {
+    final valid=await widget.repository.remainsAuthorized(widget.item);
+    if(!mounted || valid)return;
+    ++_epoch;
+    await _closePlayer();
+    if(mounted)setState((){
+      _busy=false;
+      _playing=false;
+      _error='Your access to this Moment has changed.';
+    });
+  }
+
+  Future<void> _load() async {
+    final current=++_epoch;
+    if(mounted)setState((){_busy=true;_error=null;_playing=false;});
+    try {
+      await _closePlayer();
+      final file=await widget.repository.openPrivateClip(widget.item);
+      if(!mounted || current!=_epoch){
+        await widget.repository.erasePrivateClip(file);
+        return;
+      }
+      _temporary=file;
+      if(widget.item.mediaKind=='video'){
+        final player=VideoPlayerController.file(file);
+        _video=player;
+        await player.initialize();
+        if(!mounted||current!=_epoch)return;
+        await player.setLooping(false);
+        await player.play();
+      }else{
+        final player=AudioPlayer();
+        _audio=player;
+        _audioEnd=player.onPlayerComplete.listen((_){
+          if(mounted)setState(()=>_playing=false);
+        });
+        await player.play(DeviceFileSource(file.path));
+      }
+      if(mounted && current==_epoch)setState((){
+        _busy=false;
+        _playing=true;
+      });
+    }catch(_){
+      await _closePlayer();
+      if(mounted && current==_epoch)setState((){
+        _busy=false;
+        _error='This encrypted clip cannot be played.';
+      });
+    }
+  }
+
+  Future<void> _toggle() async {
+    if(_busy||_error!=null)return;
+    try{
+      if(widget.item.mediaKind=='video'){
+        final player=_video;
+        if(player==null)return;
+        if(_playing)await player.pause(); else await player.play();
+      }else{
+        final player=_audio;
+        if(player==null)return;
+        if(_playing)await player.pause(); else await player.resume();
+      }
+      if(mounted)setState(()=>_playing=!_playing);
+    }catch(_){await _check();}
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state){
+    if(state==AppLifecycleState.inactive || state==AppLifecycleState.paused){
+      ++_epoch;
+      if(mounted)setState((){_busy=true;_playing=false;});
+      unawaited(_closePlayer());
+    }else if(state==AppLifecycleState.resumed && mounted){
+      unawaited(_load());
+    }
+  }
+
+  @override
+  void dispose(){
+    ++_epoch;
+    _revalidate?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    unawaited(_closePlayer());
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context){
+    if(_busy)return const Center(child:CircularProgressIndicator(
+      color:AppColors.primaryEnd));
+    if(_error!=null)return Center(child:Text(_error!,
+      textAlign:TextAlign.center,style:AppTypography.bodyMuted));
+    final video=_video;
+    return Center(child:Column(mainAxisSize:MainAxisSize.min,children:[
+      if(widget.item.mediaKind=='video' && video!=null && video.value.isInitialized)
+        AspectRatio(aspectRatio:video.value.aspectRatio,
+          child:VideoPlayer(video))
+      else
+        const Icon(Icons.mic_none_outlined,color:AppColors.primaryEnd,size:64),
+      const SizedBox(height:16),
+      IconButton(
+        icon:Icon(_playing?Icons.pause_circle_filled:Icons.play_circle_fill,
+          size:54,color:AppColors.primaryEnd),
+        tooltip:_playing?'Pause encrypted clip':'Play encrypted clip',
+        onPressed:()=>unawaited(_toggle()),
+      ),
+    ]));
+  }
+}
