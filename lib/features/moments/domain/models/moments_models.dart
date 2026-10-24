@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'dart:typed_data';
 
 @immutable
 class MomentAuthorData {
@@ -51,6 +52,8 @@ class MomentImageFeedItem extends MomentFeedItem {
     required this.commentCount,
     this.isLiked = false,
     this.isBookmarked = false,
+    this.imageBytes,
+    this.countsKnown = true,
   });
 
   final MomentAuthorData author;
@@ -62,6 +65,8 @@ class MomentImageFeedItem extends MomentFeedItem {
   final int commentCount;
   final bool isLiked;
   final bool isBookmarked;
+  final Uint8List? imageBytes;
+  final bool countsKnown;
 
   @override
   MomentFeedItemType get type => MomentFeedItemType.imagePost;

@@ -1,0 +1,287 @@
+import 'dart:convert';
+import 'dart:typed_data';
+import 'package:cryptography/cryptography.dart';
+import 'package:uuid/uuid.dart';
+import '../../auth/data/orbit_identity_client.dart';
+import '../../circles/data/orbit_circle_repository.dart';
+import '../../media/data/orbit_media_crypto.dart';
+import '../../media/data/orbit_media_recipient_keys.dart';
+import '../../media/data/orbit_media_repository.dart';
+import '../../media/data/orbit_moment_media_stager.dart';
+import '../domain/models/moment_publish_models.dart';
+
+class OrbitLiveMoment {
+  const OrbitLiveMoment({required this.id,required this.creatorId,
+    required this.mediaId,required this.contextId,required this.publishedAt,
+    this.captionCiphertext});
+  final String id, creatorId, mediaId, contextId;
+  final DateTime publishedAt;
+  final String? captionCiphertext;
+  factory OrbitLiveMoment.fromJson(Map<String,dynamic> d) =>
+    OrbitLiveMoment(id:d['id'] as String,creatorId:d['creator_id'] as String,
+      mediaId:d['media_id'] as String,contextId:d['context_id'] as String,
+      publishedAt:DateTime.parse(d['published_at'] as String),
+      captionCiphertext:d['caption_ciphertext'] as String?);
+}
+
+class OrbitMomentAudienceOptions {
+  const OrbitMomentAudienceOptions(this.circles,this.friends,this.privacy);
+  final List<MomentAudienceCircle> circles,friends;
+  final String privacy;
+  bool get circlesEnabled => privacy=='My Circle';
+  bool get friendsEnabled => privacy=='Selected People';
+}
+
+/// Uses only M4 trusted-device identity and M6 authenticated ciphertext API.
+class OrbitMomentRepository {
+  OrbitMomentRepository({OrbitIdentityClient? identity,OrbitMediaRepository? media,
+    OrbitMomentMediaStager? stager,OrbitMediaRecipientKeys? recipientKeys,
+    OrbitCircleRepository? circles,OrbitMediaCrypto? crypto})
+    : _identity=identity??OrbitIdentityClient.instance,
+      _media=media??OrbitMediaRepository(identity:identity),
+      _stager=stager??OrbitMomentMediaStager(identity:identity),
+      _keys=recipientKeys??OrbitMediaRecipientKeys(identity:identity),
+      _circles=circles??OrbitCircleRepository(identity:identity),
+      _crypto=crypto??OrbitMediaCrypto();
+  final OrbitIdentityClient _identity;
+  final OrbitMediaRepository _media;
+  final OrbitMomentMediaStager _stager;
+  final OrbitMediaRecipientKeys _keys;
+  final OrbitCircleRepository _circles;
+  final OrbitMediaCrypto _crypto;
+  static const Uuid _uuid=Uuid();
+
+  Future<Map<String,dynamic>> _api(String method,String path,
+      {Map<String,Object?>? body,String? key}) async {
+    final r=await _identity.socialRequest(method,path,body:body,
+        idempotencyKey:key);
+    final d=r['data'];
+    if(d is! Map)throw const FormatException('Unexpected private Moments response.');
+    return Map<String,dynamic>.from(d);
+  }
+  Future<List<OrbitLiveMoment>> feed({bool rail=false}) async {
+    final r=await _api('GET',rail?'/moments/rail':'/moments?limit=30');
+    final data=r['items'];
+    if(data is! List)throw const FormatException('Private Moments feed malformed.');
+    return data.map((e)=>OrbitLiveMoment.fromJson(Map<String,dynamic>.from(e as Map)))
+      .toList(growable:false);
+  }
+  Future<OrbitMomentAudienceOptions> audienceOptions() async {
+    final privacy=await _api('GET','/me/preferences/privacy');
+    final audience=privacy['moment_default_audience'] as String? ?? 'Nobody';
+    final friends=<MomentAudienceCircle>[];
+    if(audience=='Selected People'){
+      for(var page=1;page<=5;page++){
+        final d=await _api('GET','/friends?page='+page.toString());
+        final items=d['items'];
+        if(items is! List)throw const FormatException('Friends response malformed.');
+        for(final x in items){
+          if(x is Map && x['id'] is String)friends.add(
+            MomentAudienceCircle(id:x['id'] as String,
+              name:x['display_name'] as String? ?? 'Orbit member'));
+        }
+        if(d['has_more']!=true)break;
+        if(page==5)throw StateError('Please narrow your recipient selection.');
+      }
+    }
+    final circles=<MomentAudienceCircle>[];
+    if(audience=='My Circle'){
+      for(var page=1;page<=5;page++){
+        final d=await _circles.list(page:page);
+        for(final x in d.items) {
+          if(x.lifecycleState=='active'&&x.role!='restricted') {
+            circles.add(MomentAudienceCircle(id:x.id,name:x.name));
+          }
+        }
+        if(!d.hasMore)break;
+        if(page==5)throw StateError('Too many Circles to enumerate safely.');
+      }
+    }
+    return OrbitMomentAudienceOptions(circles,friends,audience);
+  }
+  Future<List<String>> _members(String circleId) async {
+    final owner=await _identity.currentLocalSocialOwner();
+    if(owner==null)throw StateError('Not signed in.');
+    final people=<String>{};
+    for(var page=1;page<=10;page++){
+      final d=await _circles.members(circleId,page:page);
+      for(final m in d.items){
+        if(m.id!=owner&&m.role!='restricted')people.add(m.id);
+      }
+      if(!d.hasMore)break;
+      if(page==10)throw StateError('Circle exceeds safe recipient limit.');
+    }
+    return people.toList();
+  }
+  Future<List<Map<String,Object?>>> _envelopes(String audience,
+      List<String> targets,OrbitSealedMedia original,OrbitSealedMedia thumbnail) async {
+    final result=<Map<String,Object?>>[];
+    if(audience=='selected_circles'){
+      final unique=<String>{};
+      for(final circle in targets){
+        final recipients=await _members(circle);
+        if(recipients.isEmpty)continue;
+        final people=await _keys.discover(audienceKind:'selected_circles',
+            recipientIds:recipients,circleId:circle);
+        for(final person in people)for(final device in person.devices){
+          if(!unique.add(device.id))continue;
+          final single=[OrbitMediaRecipient(person.userId,[device])];
+          result.addAll(await _keys.encryptEnvelopes(original,single));
+          result.addAll(await _keys.encryptEnvelopes(thumbnail,single));
+        }
+      }
+    }else{
+      List<String> users=targets;
+      if(audience=='accepted_friends'){
+        final options=await audienceOptions();
+        users=options.friends.map((f)=>f.id).toList();
+      }
+      if(users.isNotEmpty){
+        final people=await _keys.discover(audienceKind:'selected_friends',recipientIds:users);
+        result.addAll(await _keys.encryptEnvelopes(original,people));
+        result.addAll(await _keys.encryptEnvelopes(thumbnail,people));
+      }
+    }
+    if(result.isEmpty||result.length>300) {
+      throw StateError('No eligible trusted recipient device keys.');
+    }
+    return result;
+  }
+  Future<String> _sealText(String text,Uint8List key,String media,
+    String purpose,String context) async {
+    final nonce=_crypto.randomBytes(12);
+    final box=await AesGcm.with256bits().encrypt(utf8.encode(text),
+      secretKey:SecretKey(key),nonce:nonce,
+      aad:utf8.encode('orbit-m7-'+purpose+'-v1|'+media+'|'+context));
+    return 'v1.'+base64Encode(nonce)+'.'+base64Encode(box.cipherText)+
+        '.'+base64Encode(box.mac.bytes);
+  }
+  Future<String> _openText(String cipher,Uint8List key,String media,
+      String purpose,String context) async {
+    final fields=cipher.split('.');
+    if(fields.length!=4||fields[0]!='v1') {
+      throw const FormatException('Unsupported encrypted text.');
+    }
+    final b=await AesGcm.with256bits().decrypt(
+      SecretBox(base64Decode(fields[2]),nonce:base64Decode(fields[1]),
+        mac:Mac(base64Decode(fields[3]))),secretKey:SecretKey(key),
+      aad:utf8.encode('orbit-m7-'+purpose+'-v1|'+media+'|'+context));
+    return utf8.decode(b);
+  }
+  Future<Uint8List> _key(String media) async {
+    final d=await _identity.trustedMediaDevice();
+    final path='/media/'+Uri.encodeComponent(media)+
+      '/key-envelope?device_id='+Uri.encodeComponent(d.id)+'&variant=original';
+    final envelope=await _media.control('GET',path);
+    final material=await _crypto.unwrapKey(
+      envelope['wrapped_key_ciphertext'] as String,
+      privateKey:d.privateKey,publicKey:d.publicKey);
+    return material.key;
+  }
+  Future<MomentPublishReceipt> publish(MomentPublishRequest request,
+      void Function(double) progress) async {
+    final audience=request.audienceKind;
+    final targets=request.targetIds.toList();
+    if(!['only_me','accepted_friends','selected_friends','selected_circles'].contains(audience))
+      throw StateError('Invalid Moment audience.');
+    if((audience=='selected_circles'||audience=='selected_friends')&&targets.isEmpty)
+      throw StateError('Select an audience first.');
+    final options=await audienceOptions();
+    if(audience=='selected_circles'&&!options.circlesEnabled ||
+        (audience=='selected_friends'||audience=='accepted_friends')&&!options.friendsEnabled) {
+      throw StateError('Update Moment sharing in Privacy Settings first.');
+    }
+    String? id;
+    await _stager.stagePhoto(request.photoBytes,
+      onProgress:(v)=>progress(v*0.82),
+      onReadyForAudience:(original,thumbnail,mediaId) async {
+        if(audience!='only_me'){
+          final grants=await _media.createGrants(mediaId,
+            audience:audience,recipients:targets,
+            idempotencyKey:request.clientId,
+            keyEnvelopes:await _envelopes(audience,targets,original,thumbnail));
+          if(grants.isEmpty)throw StateError('Recipient grants unavailable.');
+        }
+        final caption=request.caption.trim().isEmpty?null:
+          await _sealText(request.caption.trim(),original.key,mediaId,
+            'caption','self');
+        progress(0.92);
+        final result=await _api('POST','/moments',key:request.clientId,body:{
+          'client_id':request.clientId,'media_id':mediaId,
+          'audience_kind':audience,'target_ids':targets,
+          if(caption!=null)'caption_ciphertext':caption,
+          if(caption!=null)'caption_key_version':'v1',
+        });
+        if(result['published']!=true||result['audience_keys_confirmed']!=true||
+            result['moment_id'] is! String) {
+          throw StateError('Server did not confirm Moment publication.');
+        }
+        id=result['moment_id'] as String;
+      });
+    if(id==null)throw StateError('Moment not published.');
+    progress(1);
+    return MomentPublishReceipt(momentId:id!);
+  }
+  Future<Uint8List> photo(OrbitLiveMoment item,{String variant='thumbnail'}) async {
+    final d=await _identity.trustedMediaDevice();
+    return _media.downloadPhoto(item.mediaId,deviceId:d.id,
+      privateKey:d.privateKey,publicKey:d.publicKey,variant:variant);
+  }
+  Future<String?> caption(OrbitLiveMoment item) async {
+    final encrypted=item.captionCiphertext;
+    if(encrypted==null||encrypted.isEmpty)return null;
+    return _openText(encrypted,await _key(item.mediaId),item.mediaId,
+      'caption','self');
+  }
+  Future<void> view(OrbitLiveMoment item) async {
+    await _api('POST','/moments/'+Uri.encodeComponent(item.id)+'/views',
+      body:{'context_id':item.contextId});
+  }
+  Future<void> react(OrbitLiveMoment item,{required bool liked}) async {
+    final path='/moments/'+Uri.encodeComponent(item.id)+'/reaction';
+    if(liked)await _api('PUT',path,
+      body:{'context_id':item.contextId,'reaction_code':'like'});
+    else await _identity.socialRequest('DELETE',path,
+      body:{'context_id':item.contextId});
+  }
+  Future<List<({String id,String author,String body,String? parent})>>
+      comments(OrbitLiveMoment item) async {
+    final data=await _api('GET','/moments/'+Uri.encodeComponent(item.id)+
+      '/comments?context_id='+Uri.encodeQueryComponent(item.contextId));
+    final rows=data['items'];
+    if(rows is! List)throw const FormatException('Invalid encrypted comments.');
+    if(rows.isEmpty)return [];
+    final key=await _key(item.mediaId);
+    final values=<({String id,String author,String body,String? parent})>[];
+    for(final raw in rows){
+      final r=Map<String,dynamic>.from(raw as Map);
+      values.add((id:r['id'] as String,author:r['author_id'] as String,
+        body:await _openText(r['body_ciphertext'] as String,key,
+          item.mediaId,'comment',item.contextId),
+        parent:r['parent_id'] as String?));
+    }
+    return values;
+  }
+  Future<void> comment(OrbitLiveMoment item,String text,{String? parent}) async {
+    await _api('POST','/moments/'+Uri.encodeComponent(item.id)+'/comments',
+      key:_uuid.v4(),body:{
+        'context_id':item.contextId,
+        'body_ciphertext':await _sealText(text,await _key(item.mediaId),
+          item.mediaId,'comment',item.contextId),
+        'key_version':'v1',if(parent!=null)'parent_id':parent,
+      });
+  }
+  Future<void> report(OrbitLiveMoment item,String reason) async {
+    await _api('POST','/moments/'+Uri.encodeComponent(item.id)+'/reports',
+      key:_uuid.v4(),body:{'context_id':item.contextId,
+      'reason':reason,'evidence_consent':false});
+  }
+  Future<void> delete(OrbitLiveMoment item) async {
+    await _api('DELETE','/moments/'+Uri.encodeComponent(item.id));
+  }
+  Future<String> name(String userId) async {
+    if(await _identity.currentLocalSocialOwner()==userId)return 'You';
+    final d=await _api('GET','/people/'+Uri.encodeComponent(userId)+'/preview');
+    return d['display_name'] as String? ?? 'Orbit member';
+  }
+}

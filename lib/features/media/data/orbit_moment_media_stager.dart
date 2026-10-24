@@ -104,6 +104,11 @@ class OrbitMomentMediaStager {
             'wrapped_key_ciphertext':await _crypto.wrapKey(thumb,device.publicKey)},
         ]));
       if(grantIds.isEmpty)throw StateError('Private media grant not confirmed.');
+      // M7 creates real recipient envelopes and publishes while ephemeral
+      // content keys are still available. Never discard on failed publish.
+      if(onReadyForAudience!=null) {
+        await onReadyForAudience(original,thumb,readyOriginal.mediaId);
+      }
       onProgress?.call(1);
       await _outbox.discard(originalDraft);
       await _outbox.discard(thumbDraft);

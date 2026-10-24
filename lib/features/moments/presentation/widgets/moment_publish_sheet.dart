@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
@@ -35,6 +36,8 @@ Future<void> showMomentPublishingSheet(
   BuildContext context, {
   required Uint8List photoBytes,
   required List<MomentAudienceCircle> circles,
+  List<MomentAudienceCircle> friends = const [],
+  String privacyAudience = 'Nobody',
   MomentPublisher? publisher,
   OrbitPrivatePhotoSaver? privateSaver,
 }) async {
@@ -54,6 +57,8 @@ Future<void> showMomentPublishingSheet(
       child: MomentPublishSheet(
         photoBytes: photoBytes,
         circles: circles,
+        friends: friends,
+        privacyAudience: privacyAudience,
         publisher: publisher,
         privateSaver: privateSaver,
       ),
@@ -65,6 +70,8 @@ class MomentPublishSheet extends StatefulWidget {
   const MomentPublishSheet({
     required this.photoBytes,
     required this.circles,
+    this.friends = const [],
+    this.privacyAudience = 'Nobody',
     this.publisher,
     this.privateSaver,
     super.key,
@@ -72,6 +79,8 @@ class MomentPublishSheet extends StatefulWidget {
 
   final Uint8List photoBytes;
   final List<MomentAudienceCircle> circles;
+  final List<MomentAudienceCircle> friends;
+  final String privacyAudience;
   final MomentPublisher? publisher;
   final OrbitPrivatePhotoSaver? privateSaver;
 
@@ -88,14 +97,27 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
   bool _busy = false;
   bool _simulated = false;
   bool _savedPrivate = false;
+  String _audienceKind = 'only_me';
+  final String _clientId = const Uuid().v4();
 
   // A live repository must inject circles and a publisher together. A missing
   // publisher deliberately never claims a post was published.
   bool get _canPublish => widget.publisher != null;
   bool get _canSavePrivate => widget.privateSaver != null && !_canPublish;
-  bool get _hasAudience => _selectedIds.isNotEmpty;
-  String get _audienceLabel =>
-      '${_selectedIds.length} ${_selectedIds.length == 1 ? 'circle' : 'circles'}';
+  bool get _hasAudience => _canPublish
+      ? (_audienceKind=='only_me' ||
+        (_audienceKind=='accepted_friends' && widget.friends.isNotEmpty) ||
+        _selectedIds.isNotEmpty)
+      : _selectedIds.isNotEmpty;
+  String get _audienceLabel {
+    if(!_canPublish) return _selectedIds.length.toString()+' circles';
+    switch(_audienceKind){
+      case 'only_me': return 'Only Me';
+      case 'accepted_friends': return 'All Friends';
+      case 'selected_friends': return _selectedIds.length.toString()+' friends';
+      default: return _selectedIds.length.toString()+' circles';
+    }
+  }
 
   @override
   void dispose() {
@@ -135,8 +157,11 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
       } else {
         final request = MomentPublishRequest(
           photoBytes: widget.photoBytes,
-          circleIds: _selectedIds,
+          circleIds: _audienceKind=='selected_circles' ? _selectedIds : const <String>{},
           caption: _caption.text.trim(),
+          audienceKind:_audienceKind,
+          targetIds:_selectedIds,
+          clientId:_clientId,
         );
         final receipt = await widget.publisher!(request, (fraction) {
           if (!mounted) return;
@@ -289,7 +314,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
         const SizedBox(height: 6),
         if (!_canSavePrivate)
           Text(
-            'Share only with circles you choose.',
+            'Choose who can see your encrypted Moment.',
             style: AppTypography.bodyMuted,
           ),
         const SizedBox(height: 10),
@@ -299,7 +324,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
           onPressed: () => setState(() => _step = _PublishStep.audience),
           icon: const Icon(Icons.people_outline_rounded, size: 20),
           label: Text(
-            _hasAudience ? '$_audienceLabel selected' : 'Choose audience',
+            _hasAudience ? _audienceLabel : 'Choose audience',
           ),
           style: OutlinedButton.styleFrom(
             minimumSize: const Size(double.infinity, 48),
@@ -353,76 +378,82 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
   }
 
   Widget _audience() {
-    final validCircles = widget.circles
-        .where((circle) => circle.id.trim().isNotEmpty)
-        .toList();
+    final live=_canPublish;
+    final choices=live
+        ? (_audienceKind=='selected_circles'?widget.circles:widget.friends)
+        : widget.circles;
+    final types=live
+        ? <(String,String)>[
+            ('only_me','Only Me'),
+            if(widget.privacyAudience=='Selected People') ...[
+              ('accepted_friends','All Friends'),
+              ('selected_friends','Selected Friends'),
+            ],
+            if(widget.privacyAudience=='My Circle')
+              ('selected_circles','Selected Circles'),
+          ] : const <(String,String)>[];
     return Column(
-      key: MomentPublishKeys.audience,
-      children: <Widget>[
+      key:MomentPublishKeys.audience,
+      children:<Widget>[
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-          child: Text(
-            _canPublish ? 'Select one or more of your circles.' : 'Sample circles for UI preview only. This selection does not share your photo.',
-            style: AppTypography.bodyMuted,
-          ),
+          padding:const EdgeInsets.fromLTRB(20,0,20,12),
+          child:Text(live
+            ? 'Sharing follows your existing Orbit privacy settings.'
+            : 'Sample circles for UI preview only. Nothing is shared.',
+            style:AppTypography.bodyMuted),
         ),
-        Expanded(
-          child: validCircles.isEmpty
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(
-                      'No circles available. Create or join a circle first.',
-                      textAlign: TextAlign.center,
-                      style: AppTypography.bodyMuted,
+        Expanded(child:ListView(
+          padding:const EdgeInsets.symmetric(horizontal:20),
+          children:<Widget>[
+            for(final type in types)
+              Padding(padding:const EdgeInsets.only(bottom:8),
+                child:Material(
+                  color:AppColors.white,
+                  borderRadius:BorderRadius.circular(20),
+                  child:RadioListTile<String>(
+                    value:type.$1,groupValue:_audienceKind,
+                    title:Text(type.$2,style:AppTypography.body),
+                    activeColor:AppColors.primaryEnd,
+                    onChanged:(v){
+                      if(v!=null)setState((){
+                        _audienceKind=v;_selectedIds.clear();
+                      });
+                    },
+                  ),
+                )),
+            if(!live || _audienceKind=='selected_circles' ||
+                _audienceKind=='selected_friends')
+              if(choices.isEmpty)
+                Padding(padding:const EdgeInsets.all(20),child:Text(
+                  'No eligible members available. Check your existing privacy and Circle settings.',
+                  textAlign:TextAlign.center,style:AppTypography.bodyMuted))
+              else
+                for(final item in choices)Padding(
+                  padding:const EdgeInsets.only(bottom:8),
+                  child:Material(key:MomentPublishKeys.circle(item.id),
+                    color:AppColors.white,
+                    borderRadius:BorderRadius.circular(20),
+                    child:CheckboxListTile(
+                      title:Text(item.name,style:AppTypography.body),
+                      value:_selectedIds.contains(item.id),
+                      activeColor:AppColors.primaryEnd,
+                      shape:RoundedRectangleBorder(
+                        borderRadius:BorderRadius.circular(20)),
+                      onChanged:(v)=>setState((){
+                        if(v==true)_selectedIds.add(item.id);
+                        else _selectedIds.remove(item.id);
+                      }),
                     ),
                   ),
-                )
-              : ListView.separated(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  itemCount: validCircles.length,
-                  separatorBuilder: (_, index) => const SizedBox(height: 10),
-                  itemBuilder: (context, index) {
-                    final circle = validCircles[index];
-                    final selected = _selectedIds.contains(circle.id);
-                    return Material(
-                      key: MomentPublishKeys.circle(circle.id),
-                      color: AppColors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      child: CheckboxListTile(
-                        value: selected,
-                        title: Text(
-                          circle.name,
-                          style: AppTypography.body.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        activeColor: AppColors.primaryEnd,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        onChanged: (value) => setState(() {
-                          if (value == true) {
-                            _selectedIds.add(circle.id);
-                          } else {
-                            _selectedIds.remove(circle.id);
-                          }
-                        }),
-                      ),
-                    );
-                  },
                 ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-          child: AppPrimaryButton(
-            label: _hasAudience
-                ? 'Continue with $_audienceLabel'
-                : 'Select a circle',
-            enabled: _hasAudience,
-            onPressed: () => setState(() => _step = _PublishStep.review),
-          ),
-        ),
+          ],
+        )),
+        Padding(padding:const EdgeInsets.fromLTRB(20,12,20,20),
+          child:AppPrimaryButton(
+            label:_hasAudience ? 'Continue with '+_audienceLabel : 'Choose audience',
+            enabled:_hasAudience,
+            onPressed:()=>setState(()=>_step=_PublishStep.review),
+          )),
       ],
     );
   }

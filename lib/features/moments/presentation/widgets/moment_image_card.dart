@@ -16,6 +16,8 @@ class MomentImageCard extends StatelessWidget {
     required this.onCommentPressed,
     required this.onBookmarkPressed,
     required this.onSharePressed,
+    this.onViewPressed,
+    this.privateMode=false,
     super.key,
   });
 
@@ -26,6 +28,8 @@ class MomentImageCard extends StatelessWidget {
   final VoidCallback onCommentPressed;
   final VoidCallback onBookmarkPressed;
   final VoidCallback onSharePressed;
+  final VoidCallback? onViewPressed;
+  final bool privateMode;
 
   @override
   Widget build(BuildContext context) {
@@ -38,12 +42,15 @@ class MomentImageCard extends StatelessWidget {
         children: <Widget>[
           ClipRRect(
             borderRadius: BorderRadius.circular(16),
-            child: AspectRatio(
+            child: GestureDetector(
+              onTap:onViewPressed,
+              behavior:HitTestBehavior.translucent,
+              child:AspectRatio(
               aspectRatio: 1.06,
               child: Stack(
                 fit: StackFit.expand,
                 children: <Widget>[
-                  MomentMediaImage(path: data.imagePath, fit: BoxFit.cover),
+                  MomentMediaImage(path: data.imagePath, bytes:data.imageBytes, fit: BoxFit.cover),
                   const DecoratedBox(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
@@ -65,7 +72,7 @@ class MomentImageCard extends StatelessWidget {
                     right: 12,
                     child: _ImageCardHeader(
                       data: data,
-                      onSharePressed: onSharePressed,
+                      onSharePressed: privateMode ? () {} : onSharePressed,
                     ),
                   ),
                   Positioned(
@@ -76,9 +83,12 @@ class MomentImageCard extends StatelessWidget {
                   ),
                 ],
               ),
+              ),
             ),
           ),
           _EngagementBar(
+            privateMode:privateMode,
+            countsKnown:data.countsKnown,
             likeCount: data.likeCount,
             commentCount: data.commentCount,
             isLiked: isLiked,

@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'package:uuid/uuid.dart';
 
 /// A circle supplied by the membership repository, not inferred from contacts.
 class MomentAudienceCircle {
@@ -14,11 +15,18 @@ class MomentPublishRequest {
     required this.photoBytes,
     required Iterable<String> circleIds,
     required this.caption,
-  }) : circleIds = Set<String>.unmodifiable(circleIds);
+    this.audienceKind='selected_circles',
+    Iterable<String>? targetIds,
+    String? clientId,
+  }) : targetIds=Set<String>.unmodifiable(targetIds??circleIds),
+       clientId=clientId??const Uuid().v4(), circleIds = Set<String>.unmodifiable(circleIds);
 
   final Uint8List photoBytes;
   final Set<String> circleIds;
   final String caption;
+  final String audienceKind;
+  final Set<String> targetIds;
+  final String clientId;
 }
 
 /// Only return this after the service confirms creation of the Moment.

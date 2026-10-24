@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:typed_data';
 
 class MomentMediaImage extends StatelessWidget {
   const MomentMediaImage({
@@ -6,10 +7,12 @@ class MomentMediaImage extends StatelessWidget {
     this.fit = BoxFit.cover,
     this.alignment = Alignment.center,
     this.fallback,
+    this.bytes,
     super.key,
   });
 
   final String? path;
+  final Uint8List? bytes;
   final BoxFit fit;
   final AlignmentGeometry alignment;
   final Widget? fallback;
@@ -30,6 +33,11 @@ class MomentMediaImage extends StatelessWidget {
           ),
         );
 
+    if(bytes!=null && bytes!.isNotEmpty){
+      return Image.memory(bytes!,fit:fit,alignment:alignment,
+        filterQuality:FilterQuality.high,
+        errorBuilder:(_,error,stack)=>fallbackWidget);
+    }
     if (resolvedPath == null || resolvedPath.isEmpty) {
       return fallbackWidget;
     }

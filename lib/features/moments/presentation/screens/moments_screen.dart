@@ -61,6 +61,7 @@ class MomentsScreen extends StatefulWidget {
     this.viewState = MomentsViewState.populated,
     this.errorMessage = 'Something went wrong. Please try again.',
     this.cameraBuilder,
+    this.privateMode=false,
     super.key,
   });
 
@@ -159,6 +160,7 @@ class MomentsScreen extends StatefulWidget {
   final MomentsViewState viewState;
   final String errorMessage;
   final WidgetBuilder? cameraBuilder;
+  final bool privateMode;
 
   @override
   State<MomentsScreen> createState() => _MomentsScreenState();
@@ -562,6 +564,8 @@ class _MomentsScreenState extends State<MomentsScreen> {
         final imageItem = item as MomentImageFeedItem;
         return MomentImageCard(
           data: imageItem,
+          privateMode:widget.privateMode,
+          onViewPressed:()=>widget.onFeedItemPressed(imageItem),
           isLiked: _likedById[imageItem.id] ?? imageItem.isLiked,
           isBookmarked: _bookmarkedById[imageItem.id] ?? imageItem.isBookmarked,
           onLikePressed: () => _toggleLike(imageItem),
@@ -688,6 +692,7 @@ class _MomentsScreenState extends State<MomentsScreen> {
 
   void _shareMoment(MomentImageFeedItem item) {
     widget.onSharePressed(item);
+    if(widget.privateMode)return;
     unawaited(
       OrbitShareService.shareMoment(
         authorName: item.author.name,

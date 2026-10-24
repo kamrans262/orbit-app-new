@@ -38,6 +38,8 @@ class MomentCameraScreen extends StatefulWidget {
     this.onCaptured,
     this.onSendPressed,
     this.momentAudienceCircles = const <MomentAudienceCircle>[],
+    this.momentAudienceFriends = const <MomentAudienceCircle>[],
+    this.momentPrivacyAudience = 'Nobody',
     this.publishMoment,
     this.privateSaver,
     this.enableCamera = true,
@@ -56,6 +58,8 @@ class MomentCameraScreen extends StatefulWidget {
   /// Inject real memberships and a confirmed publisher with the backend.
   /// Without a publisher the photo flow is explicitly UI-preview only.
   final List<MomentAudienceCircle> momentAudienceCircles;
+  final List<MomentAudienceCircle> momentAudienceFriends;
+  final String momentPrivacyAudience;
   final MomentPublisher? publishMoment;
   final OrbitPrivatePhotoSaver? privateSaver;
 
@@ -512,6 +516,8 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         photoBytes: captured,
         // An authenticated account must never show fabricated Circle names.
         circles: widget.momentAudienceCircles,
+        friends: widget.momentAudienceFriends,
+        privacyAudience: widget.momentPrivacyAudience,
         publisher: widget.publishMoment,
         privateSaver: widget.privateSaver,
       );
