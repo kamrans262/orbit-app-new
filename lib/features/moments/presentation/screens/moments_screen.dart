@@ -373,7 +373,7 @@ class _MomentsScreenState extends State<MomentsScreen> {
       },
       searchButtonKey: MomentsKeys.searchButton,
       trailingActions: <Widget>[
-        Theme(
+        if(!widget.privateMode)Theme(
           data: noFlashTheme(context),
           child: AppCircularIconButton(
             key: MomentsKeys.filterButton,
@@ -385,7 +385,7 @@ class _MomentsScreenState extends State<MomentsScreen> {
             size: 40,
           ),
         ),
-        Theme(
+        if(!widget.privateMode)Theme(
           data: noFlashTheme(context),
           child: AppCircularIconButton(
             key: MomentsKeys.messagesButton,

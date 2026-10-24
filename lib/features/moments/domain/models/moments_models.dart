@@ -21,12 +21,14 @@ class MomentStoryData {
     required this.name,
     this.imagePath,
     this.isAddStory = false,
+    this.imageBytes,
   });
 
   final String id;
   final String name;
   final String? imagePath;
   final bool isAddStory;
+  final Uint8List? imageBytes;
 }
 
 enum MomentFeedItemType { imagePost, promo, textPost, futureVideoPost }

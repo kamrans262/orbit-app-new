@@ -49,6 +49,7 @@ class MomentStoryAvatar extends StatelessWidget {
                         dimension: 50,
                         child: MomentMediaImage(
                           path: data.imagePath,
+                          bytes:data.imageBytes,
                           fit: BoxFit.cover,
                           fallback: const ColoredBox(
                             color: Color(0xFFF0ECF8),
