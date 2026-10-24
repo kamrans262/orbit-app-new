@@ -23,7 +23,7 @@ void main() {
     ));
     await tester.enterText(
       find.byKey(const Key('m5_join_code_field')),
-      'A' * 40,
+      List<String>.filled(40, 'A').join(),
     );
     await tester.tap(find.byKey(const Key('m5_join_verify')));
     await tester.pumpAndSettle();
