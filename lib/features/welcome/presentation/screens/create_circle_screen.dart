@@ -180,7 +180,7 @@ class _CreateCircleScreenState extends State<CreateCircleScreen> {
                     child: SingleChildScrollView(
                       padding: EdgeInsets.fromLTRB(
                         _contentPadding,
-                        compact ? 12 : 52,
+                        widget.isOnboarding ? (compact ? 12 : 52) : 20,
                         _contentPadding,
                         16,
                       ),
@@ -201,7 +201,7 @@ class _CreateCircleScreenState extends State<CreateCircleScreen> {
                                 style: AppTypography.largeHeading,
                               )
                             else
-                              const AppScreenHeader(title: 'Create Circle', prominent: true),
+                              const AppScreenHeader(title: 'Create Circle'),
                             if (widget.onJoinRequested != null)
                               Align(alignment:Alignment.center,
                                 child:TextButton.icon(
