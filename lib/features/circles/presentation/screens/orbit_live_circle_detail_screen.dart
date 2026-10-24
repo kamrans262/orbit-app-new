@@ -12,6 +12,7 @@ import '../../domain/models/friend_details_models.dart';
 import 'friend_details_screen.dart';
 import 'orbit_live_circle_settings_screen.dart';
 import 'orbit_live_invite_member_screen.dart';
+import '../../../moments/presentation/screens/orbit_live_moments_screen.dart';
 
 class OrbitLiveCircleDetailScreen extends StatefulWidget {
   const OrbitLiveCircleDetailScreen({required this.circleId,super.key,this.repository,this.changeSource});
@@ -164,6 +165,17 @@ class _OrbitLiveCircleDetailScreenState extends State<OrbitLiveCircleDetailScree
     await _refresh();
   }
 
+  Future<void> _openMoments() async {
+    final circle=_circle;
+    if(circle==null || _loading || _error!=null)return;
+    // The actual Circle feed is still permission-filtered by M5 + M7 on API.
+    await Navigator.of(context).push<void>(AppFadeSlidePageRoute<void>(
+      builder:(_)=>OrbitLiveMomentsScreen(
+        circleId:circle.id,onTabSelected:(_){},
+      )));
+    if(mounted)await _refresh(silent:true);
+  }
+
   @override
   Widget build(BuildContext context) => Stack(children: [
     FriendDetailsScreen(
@@ -189,6 +201,16 @@ class _OrbitLiveCircleDetailScreenState extends State<OrbitLiveCircleDetailScree
       errorMessage:_error ?? 'Unable to load Circle members.',
       onRetry:_refresh,
     ),
+    if(!_loading && _circle!=null)
+      Positioned(right:20,bottom:92,
+        child: FloatingActionButton.extended(
+          heroTag:'m7-circle-moments',
+          backgroundColor:AppColors.background,
+          foregroundColor:const Color(0xFF7C3AED),
+          onPressed:_openMoments,
+          label:const Text('Circle Moments'),
+          icon:const Icon(Icons.photo_library_outlined),
+        )),
     if(!_loading && _circle!=null)
       Positioned(right:20,bottom:25,
         child: FloatingActionButton.extended(
