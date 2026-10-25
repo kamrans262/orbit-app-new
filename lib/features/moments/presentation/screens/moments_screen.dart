@@ -551,7 +551,7 @@ class _MomentsScreenState extends State<MomentsScreen> {
 
     return SizedBox(
       key: MomentsKeys.storiesList,
-      height: 76,
+      height: stories.any((entry)=>entry.ageLabel!=null)?96:76,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: EdgeInsets.zero,
