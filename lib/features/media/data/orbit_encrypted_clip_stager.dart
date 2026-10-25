@@ -96,7 +96,7 @@ class OrbitNativeVideoProcessor implements OrbitVideoProcessor {
       throw const FormatException('Compressed video exceeds upload limits.');
     }
     final info=await _compressor.getMediaInfo(output.path);
-    if(stripAudio && info.audioCodec!=null){
+    if(stripAudio && info.hasAudio){
       throw const FormatException('Muted Moment export still contains audio.');
     }
     if(info.durationMs<=0 || info.durationMs>maxDurationMs ||
