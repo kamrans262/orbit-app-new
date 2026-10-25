@@ -48,9 +48,15 @@ class OrbitNativeVideoProcessor implements OrbitVideoProcessor {
       {void Function(double progress)? onProgress}) =>
     _prepare(input,onProgress:onProgress,stripAudio:true);
 
+  Future<OrbitPreparedVideo> prepareForNetwork(File input,
+      {bool stripAudio=false,bool lowBandwidth=false,
+       void Function(double progress)? onProgress}) =>
+    _prepare(input,onProgress:onProgress,
+      stripAudio:stripAudio,lowBandwidth:lowBandwidth);
+
   Future<OrbitPreparedVideo> _prepare(File input,
       {void Function(double progress)? onProgress,
-       required bool stripAudio}) async {
+       required bool stripAudio,bool lowBandwidth=false}) async {
     if(!await input.exists() || await input.length()>maxUncompressedBytes
         || await input.length()==0) {
       throw const FormatException('Video file exceeds the capture limits.');
@@ -63,6 +69,8 @@ class OrbitNativeVideoProcessor implements OrbitVideoProcessor {
     // and makes a bounded MP4 before per-part authenticated encryption.
     final job=_compressor.compress(input.path,
       options:CompressOptions(preset:CompressPreset.p720,
+        maxLongSidePx:1280,maxFps:30,
+        videoBitrateBps:lowBandwidth?2000000:4000000,
         audio:stripAudio?const AudioStrip():const AudioPassthrough()));
     final progress=job.progress.listen((value) {
       onProgress?.call((value/100).clamp(0.0,1.0));
