@@ -6,6 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_ui/features/circles/presentation/screens/friend_details_screen.dart';
 import 'package:orbit_ui/features/circles/domain/models/friend_details_models.dart';
 import 'package:orbit_ui/features/moments/data/orbit_moment_repository.dart';
+import 'package:orbit_ui/features/moments/domain/models/moments_models.dart';
+import 'package:orbit_ui/features/moments/presentation/screens/moments_screen.dart';
 import 'package:orbit_ui/features/profile/presentation/screens/orbit_live_profile_moments.dart';
 
 class _PrivateMoments extends OrbitMomentRepository {
@@ -81,6 +83,39 @@ void main() {
     expect(find.byType(Image),findsNothing);
     expect(find.text('No Moments yet'),findsOneWidget);
     expect(repo.checks,greaterThan(1));
+  });
+
+  testWidgets('M7 feed presents a real continuation control', (tester) async {
+    var loads=0;
+    await tester.binding.setSurfaceSize(const Size(390,844));
+    addTearDown(()=>tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(MaterialApp(home:MomentsScreen(
+      stories:const [],
+      feedItems:const [
+        MomentTextFeedItem(
+          id:'moment-one',
+          author:MomentAuthorData(id:'creator-1',name:'Orbit member'),
+          timeLabel:'Just now',
+          text:'Encrypted content preview',
+        ),
+      ],
+      privateMode:true,
+      onSearchPressed:(){},onFilterPressed:(){},
+      onMessagesPressed:(){},onStoryPressed:(_){},
+      onLikeChanged:(_,__){},onCommentPressed:(_){},
+      onBookmarkChanged:(_,__){},onSharePressed:(_){},
+      onTextMenuPressed:(_){},onFeedItemPressed:(_){},
+      onTabSelected:(_){},onAddPressed:(){},
+      hasMore:true,onLoadMore:()=>loads++,
+    )));
+    await tester.pumpAndSettle();
+    final more=find.byKey(const Key('moments_load_more'));
+    expect(more,findsOneWidget);
+    await tester.ensureVisible(more);
+    await tester.tap(more);
+    await tester.pump();
+    expect(loads,1);
+    expect(tester.takeException(),isNull);
   });
 
   testWidgets('Circle Moment thumbnails disappear on app background',
