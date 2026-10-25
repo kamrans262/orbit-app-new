@@ -1375,7 +1375,7 @@ class _CameraToolItem extends StatelessWidget {
   final String assetPath;
   final IconData? icon;
   final String label;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
