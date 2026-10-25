@@ -139,20 +139,29 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       final captions=<String,String>{};
       final places=<String,String>{};
       final unique=<String>{};
-      for(final m in [...rail,...moments]){
-        if(!unique.add(m.id))continue;
-        try {
-          names[m.creatorId]??=await _repo.name(m.creatorId);
-        }catch(_){names[m.creatorId]??='Orbit member';}
-        try {
-          previews[m.id]=await _repo.photo(m);
-          final text=await _repo.caption(m);
-          if(text!=null)captions[m.id]=text;
-          final place=await _repo.place(m);
-          if(place!=null)places[m.id]=place;
-        }catch(_){
-          // An expired or revoked key never uses an unauthenticated media URL.
-        }
+      final prefetch=<OrbitLiveMoment>[
+        for(final m in [...rail,...moments])
+          if(unique.add(m.id))m,
+      ];
+      // Next-two bounded prefetch: three authorized thumbnail/decrypt requests
+      // at most. Avoid serial head-of-line latency and unbounded media memory.
+      for(var index=0;index<prefetch.length;index+=3){
+        final batch=prefetch.skip(index).take(3);
+        await Future.wait(batch.map((m) async {
+          try {
+            names[m.creatorId]??=await _repo.name(m.creatorId);
+          }catch(_){names[m.creatorId]??='Orbit member';}
+          try {
+            previews[m.id]=await _repo.photo(m);
+            final text=await _repo.caption(m);
+            if(text!=null)captions[m.id]=text;
+            final place=await _repo.place(m);
+            if(place!=null)places[m.id]=place;
+          }catch(_){
+            // An expired or revoked key never uses a public-media fallback.
+          }
+        }));
+        if(!mounted || epoch!=_loadEpoch)break;
       }
       if(!mounted || epoch!=_loadEpoch){
         for(final bytes in previews.values)unawaited(MemoryImage(bytes).evict());
