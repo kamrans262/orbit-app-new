@@ -95,6 +95,24 @@ class OrbitMomentRepository {
     if(d is! Map)throw const FormatException('Unexpected private Moments response.');
     return Map<String,dynamic>.from(d);
   }
+  Future<List<Map<String,dynamic>>> notifications() async {
+    final result=await _api('GET','/me/moments/notifications');
+    final items=result['items'];
+    if(items is! List)throw const FormatException('Private notices malformed.');
+    return items.map((x)=>Map<String,dynamic>.from(x as Map)).toList();
+  }
+
+  Future<OrbitLiveMoment> notificationMoment(String id,String context) async {
+    final data=await _api('GET',
+      '/moments/${Uri.encodeComponent(id)}?context_id=${Uri.encodeQueryComponent(context)}');
+    return OrbitLiveMoment.fromJson(data);
+  }
+
+  Future<void> markNotificationRead(String id) async {
+    await _identity.socialRequest('POST',
+      '/me/moments/notifications/${Uri.encodeComponent(id)}/read');
+  }
+
   Future<List<OrbitLiveMoment>> feed({
     bool rail=false,String? circleId,String? profileId,int maxItems=120,
   }) async {
