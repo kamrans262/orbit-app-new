@@ -352,6 +352,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
     }catch(_){if(mounted)unawaited(_load());}
   }
   Future<void> _shareAuthorizedMoment(MomentImageFeedItem item) async {
+    if(_showingOfflinePreviews)return;
     OrbitLiveMoment? selected;
     for(final m in _items)if(m.id==item.id){selected=m;break;}
     if(selected==null)return;
@@ -452,6 +453,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       MomentsScreen(
       key:const Key('orbit_m7_live_moments'),
       stories:stories,feedItems:feed,privateMode:true,
+      privateReadOnly:_showingOfflinePreviews,
       privateBookmarking:true,
       privateSharing:true,
       viewState:_busy?MomentsViewState.loading:
