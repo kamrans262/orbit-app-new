@@ -168,6 +168,15 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
     greetingName:_greeting,
     useLiveDate:true,
     quickActions:const <QuickActionData>[
+      QuickActionData(id:'ping',title:'Ping',
+        icon:Icons.bolt_rounded,
+        iconColor:Color(0xFF7C3AED),iconBackground:Color(0xFFF2EAFE)),
+      QuickActionData(id:'sos',title:'SOS',
+        icon:Icons.sos_rounded,
+        iconColor:Color(0xFFF43F8E),iconBackground:Color(0xFFFFE1EE)),
+      QuickActionData(id:'explore',title:'Explore',
+        icon:Icons.explore_outlined,
+        iconColor:Color(0xFF4978F2),iconBackground:Color(0xFFE7EDFF)),
       QuickActionData(id:'moment',title:'Moment',
         icon:Icons.photo_camera_outlined,
         iconColor:Color(0xFF16B88B),iconBackground:Color(0xFFE2F8F2)),
@@ -183,6 +192,11 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
         Navigator.of(context).push<void>(MaterialPageRoute(
           builder:(_)=>OrbitLiveMomentsScreen(onTabSelected:(_){},
             onAddPressed:(){})));
+      }else{
+        // M7 must not pretend future Ping, SOS or Explore features are
+        // operational; preserve the approved four-action Home layout.
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content:Text('${action.title} is not yet enabled. No data was shared.')));
       }
     },
     onPlanPressed:(_){},
