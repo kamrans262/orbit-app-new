@@ -13,6 +13,7 @@ enum OrbitPopupType {
   logout,
   deleteAccount,
   deleteMoment,
+  discardMomentDraft,
   stayConnected,
   cameraPermission,
   momentError,
@@ -137,6 +138,22 @@ Future<void> showDeleteMomentPopup(
     secondaryStyle: OrbitPopupActionStyle.text,
   );
 }
+
+Future<void> showDiscardMomentDraftPopup(
+  BuildContext context,{required OrbitPopupCallback onDiscard},
+) => _showConfiguredPopup(
+  context,type:OrbitPopupType.discardMomentDraft,
+  title:'Discard encrypted draft',
+  description:'This draft can no longer be recovered safely. Discard its encrypted files? This cannot be undone.',
+  assetPath:'assets/popup/delete.svg',
+  motion:OrbitPopupIllustrationMotion.scaleIn,
+  illustrationSvgSize:82,
+  primaryLabel:'Discard draft',
+  primaryStyle:OrbitPopupActionStyle.destructive,
+  onPrimary:onDiscard,
+  secondaryLabel:'Cancel',
+  secondaryStyle:OrbitPopupActionStyle.text,
+);
 
 Future<void> showStayConnectedPopup(
   BuildContext context, {
