@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../core/popups/orbit_popup_variants.dart';
@@ -264,6 +265,23 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       });
     }catch(_){if(mounted)unawaited(_load());}
   }
+  Future<void> _shareAuthorizedMoment(MomentImageFeedItem item) async {
+    OrbitLiveMoment? selected;
+    for(final m in _items)if(m.id==item.id){selected=m;break;}
+    if(selected==null)return;
+    try{
+      // Sharing this reference never shares ciphertext, keys or privileges.
+      // The receiving installation must authenticate and pass current ACLs.
+      final current=await _repo.authorizedMoment(selected.id);
+      if(!mounted || current.id!=selected.id)return;
+      await Share.share('View this private Moment in Orbit if you have access:\n'
+        'orbit://moment/${Uri.encodeComponent(current.id)}');
+    }catch(_){
+      if(mounted)ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content:Text('This private Moment is no longer shareable.')));
+    }
+  }
+
   Future<void> _setBookmark(MomentImageFeedItem item,bool saved) async {
     OrbitLiveMoment? current;
     for(final entry in _items)if(entry.id==item.id){current=entry;break;}
@@ -348,6 +366,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       key:const Key('orbit_m7_live_moments'),
       stories:stories,feedItems:feed,privateMode:true,
       privateBookmarking:true,
+      privateSharing:true,
       viewState:_busy?MomentsViewState.loading:
         _error!=null?MomentsViewState.error:
         feed.isEmpty?MomentsViewState.empty:MomentsViewState.populated,
@@ -358,7 +377,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       onLikeChanged:(item,liked)=>unawaited(_react(item,liked)),
       onCommentPressed:(item)=>_openById(item.id),
       onBookmarkChanged:(item,value)=>unawaited(_setBookmark(item,value)),
-      onSharePressed:(item){},
+      onSharePressed:(item)=>unawaited(_shareAuthorizedMoment(item)),
       onTextMenuPressed:(item){},
       onFeedItemPressed:(item)=>_openById(item.id),
       onTabSelected:widget.onTabSelected,onAddPressed:(){},
