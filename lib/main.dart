@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'app/app.dart';
@@ -6,11 +7,13 @@ import 'features/auth/data/orbit_identity_client.dart';
 import 'core/navigation/orbit_bottom_add_coordinator.dart';
 import 'features/app_update/presentation/orbit_update_runtime.dart';
 import 'features/connectivity/presentation/orbit_connectivity_runtime.dart';
+import 'features/moments/data/orbit_m7_background_retry.dart';
 import 'features/create/presentation/screens/orbit_create_sheet.dart';
 import 'features/splash/presentation/screens/orbit_splash_gate.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  unawaited(OrbitM7BackgroundRetry.initialize());
 
   // One source of truth for the shared bottom-navigation + button.
   // Wherever the shared bottom bar is visible, + opens the Create sheet.
