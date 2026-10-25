@@ -325,7 +325,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       const MomentStoryData(id:'add',name:'You',isAddStory:true),
       for(final m in grouped)MomentStoryData(
         id:m.id,name:_names[m.creatorId]??'Orbit member',
-        imageBytes:_previews[m.id],
+        imageBytes:_previews[m.id],ageLabel:_relative(m.publishedAt),
         isCircle:m.contextId.startsWith('circle:'),
         isUnseen:groupUnseen[m.contextId+'|'+m.creatorId]??false),
     ];
