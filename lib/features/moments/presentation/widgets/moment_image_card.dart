@@ -18,6 +18,7 @@ class MomentImageCard extends StatelessWidget {
     required this.onSharePressed,
     this.onViewPressed,
     this.privateMode=false,
+    this.privateSharing=false,
     this.privateBookmarking=false,
     super.key,
   });
@@ -31,6 +32,7 @@ class MomentImageCard extends StatelessWidget {
   final VoidCallback onSharePressed;
   final VoidCallback? onViewPressed;
   final bool privateMode;
+  final bool privateSharing;
   final bool privateBookmarking;
 
   @override
@@ -75,7 +77,7 @@ class MomentImageCard extends StatelessWidget {
                     child: _ImageCardHeader(
                       data: data,
                       onSharePressed:onSharePressed,
-                      showShare:!privateMode,
+                      showShare:!privateMode || privateSharing,
                     ),
                   ),
                   Positioned(
