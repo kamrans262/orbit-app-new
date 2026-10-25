@@ -36,6 +36,19 @@ void main(){
       const MomentPhotoEdit(beautyStrength:0.5)),throwsFormatException);
   });
 
+  test('Photo data saver uses 1080px versus standard 1440px output',(){
+    final large=Uint8List.fromList(img.encodePng(
+      img.Image(width:1800,height:1200)));
+    final normal=img.decodeJpg(MomentPhotoProcessor.render(
+      large,const MomentPhotoEdit()))!;
+    final saver=img.decodeJpg(MomentPhotoProcessor.render(
+      large,const MomentPhotoEdit(maxLongSide:1080)))!;
+    expect(normal.width,1440);
+    expect(saver.width,1080);
+    expect(()=>MomentPhotoProcessor.render(
+      large,const MomentPhotoEdit(maxLongSide:2000)),throwsFormatException);
+  });
+
   test('Rejects too-long overlay before upload',(){
     expect(()=>MomentPhotoProcessor.render(source,MomentPhotoEdit(
       text:List<String>.filled(81,'x').join())),throwsFormatException);
