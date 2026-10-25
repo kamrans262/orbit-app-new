@@ -128,7 +128,7 @@ class OrbitMomentCaptureVault {
       rethrow;
     }
     final oldName=previous?['name'];
-    if(oldName is String && RegExp(r'^[a-fA-F0-9-]{36}\\.cipher$').hasMatch(oldName)
+    if(oldName is String && RegExp(r'^[a-fA-F0-9-]{36}\.cipher$').hasMatch(oldName)
         && oldName!=metadata['name']){
       final old=File('${(await _root(owner)).path}/$oldName');
       if(await old.exists())await old.delete();
@@ -151,7 +151,7 @@ class OrbitMomentCaptureVault {
     final id=data['id'];
     final kind=data['kind'];
     if(name is! String || id is! String ||
-       !RegExp(r'^[a-fA-F0-9-]{36}\\.cipher$').hasMatch(name) ||
+       !RegExp(r'^[a-fA-F0-9-]{36}\.cipher$').hasMatch(name) ||
        !RegExp(r'^[a-fA-F0-9-]{36}$').hasMatch(id) ||
        !['image','video','audio'].contains(kind)){
       throw const FormatException('Untrusted encrypted capture index.');
@@ -242,7 +242,7 @@ class OrbitMomentCaptureVault {
     final metadata=await _metadata(owner);
     await _vault.delete(_index(owner));
     final name=metadata?['name'];
-    if(name is String && RegExp(r'^[a-fA-F0-9-]{36}\\.cipher$').hasMatch(name)){
+    if(name is String && RegExp(r'^[a-fA-F0-9-]{36}\.cipher$').hasMatch(name)){
       final file=File('${(await _root(owner)).path}/$name');
       if(await file.exists())await file.delete();
     }
