@@ -73,7 +73,7 @@ jobs:
           path: build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error
   ios-simulator-compile:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.target == 'ios' }}
+    if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/integration/m2-m5-flutter-consolidated-2026-10-24') || (github.event_name == 'workflow_dispatch' && inputs.target == 'ios') }}
     runs-on: macos-15
     timeout-minutes: 45
     steps:
