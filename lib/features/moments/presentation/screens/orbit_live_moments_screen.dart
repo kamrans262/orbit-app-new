@@ -10,6 +10,8 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_primary_button.dart';
 
 import '../../data/orbit_moment_repository.dart';
+import '../../data/orbit_moment_offline_cache.dart';
+import '../../../auth/data/orbit_identity_client.dart';
 import '../../../media/data/orbit_moment_media_stager.dart';
 import '../../domain/models/moments_models.dart';
 import '../screens/moment_camera_screen.dart';
@@ -29,6 +31,7 @@ class OrbitLiveMomentsScreen extends StatefulWidget {
 }
 class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with WidgetsBindingObserver {
   final OrbitMomentRepository _repo=OrbitMomentRepository();
+  final OrbitMomentOfflineCache _offline=OrbitMomentOfflineCache();
   List<OrbitLiveMoment> _items=const [];
   List<OrbitLiveMoment> _rail=const [];
   final Map<String,Uint8List> _previews={};
@@ -41,6 +44,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
   final Set<String> _bookmarked={};
   final Set<String> _seen={};
   bool _busy=true;
+  bool _showingOfflinePreviews=false;
   String? _error;
   int _pendingPublishCount=0;
   String? _pendingWarning;
@@ -96,6 +100,38 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
     WidgetsBinding.instance.removeObserver(this);
     _evictDecodedMedia();
     super.dispose();
+  }
+
+  Future<bool> _showValidOfflinePreviews(int epoch) async {
+    try{
+      final previews=await _offline.read();
+      if(previews.isEmpty || !mounted || epoch!=_loadEpoch)return false;
+      final items=<OrbitLiveMoment>[];
+      final bytes=<String,Uint8List>{};
+      final labels=<String,String>{};
+      for(final preview in previews){
+        items.add(OrbitLiveMoment(
+          id:preview.id,creatorId:preview.creatorId,
+          mediaId:preview.mediaId,contextId:preview.contextId,
+          publishedAt:preview.publishedAt));
+        bytes[preview.id]=preview.bytes;
+        labels[preview.creatorId]='Offline preview';
+      }
+      setState((){
+        _evictDecodedMedia();
+        _items=items;
+        _rail=items.where((m)=>DateTime.now().toUtc()
+          .isBefore(m.publishedAt.add(const Duration(hours:24)))).toList();
+        _previews..clear()..addAll(bytes);
+        _names..clear()..addAll(labels);
+        _likes.clear();_bookmarked.clear();_seen.clear();
+        _captions.clear();_places.clear();
+        _showingOfflinePreviews=true;
+        _error=null;
+        _busy=false;
+      });
+      return true;
+    }catch(_){return false;}
   }
 
   Future<void> _load() async {
@@ -168,7 +204,30 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         for(final bytes in previews.values)unawaited(MemoryImage(bytes).evict());
         return;
       }
+      // A new authenticated feed is authoritative: evict any stale audience
+      // entries before issuing new short server-bound encrypted preview leases.
+      try {
+        await _offline.reconcile(moments.map((m)=>m.id).toSet());
+        for(final m in prefetch.take(3)){
+          if(!mounted || epoch!=_loadEpoch)break;
+          final preview=previews[m.id];
+          if(preview==null || preview.length>OrbitMomentOfflineCache.maxPreviewBytes)continue;
+          try {
+            final lease=await _repo.offlinePreviewLease(m);
+            if(!mounted || epoch!=_loadEpoch)break;
+            await _offline.save(
+              id:m.id,mediaId:m.mediaId,creatorId:m.creatorId,
+              contextId:m.contextId,publishedAt:m.publishedAt,
+              issuedAt:lease.issued,expiresAt:lease.expires,
+              viewExpiresAt:lease.viewExpires,preview:preview);
+          }catch(_){
+            // Failure to obtain current server lease disables offline reuse.
+          }
+        }
+      }catch(_){}
+      if(!mounted || epoch!=_loadEpoch)return;
       setState((){
+        _showingOfflinePreviews=false;
         _evictDecodedMedia();
         _items=moments;_rail=rail;_options=options;
         _likes..clear()..addAll(moments.where((item)=>item.myReaction=='like').map((item)=>item.id));
@@ -179,6 +238,24 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         _captions..clear()..addAll(captions);
         _places..clear()..addAll(places);
         _busy=false;
+      });
+    }on OrbitIdentityException catch(error){
+      if(error.statusCode==null || (error.statusCode!=null &&
+          error.statusCode!>=500)){
+        if(await _showValidOfflinePreviews(epoch))return;
+      }else{
+        // A server authorization denial is never an offline-cache fallback.
+        try{
+          final owner=await OrbitIdentityClient.instance.currentLocalSocialOwner();
+          if(owner!=null)await _offline.purge(owner);
+        }catch(_){}
+      }
+      if(mounted && epoch==_loadEpoch)setState((){
+        _evictDecodedMedia();
+        _items=const [];_rail=const [];
+        _names.clear();_likes.clear();_bookmarked.clear();
+        _showingOfflinePreviews=false;_busy=false;
+        _error='Unable to verify private Moments. Check your connection.';
       });
     }catch(_){
       if(mounted && epoch==_loadEpoch)setState((){
@@ -231,6 +308,12 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
   Future<void> _openViewer(OrbitLiveMoment item,
       {bool storyGroup=false}) async {
     if(!mounted)return;
+    if(_showingOfflinePreviews){
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content:Text(
+          'Offline previews are read-only. Reconnect to verify this Moment.')));
+      return;
+    }
     final source=storyGroup
       ? <OrbitLiveMoment>[..._rail,..._items] : _items;
     final found=<String>{};
@@ -382,6 +465,17 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       onFeedItemPressed:(item)=>_openById(item.id),
       onTabSelected:widget.onTabSelected,onAddPressed:(){},
       cameraBuilder:(_)=>_camera(),
+    ),
+    if(_showingOfflinePreviews)Positioned(
+      top:68,left:16,right:16,
+      child:Material(
+        color:AppColors.background,
+        elevation:2,
+        borderRadius:BorderRadius.circular(16),
+        child:Padding(padding:const EdgeInsets.all(12),
+          child:Text('Offline preview · access will expire soon',
+            textAlign:TextAlign.center,style:AppTypography.bodyMuted)),
+      ),
     ),
     if(_pendingPublishCount>0)Positioned(
       bottom:90,left:16,right:16,
