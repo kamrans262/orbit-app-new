@@ -463,7 +463,8 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
       backgroundColor:AppColors.background,
       shape:const RoundedRectangleBorder(
         borderRadius:BorderRadius.vertical(top:Radius.circular(28))),
-      builder:(sheet)=>Padding(padding:const EdgeInsets.all(20),
+      builder:(sheet)=>SingleChildScrollView(child:Padding(
+        padding:const EdgeInsets.all(20),
         child:Column(mainAxisSize:MainAxisSize.min,
           crossAxisAlignment:CrossAxisAlignment.stretch,children:[
           Text('Manage Moment',style:AppTypography.smallHeading),
@@ -483,7 +484,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
           ListTile(leading:const Icon(Icons.delete_outline_rounded),
             title:Text('Delete Moment',style:AppTypography.body),
             onTap:()=>Navigator.of(sheet).pop('delete')),
-        ])),
+        ]))),
     );
     if(!mounted)return;
     switch(action){
