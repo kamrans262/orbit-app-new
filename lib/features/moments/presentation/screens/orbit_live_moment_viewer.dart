@@ -168,11 +168,11 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
       if(!await widget.repository.remainsAuthorized(current)){
         throw StateError('Audience authorization expired');
       }
-      final photo=current.mediaKind=='image'
-        ? await widget.repository.photo(current,variant:'original')
-        : current.mediaKind=='audio'
-          ? await widget.repository.photo(current,variant:'thumbnail')
-          : Uint8List(0);
+      // First display a separately authorized thumbnail; request the
+      // original only after another live permission check.
+      final photo=current.mediaKind=='image' || current.mediaKind=='audio'
+        ? await widget.repository.photo(current,variant:'thumbnail')
+        : Uint8List(0);
       final caption=await widget.repository.caption(current);
       await widget.repository.view(current);
       String? viewer;
@@ -191,6 +191,9 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
           _loading=false;
         });
         _schedule();
+        if(current.mediaKind=='image'){
+          unawaited(_upgradeOriginal(current,epoch));
+        }
       }else{
         unawaited(MemoryImage(photo).evict());
       }
@@ -202,6 +205,26 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
       });
     }
   }
+  Future<void> _upgradeOriginal(OrbitLiveMoment current,int epoch) async {
+    Uint8List? original;
+    try {
+      if(!await widget.repository.remainsAuthorized(current))return;
+      original=await widget.repository.photo(current,variant:'original');
+      if(!await widget.repository.remainsAuthorized(current))return;
+      if(!mounted || epoch!=_loadEpoch || _loading ||
+         _error!=null || _current.id!=current.id)return;
+      final thumbnail=_photo;
+      setState(()=>_photo=original);
+      original=null; // The active widget now owns these decrypted bytes.
+      if(thumbnail!=null)unawaited(MemoryImage(thumbnail).evict());
+    }catch(_){
+      // A failed download never reveals a public original or hides the
+      // thumbnail that was previously authorized.
+    }finally{
+      if(original!=null)unawaited(MemoryImage(original).evict());
+    }
+  }
+
   Future<void> _toggleLike() async {
     if(_sending)return;
     final liked=!_liked;setState(()=>_sending=true);
