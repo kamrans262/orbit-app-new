@@ -51,6 +51,9 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
   String? _pendingWarning;
   bool _retrying=false;
   bool _publishingNow=false;
+  bool _loadingMore=false;
+  bool _hasMore=false;
+  int _feedLimit=30;
   String? _lastPublishFailure;
   Timer? _authorizationRefresh;
   int _loadEpoch=0;
@@ -130,6 +133,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         _likes.clear();_bookmarked.clear();_seen.clear();
         _captions.clear();_places.clear();
         _showingOfflinePreviews=true;
+        _hasMore=false;
         _error=null;
         _busy=false;
       });
@@ -137,7 +141,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
     }catch(_){return false;}
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool incremental=false}) async {
     if(!mounted)return;
     if(!OrbitM7Rollout.enabled){
       ++_loadEpoch;
@@ -150,6 +154,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         _bookmarked.clear();
         _seen.clear();
         _showingOfflinePreviews=false;
+        _hasMore=false;
         _pendingPublishCount=0;
         _pendingWarning=null;
         _error=null;
@@ -158,7 +163,10 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       return;
     }
     final epoch=++_loadEpoch;
-    setState((){_busy=true;_error=null;});
+    setState((){
+      if(!incremental)_busy=true;
+      _error=null;
+    });
     try {
       // Resume only this account's encrypted outbox while foregrounded.
       // Failures leave the original ciphertext queued without fake success.
@@ -178,8 +186,11 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         _pendingPublishCount=waiting;
         _pendingWarning=pendingProblem;
       });
-      final moments=await _repo.feed(maxItems:30,
+      // Fetch one extra item to expose real authenticated cursor continuation.
+      final page=await _repo.feed(maxItems:_feedLimit+1,
         circleId:widget.circleId,profileId:widget.profileId);
+      final hasMore=page.length>_feedLimit;
+      final moments=page.take(_feedLimit).toList(growable:false);
       final rail=widget.circleId!=null||widget.profileId!=null
         ? moments.where((m)=>DateTime.now().difference(m.publishedAt)
           <const Duration(hours:24)).take(20).toList(growable:false)
@@ -253,6 +264,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         _showingOfflinePreviews=false;
         _evictDecodedMedia();
         _items=moments;_rail=rail;_options=options;
+        _hasMore=hasMore && _feedLimit<240;
         _likes..clear()..addAll(moments.where((item)=>item.myReaction=='like').map((item)=>item.id));
         _bookmarked..clear()..addAll(saved);
         _previews..clear()..addAll(previews);
@@ -292,6 +304,20 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       });
     }
   }
+  Future<void> _loadMore() async {
+    if(!mounted || _busy || _loadingMore || !_hasMore ||
+       _showingOfflinePreviews || !OrbitM7Rollout.enabled)return;
+    setState((){
+      _loadingMore=true;
+      _feedLimit=(_feedLimit+30).clamp(30,240);
+    });
+    try{
+      await _load(incremental:true);
+    }finally{
+      if(mounted)setState(()=>_loadingMore=false);
+    }
+  }
+
   Future<void> _retryEncryptedDrafts() async {
     if(!mounted || _retrying)return;
     setState(()=>_retrying=true);
@@ -528,6 +554,9 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       key:const Key('orbit_m7_live_moments'),
       stories:stories,feedItems:feed,privateMode:true,
       pendingCard:_pendingCard(),
+      hasMore:_hasMore && !_showingOfflinePreviews,
+      loadingMore:_loadingMore,
+      onLoadMore:()=>unawaited(_loadMore()),
       privateReadOnly:_showingOfflinePreviews,
       privateBookmarking:true,
       privateSharing:true,
