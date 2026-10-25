@@ -676,7 +676,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 data: person,
                 onTap: () {
                   widget.onFavoritePersonPressed(person);
-                  _openFavoriteCircleDetails();
+                  if(widget.enableDemoCircleNavigation)_openFavoriteCircleDetails();
                 },
               );
             },
