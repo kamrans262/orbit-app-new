@@ -1,7 +1,7 @@
 name: Orbit M7 Flutter Moments validation
 on:
   push:
-    branches: [feature/m7-moments-flutter]
+    branches: [feature/m7-moments-flutter, integration/m2-m5-flutter-consolidated-2026-10-24]
   workflow_dispatch:
     inputs:
       target:
@@ -36,6 +36,7 @@ jobs:
           flutter test test/features/moments/presentation/widgets/orbit_m7_live_publish_test.dart
           flutter test test/features/moments/presentation/widgets/orbit_m7_gallery_capture_test.dart
           flutter test test/features/moments/data/orbit_moment_intent_vault_test.dart
+          flutter test test/features/moments/data/orbit_moment_capture_vault_test.dart
           flutter test test/features/moments/data/moment_photo_processor_test.dart
           flutter test test/features/media/orbit_media_recovery_coordinator_test.dart
           flutter test test/features/moments/data/orbit_moment_offline_cache_test.dart
@@ -44,7 +45,7 @@ jobs:
           flutter test test/features/moments/presentation/moments_screen_test.dart
 
   android-native-compile:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.target == 'android' }}
+    if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/integration/m2-m5-flutter-consolidated-2026-10-24') || (github.event_name == 'workflow_dispatch' && inputs.target == 'android') }}
     runs-on: ubuntu-latest
     timeout-minutes: 65
     steps:
