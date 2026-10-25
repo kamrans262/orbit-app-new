@@ -46,8 +46,8 @@ class OrbitStoredMomentIntent {
 }
 
 /// Each access checks the active account even when another account's vault
-/// index still exists on the device. Queue replay is explicitly initiated by
-/// an authenticated user; never publish from background isolates.
+/// index still exists on the device. Only user-queued, encrypted intents can
+/// replay after fresh server/device-trust validation, including headless tasks.
 class OrbitMomentIntentVault {
   OrbitMomentIntentVault({OrbitMediaVault? vault,
     Future<String?> Function()? owner})
