@@ -712,7 +712,7 @@ class OrbitMomentRepository {
       throw StateError('Existing Moment media key is not authorized.');
     }
     return OrbitSealedMedia(file:File(''),key:material.key,
-      noncePrefix:material.prefix,plainBytes:0,bytes:0,sha256:'',
+      noncePrefix:material.prefix,plainBytes:material.length,bytes:0,sha256:'',
       ownerId:owner,transferId:material.transfer,
       purpose:material.purpose,variant:variant);
   }
