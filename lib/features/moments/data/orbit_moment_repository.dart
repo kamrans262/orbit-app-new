@@ -13,6 +13,7 @@ import '../../media/data/orbit_moment_media_stager.dart';
 import '../../media/data/orbit_encrypted_clip_stager.dart';
 import '../domain/models/moment_publish_models.dart';
 import 'orbit_moment_intent_vault.dart';
+import 'orbit_m7_background_retry.dart';
 import 'orbit_moment_seen_vault.dart';
 import 'orbit_moment_bookmark_vault.dart';
 import '../../media/data/orbit_media_outbox.dart';
@@ -332,6 +333,8 @@ class OrbitMomentRepository {
         locationConsent:request.locationConsent,
         taggedUserIds:request.taggedUserIds.toList(),
         createdAt:DateTime.now().toUtc()));
+      // Scheduling is best-effort. Preserve the secure draft if it fails.
+      try{await OrbitM7BackgroundRetry.schedule();}catch(_){}
     }
     String? id;
     Future<void> commit(OrbitSealedMedia original,OrbitSealedMedia? derivative,
@@ -489,8 +492,9 @@ class OrbitMomentRepository {
     return removed;
   }
 
-  /// User-initiated or foreground retry only. Never publish from a background
-  /// worker, and do not treat encrypted upload success as Moment publication.
+  /// Only encrypted, user-queued intents may be replayed by a verified session
+  /// in the foreground or an OS-delivered background callback. Upload is not
+  /// considered publication until a Laravel idempotent receipt is confirmed.
   Future<int> resumePendingPublishes({
     void Function(double progress)? onProgress,
     bool force=false,
