@@ -49,6 +49,8 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
   int _pendingPublishCount=0;
   String? _pendingWarning;
   bool _retrying=false;
+  bool _publishingNow=false;
+  String? _lastPublishFailure;
   Timer? _authorizationRefresh;
   int _loadEpoch=0;
 
@@ -397,9 +399,21 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
     momentAudienceFriends:_options.friends,
     momentPrivacyAudience:_options.privacy,
     publishMoment:(request,progress) async {
-      final receipt=await _repo.publish(request,progress);
-      unawaited(_load());
-      return receipt;
+      if(mounted)setState((){
+        _publishingNow=true;
+        _lastPublishFailure=null;
+      });
+      try{
+        final receipt=await _repo.publish(request,progress);
+        if(mounted)unawaited(_load());
+        return receipt;
+      }catch(_){
+        if(mounted)setState(()=>_lastPublishFailure=
+          'Failed to send Moment. Your encrypted draft is retained if queued.');
+        rethrow;
+      }finally{
+        if(mounted)setState(()=>_publishingNow=false);
+      }
     },
   );
   @override
@@ -460,6 +474,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         _error!=null?MomentsViewState.error:
         feed.isEmpty?MomentsViewState.empty:MomentsViewState.populated,
       errorMessage:_error??'Moments unavailable.',
+      onRefresh:_load,
       onSearchPressed:(){},onFilterPressed:()=>unawaited(_load()),
       onMessagesPressed:(){},
       onStoryPressed:(story)=>_openById(story.id,storyGroup:true),
@@ -483,7 +498,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
             textAlign:TextAlign.center,style:AppTypography.bodyMuted)),
       ),
     ),
-    if(_pendingPublishCount>0)Positioned(
+    if(_publishingNow || _pendingPublishCount>0 || _lastPublishFailure!=null)Positioned(
       bottom:90,left:16,right:16,
       child:Material(
         color:AppColors.background,
@@ -493,19 +508,26 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
           padding:const EdgeInsets.all(12),
           child:Column(mainAxisSize:MainAxisSize.min,children:[
             Text(
-              _pendingWarning??'$_pendingPublishCount encrypted Moment draft(s) waiting to send',
+              _publishingNow?'Sending encrypted Moment…':
+              _pendingWarning!=null?'Failed / Waiting for connection: $_pendingWarning':
+              _lastPublishFailure??'Waiting for connection · $_pendingPublishCount encrypted Moment draft(s)',
               textAlign:TextAlign.center,style:AppTypography.body),
             const SizedBox(height:8),
-            if((_pendingWarning??'').startsWith('Draft needs review') ||
-                (_pendingWarning??'').startsWith('Encrypted draft is incomplete'))
+            if(!_publishingNow && ((_pendingWarning??'').startsWith('Draft needs review') ||
+                (_pendingWarning??'').startsWith('Encrypted draft is incomplete')))
               AppPrimaryButton(label:'Discard unrecoverable draft',
                 enabled:!_retrying,
                 onPressed:()=>unawaited(_discardUnrecoverable()))
-            else
+            else if(!_publishingNow && _pendingPublishCount>0)
               AppPrimaryButton(
                 label:_retrying?'Sending…':'Retry encrypted draft',
                 enabled:!_retrying,
                 onPressed:()=>unawaited(_retryEncryptedDrafts())),
+            if(!_publishingNow && _pendingPublishCount==0 && _lastPublishFailure!=null)
+              TextButton(
+                onPressed:()=>setState(()=>_lastPublishFailure=null),
+                child:const Text('Dismiss'),
+              ),
           ]),
         ),
       ),
