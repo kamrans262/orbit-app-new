@@ -67,6 +67,16 @@ class MomentStoryAvatar extends StatelessWidget {
                       ),
                     ),
             ),
+            if(data.isCircle && !data.isAddStory)Positioned(
+              left:0,top:0,
+              child:Semantics(label:'Circle Moment',child:Container(
+                width:17,height:17,
+                decoration:BoxDecoration(color:AppColors.background,
+                  shape:BoxShape.circle,border:Border.all(color:AppColors.white)),
+                child:const Icon(Icons.groups_outlined,size:12,
+                  color:AppColors.primaryEnd),
+              )),
+            ),
             if(data.isUnseen&&!data.isAddStory)Positioned(
               right:0,bottom:0,
               child:Semantics(label:'Unseen private Moment',child:Container(
