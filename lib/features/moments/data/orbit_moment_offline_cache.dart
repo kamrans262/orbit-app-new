@@ -13,10 +13,11 @@ import '../../media/data/orbit_media_outbox.dart';
 class OrbitOfflineMomentPreview {
   const OrbitOfflineMomentPreview({
     required this.id,required this.mediaId,required this.creatorId,
-    required this.contextId,required this.publishedAt,
-    required this.leaseExpiresAt,required this.bytes,
+    required this.contextId,required this.audienceRevision,
+    required this.publishedAt,required this.leaseExpiresAt,required this.bytes,
   });
   final String id,mediaId,creatorId,contextId;
+  final int audienceRevision;
   final DateTime publishedAt,leaseExpiresAt;
   final Uint8List bytes;
 }
@@ -92,7 +93,8 @@ class OrbitMomentOfflineCache {
 
   Future<void> save({
     required String id,required String mediaId,required String creatorId,
-    required String contextId,required DateTime publishedAt,
+    required String contextId,required int audienceRevision,
+    required DateTime publishedAt,
     required DateTime issuedAt,required DateTime expiresAt,
     required DateTime viewExpiresAt,required Uint8List preview,
   }) async {
@@ -100,7 +102,7 @@ class OrbitMomentOfflineCache {
     await _verifyClock(account);
     final now=DateTime.now().toUtc();
     final issued=issuedAt.toUtc(),end=expiresAt.toUtc();
-    if(preview.isEmpty || preview.length>maxPreviewBytes ||
+    if(audienceRevision<1 || preview.isEmpty || preview.length>maxPreviewBytes ||
         issued.isBefore(now.subtract(const Duration(minutes:2))) ||
         issued.isAfter(now.add(const Duration(minutes:2))) ||
         !end.isAfter(now) || end.isAfter(issued.add(lease)) ||
@@ -126,7 +128,8 @@ class OrbitMomentOfflineCache {
       index.removeWhere((row)=>row['id']==id && row['context']==contextId);
       index.insert(0,{
         'id':id,'media_id':mediaId,'creator_id':creatorId,
-        'context':contextId,'published_at':publishedAt.toUtc().toIso8601String(),
+        'context':contextId,'revision':audienceRevision,
+        'published_at':publishedAt.toUtc().toIso8601String(),
         'until':end.toIso8601String(),'file':file.uri.pathSegments.last,
       });
       if(index.length>maxEntries){
@@ -177,6 +180,7 @@ class OrbitMomentOfflineCache {
           available.add(OrbitOfflineMomentPreview(
             id:id,mediaId:entry['media_id'] as String,
             creatorId:entry['creator_id'] as String,contextId:context,
+            audienceRevision:(entry['revision'] as num).toInt(),
             publishedAt:published,leaseExpiresAt:end,
             bytes:Uint8List.fromList(plain)));
           keep.add(entry);
@@ -196,14 +200,17 @@ class OrbitMomentOfflineCache {
   }
 
   /// Called only following a fresh successful authenticated feed response.
-  Future<void> reconcile(Set<String> authorized) async {
+  Future<void> reconcile(Set<String> authorizedContexts) async {
     final account=await _account();
     final root=await _root(account);
     final entries=await _entries(account);
     final keep=<Map<String,dynamic>>[];
     for(final e in entries){
       final id=e['id'];
-      if(id is String && authorized.contains(id)){
+      final context=e['context'];
+      final rev=e['revision'];
+      if(id is String && context is String && rev is int &&
+          authorizedContexts.contains('$id|$context|$rev')){
         keep.add(e);continue;
       }
       final name=e['file'];
