@@ -1,5 +1,7 @@
 import 'dart:async';
 import '../../../auth/data/orbit_identity_client.dart';
+import '../../../friends/data/orbit_social_repository.dart';
+import '../../../friends/presentation/screens/orbit_person_screen.dart';
 import 'package:flutter/material.dart';
 
 import '../../../moments/data/orbit_moment_repository.dart';
@@ -21,6 +23,8 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
     with WidgetsBindingObserver {
   final OrbitMomentRepository _moments=OrbitMomentRepository();
   List<MomentData> _recent=const [];
+  List<FavoritePersonData> _realFriends=const [];
+  final Map<String,OrbitPerson> _friendDetails={};
   String _greeting='';
   Timer? _revalidation;
   StreamSubscription<void>? _pushEvents;
@@ -85,6 +89,24 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
           setState(()=>_greeting=data['display_name'] as String);
         }
       }catch(_){}
+      // M4 friends are distinct from M5 Circles. Never invent online
+      // presence, favorite state or profile imagery.
+      try{
+        final page=await OrbitSocialRepository().friends();
+        if(mounted && epoch==_reloadEpoch)setState((){
+          _realFriends=page.items.take(20).map((person)=>FavoritePersonData(
+            id:person.id,name:person.name,status:'Friend',
+            imagePath:'',isOnline:false)).toList(growable:false);
+          _friendDetails
+            ..clear()
+            ..addEntries(page.items.map((p)=>MapEntry(p.id,p)));
+        });
+      }catch(_){
+        if(mounted && epoch==_reloadEpoch)setState((){
+          _realFriends=const [];
+          _friendDetails.clear();
+        });
+      }
       final rail=await _moments.feed(rail:true);
       final visible=<MomentData>[];
       final authorized=<String,OrbitLiveMoment>{};
@@ -152,7 +174,7 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
     ],
     upcomingPlans:const <UpcomingPlanData>[],
     promoBanner:null,
-    favoritePeople:const <FavoritePersonData>[],
+    favoritePeople:_realFriends,
     recentMoments:_recent,
     onNotificationPressed:()=>unawaited(_openNotices()),
     onQuickActionPressed:(action){
@@ -165,7 +187,12 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
     },
     onPlanPressed:(_){},
     onPromoPressed:(){},
-    onFavoritePersonPressed:(_){},
+    onFavoritePersonPressed:(person){
+      final live=_friendDetails[person.id];
+      if(live==null)return;
+      Navigator.of(context).push<void>(MaterialPageRoute(
+        builder:(_)=>OrbitPersonScreen(person:live)));
+    },
     onFavoriteToggle:(_){},
     onMomentPressed:(moment)=>unawaited(_view(moment)),
     onTabSelected:(_){},
