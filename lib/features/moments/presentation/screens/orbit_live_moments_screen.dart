@@ -269,17 +269,33 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
   Widget build(BuildContext context){
     final groups=<String,OrbitLiveMoment>{};
     final groupUnseen=<String,bool>{};
+    final newestInContext=<String,DateTime>{};
     for(final m in _rail){
       final groupKey=m.contextId+'|'+m.creatorId;
       groups.putIfAbsent(groupKey,()=>m);
+      final previous=newestInContext[m.contextId];
+      if(previous==null || m.publishedAt.isAfter(previous)){
+        newestInContext[m.contextId]=m.publishedAt;
+      }
       groupUnseen[groupKey]=(groupUnseen[groupKey]??false) ||
         !_seen.contains(m.id);
     }
+    // Preserve the internal Circle -> sender organization, with Circles
+    // ordered by newest eligible content and senders newest first.
+    final grouped=groups.values.toList()..sort((a,b){
+      final byContext=newestInContext[b.contextId]!
+        .compareTo(newestInContext[a.contextId]!);
+      if(byContext!=0)return byContext;
+      final byCircle=a.contextId.compareTo(b.contextId);
+      if(byCircle!=0)return byCircle;
+      return b.publishedAt.compareTo(a.publishedAt);
+    });
     final stories=<MomentStoryData>[
       const MomentStoryData(id:'add',name:'You',isAddStory:true),
-      for(final m in groups.values)MomentStoryData(
+      for(final m in grouped)MomentStoryData(
         id:m.id,name:_names[m.creatorId]??'Orbit member',
         imageBytes:_previews[m.id],
+        isCircle:m.contextId.startsWith('circle:'),
         isUnseen:groupUnseen[m.contextId+'|'+m.creatorId]??false),
     ];
     final feed=<MomentFeedItem>[
