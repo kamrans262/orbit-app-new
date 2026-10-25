@@ -121,7 +121,7 @@ Future<void> showDeleteAccountPopup(
 /// a Moment hides it immediately and queues encrypted-media purge; physical
 /// ciphertext erasure is asynchronous and controlled by the M6 worker.
 Future<void> showDeleteMomentPopup(
-  BuildContext context, {required OrbitPopupCallback onDelete},
+  BuildContext context, {required OrbitPopupCallback onDelete}
 ) {
   return _showConfiguredPopup(
     context,
@@ -140,7 +140,7 @@ Future<void> showDeleteMomentPopup(
 }
 
 Future<void> showDiscardMomentDraftPopup(
-  BuildContext context,{required OrbitPopupCallback onDiscard},
+  BuildContext context,{required OrbitPopupCallback onDiscard}
 ) => _showConfiguredPopup(
   context,type:OrbitPopupType.discardMomentDraft,
   title:'Discard encrypted draft',
