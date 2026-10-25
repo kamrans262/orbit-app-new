@@ -8,6 +8,7 @@ import 'package:workmanager/workmanager.dart';
 import '../../auth/data/orbit_identity_client.dart';
 import 'orbit_m7_rollout.dart';
 import 'orbit_moment_repository.dart';
+import 'orbit_moment_intent_vault.dart';
 
 /// OS best-effort background recovery of ciphertext the user has ALREADY
 /// explicitly queued. No camera capture, drafts awaiting review, or automatic
@@ -52,6 +53,25 @@ abstract final class OrbitM7BackgroundRetry {
     }
   }
 
+  /// Stop waking the OS when no safely retryable encrypted intent remains.
+  /// Keep any exhausted/expired ciphertext for explicit user review in Orbit.
+  static Future<void> cancelWhenIdle() async {
+    if(!Platform.isAndroid && !Platform.isIOS)return;
+    try {
+      final owner=await OrbitIdentityClient.instance.currentLocalSocialOwner();
+      if(owner==null){await cancel();return;}
+      final queued=await OrbitMomentIntentVault().pending(owner);
+      final now=DateTime.now().toUtc();
+      final eligible=queued.any((item)=>
+        item.attemptCount<8 &&
+        !now.difference(item.createdAt).isNegative &&
+        now.difference(item.createdAt)<=const Duration(days:7));
+      if(!eligible)await cancel();
+    }catch(_){
+      // A storage read failure must not discard unconfirmed private drafts.
+    }
+  }
+
   /// This can run in an OS-launched headless Flutter engine.
   static Future<bool> execute({
     Future<OrbitRestoreState> Function()? verifySession,
@@ -65,6 +85,7 @@ abstract final class OrbitM7BackgroundRetry {
       // for this verified account, checks the current allowed audience and
       // requires an idempotent Laravel publication receipt before completion.
       await (resume??OrbitMomentRepository().resumePendingPublishes)();
+      await cancelWhenIdle();
       return true;
     }catch(_){
       // Keep the OS periodic work scheduled and preserve the ciphertext for

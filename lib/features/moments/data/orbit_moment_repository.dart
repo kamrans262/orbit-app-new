@@ -404,6 +404,8 @@ class OrbitMomentRepository {
     }
     if(id==null)throw StateError('Moment not published.');
     if(stagedTransfer!=null)await _intents.remove(owner,stagedTransfer!);
+    // Retire OS work when the last secure queued intent completes.
+    try{await OrbitM7BackgroundRetry.cancelWhenIdle();}catch(_){}
     progress(1);
     return MomentPublishReceipt(momentId:id!);
   }

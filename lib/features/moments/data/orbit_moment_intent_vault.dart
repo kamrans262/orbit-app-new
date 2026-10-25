@@ -132,6 +132,16 @@ class OrbitMomentIntentVault {
     return next;
   }
 
+  /// Sign-out and account switch remove every secure publication intent.
+  /// This purge deliberately does not require a still-active auth session.
+  Future<void> purge(String owner) async {
+    if(owner.isEmpty)return;
+    for(final transfer in await _transfers(owner)){
+      await _vault.delete(_entry(owner,transfer));
+    }
+    await _vault.delete(_index(owner));
+  }
+
   Future<void> remove(String owner,String transfer) async {
     await _check(owner);
     await _vault.delete(_entry(owner,transfer));

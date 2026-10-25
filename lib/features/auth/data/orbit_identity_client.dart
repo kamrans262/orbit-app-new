@@ -12,6 +12,7 @@ import '../../circles/data/orbit_m5_firebase_change_source.dart';
 import '../../media/data/orbit_media_outbox.dart';
 import '../../moments/data/orbit_moment_offline_cache.dart';
 import '../../moments/data/orbit_moment_capture_vault.dart';
+import '../../moments/data/orbit_moment_intent_vault.dart';
 import '../../moments/data/orbit_m7_background_retry.dart';
 import '../../moments/data/orbit_moment_audience_memory.dart';
 
@@ -245,6 +246,7 @@ class OrbitIdentityClient {
           try { await OrbitMomentOfflineCache().purge(lastUser); }
           catch (_) { /* Never transfer stale offline previews to another user. */ }
           try { await OrbitMomentCaptureVault().purge(lastUser); }catch(_){}
+          try { await OrbitMomentIntentVault().purge(lastUser); }catch(_){}
           try { await OrbitMomentAudienceMemory().purge(lastUser); }catch(_){}
         }
         await OrbitM5FirebaseChangeSource.instance.stop();
@@ -366,6 +368,7 @@ class OrbitIdentityClient {
       try { await OrbitMomentOfflineCache().purge(oldMediaOwner); }
       catch (_) { /* Local secure read keys are best-effort purged on logout. */ }
       try { await OrbitMomentCaptureVault().purge(oldMediaOwner); }catch(_){}
+      try { await OrbitMomentIntentVault().purge(oldMediaOwner); }catch(_){}
       await OrbitM7BackgroundRetry.cancel();
       try { await OrbitMomentAudienceMemory().purge(oldMediaOwner); }catch(_){}
     }

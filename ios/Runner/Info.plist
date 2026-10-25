@@ -22,7 +22,7 @@
       </dict>
     </array>
     <key>UIBackgroundModes</key>
-    <array><string>processing</string></array>
+    <array><string>processing</string><string>fetch</string></array>
     <key>BGTaskSchedulerPermittedIdentifiers</key>
     <array><string>com.example.orbitUi.m7.encrypted_retry</string></array>
     <key>LSRequiresIPhoneOS</key><true/>
