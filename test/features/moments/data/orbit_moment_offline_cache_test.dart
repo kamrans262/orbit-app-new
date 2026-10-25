@@ -30,7 +30,7 @@ void main(){
     await cache.save(
       id:'22222222-2222-4222-8222-222222222222',
       mediaId:'33333333-3333-4333-8333-333333333333',
-      creatorId:owner,contextId:'self',
+      creatorId:owner,contextId:'self',audienceRevision:1,
       publishedAt:now.subtract(const Duration(minutes:1)),
       issuedAt:now,expiresAt:now.add(const Duration(minutes:3)),
       viewExpiresAt:now.add(const Duration(days:6)),preview:jpeg,
@@ -62,7 +62,7 @@ void main(){
     Future<void> invalid(Duration ttl)=>cache.save(
       id:'22222222-2222-4222-8222-222222222222',
       mediaId:'33333333-3333-4333-8333-333333333333',
-      creatorId:owner,contextId:'self',
+      creatorId:owner,contextId:'self',audienceRevision:1,
       publishedAt:now.subtract(const Duration(minutes:1)),
       issuedAt:now,expiresAt:now.add(ttl),
       viewExpiresAt:now.add(const Duration(days:6)),
