@@ -62,6 +62,7 @@ class MomentsScreen extends StatefulWidget {
     this.errorMessage = 'Something went wrong. Please try again.',
     this.cameraBuilder,
     this.privateMode=false,
+    this.privateReadOnly=false,
     this.privateFiltering=false,
     this.privateBookmarking=false,
     this.privateSharing=false,
@@ -164,6 +165,7 @@ class MomentsScreen extends StatefulWidget {
   final String errorMessage;
   final WidgetBuilder? cameraBuilder;
   final bool privateMode;
+  final bool privateReadOnly;
   final bool privateFiltering;
   final bool privateBookmarking;
   final bool privateSharing;
@@ -722,12 +724,14 @@ class _MomentsScreenState extends State<MomentsScreen> {
   }
 
   void _toggleLike(MomentImageFeedItem item) {
+    if(widget.privateReadOnly)return;
     final nextValue = !(_likedById[item.id] ?? item.isLiked);
     setState(() => _likedById[item.id] = nextValue);
     widget.onLikeChanged(item, nextValue);
   }
 
   void _toggleBookmark(MomentImageFeedItem item) {
+    if(widget.privateReadOnly)return;
     final nextValue = !(_bookmarkedById[item.id] ?? item.isBookmarked);
     setState(() => _bookmarkedById[item.id] = nextValue);
     widget.onBookmarkChanged(item, nextValue);
