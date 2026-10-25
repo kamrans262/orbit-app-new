@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:image/image.dart' as img;
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_circular_icon_button.dart';
@@ -348,9 +349,65 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
       )),
     );
     if(code==null)return;
+    bool includePreview=false;
+    try {
+      final allowed=await widget.repository.volunteerEvidenceAllowed();
+      if(allowed && mounted){
+        final result=await showModalBottomSheet<bool>(
+          context:context,useSafeArea:true,
+          backgroundColor:AppColors.background,
+          shape:const RoundedRectangleBorder(
+            borderRadius:BorderRadius.vertical(top:Radius.circular(28))),
+          builder:(sheet)=>StatefulBuilder(builder:(sheet,update)=>
+            Padding(padding:const EdgeInsets.all(20),
+              child:Column(mainAxisSize:MainAxisSize.min,
+                crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+                Text('Report evidence',style:AppTypography.smallHeading),
+                const SizedBox(height:12),
+                Text('Your report can be sent without a preview. Sharing a preview is optional and lets an approved moderator see only this volunteered image.',
+                  style:AppTypography.bodyMuted),
+                const SizedBox(height:12),
+                CheckboxListTile(
+                  value:includePreview,
+                  title:Text('I consent to share this preview with moderators',
+                    style:AppTypography.body),
+                  onChanged:(value)=>update(()=>includePreview=value==true)),
+                const SizedBox(height:12),
+                AppPrimaryButton(label:'Send report',
+                  onPressed:()=>Navigator.of(sheet).pop(includePreview)),
+              ])),
+          ),
+        );
+        if(result==null)return;
+        includePreview=result;
+      }
+    }catch(_){includePreview=false;}
+    Uint8List? evidence;
+    if(includePreview){
+      try{
+        final source=img.decodeImage(await widget.repository.photo(_current));
+        if(source==null)throw const FormatException('No safe preview.');
+        var clean=img.copyResize(source,
+          width:source.width>320?320:source.width);
+        final reencoded=img.Image(width:clean.width,height:clean.height,
+          numChannels:3);
+        img.compositeImage(reencoded,clean);
+        var jpeg=img.encodeJpg(reencoded,quality:55);
+        if(jpeg.length>40960){
+          clean=img.copyResize(reencoded,width:160);
+          jpeg=img.encodeJpg(clean,quality:50);
+        }
+        if(jpeg.length>40960)throw const FormatException('Preview too large.');
+        evidence=Uint8List.fromList(jpeg);
+      }catch(_){
+        includePreview=false;
+        if(mounted)_notice('Preview unavailable. Report will be sent without it.');
+      }
+    }
     try{
       await widget.repository.report(_current,code,
-        commentId:commentId,account:account);
+        commentId:commentId,account:account,
+        volunteeredPreview:includePreview?evidence:null);
       if(mounted)_notice('Your report has been submitted.');
     }catch(_){if(mounted)_notice('Unable to submit this report.');}
   }
