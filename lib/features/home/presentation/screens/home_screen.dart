@@ -57,6 +57,7 @@ class HomeScreen extends StatefulWidget {
     this.onSeeAllMomentsPressed,
     this.selectedBottomIndex = 0,
     this.isLoading = false,
+    this.useLiveDate = false,
     this.enableDemoCircleNavigation = false,
     super.key,
   });
@@ -215,6 +216,7 @@ class HomeScreen extends StatefulWidget {
   final VoidCallback onAddPressed;
   final int selectedBottomIndex;
   final bool isLoading;
+  final bool useLiveDate;
   /// Preserves approved design-preview fixture behavior but never opens
   /// fabricated Circle rosters in authenticated production navigation.
   final bool enableDemoCircleNavigation;
@@ -463,7 +465,13 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildGreeting() {
     final trimmedName = widget.greetingName.trim();
     final displayName = trimmedName.isEmpty ? 'there' : trimmedName;
-    const dateLabel = 'Sunday, September 22';
+    final today=DateTime.now();
+    final weekdays=const ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+    final months=const ['January','February','March','April','May','June',
+      'July','August','September','October','November','December'];
+    final dateLabel=widget.useLiveDate
+      ? '${weekdays[today.weekday-1]}, ${months[today.month-1]} ${today.day}'
+      : 'Sunday, September 22';
     final nearby = widget.nearbyFriendsCount;
     final nearbyLabel = nearby == null
         ? 'Nearby friends unavailable'
