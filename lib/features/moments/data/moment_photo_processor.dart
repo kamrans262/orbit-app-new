@@ -23,12 +23,14 @@ class MomentPhotoEdit {
   const MomentPhotoEdit({
     this.filter=MomentFilter.natural,
     this.beautyStrength=0,
+    this.maxLongSide=1440,
     this.text='',
     this.strokes=const [],
   });
   final MomentFilter filter;
   /// Optional bounded, subtle local smoothing. Strictly off by default.
   final double beautyStrength;
+  final int maxLongSide;
   final String text;
   final List<MomentDrawStroke> strokes;
 }
@@ -38,6 +40,9 @@ abstract final class MomentPhotoProcessor {
     if(source.isEmpty || source.length>26*1024*1024){
       throw const FormatException('Photo exceeds the secure editor size limit.');
     }
+    if(edit.maxLongSide!=1080 && edit.maxLongSide!=1440){
+      throw const FormatException('Unsupported photo bandwidth profile.');
+    }
     if(!edit.beautyStrength.isFinite || edit.beautyStrength<0 ||
         edit.beautyStrength>0.25){
       throw const FormatException('Beauty adjustment outside safe range.');
@@ -46,10 +51,10 @@ abstract final class MomentPhotoProcessor {
     if(decoded==null)throw const FormatException('Unsupported photo format.');
     var image=img.bakeOrientation(decoded);
     final edge=image.width>image.height?image.width:image.height;
-    if(edge>1440){
+    if(edge>edit.maxLongSide){
       image=img.copyResize(image,
-        width:image.width*1440~/edge,
-        height:image.height*1440~/edge,
+        width:image.width*edit.maxLongSide~/edge,
+        height:image.height*edit.maxLongSide~/edge,
         interpolation:img.Interpolation.linear);
     }
     final w=image.width, h=image.height;
@@ -120,6 +125,6 @@ abstract final class MomentPhotoProcessor {
         color:img.ColorRgb8(255,255,255));
     }
     // Encoded output has only rendered pixels: no GPS/EXIF or metadata.
-    return Uint8List.fromList(img.encodeJpg(image,quality:86));
+    return Uint8List.fromList(img.encodeJpg(image,quality:80));
   }
 }
