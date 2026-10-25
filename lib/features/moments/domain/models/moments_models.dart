@@ -24,6 +24,7 @@ class MomentStoryData {
     this.imageBytes,
     this.isUnseen=false,
     this.isCircle=false,
+    this.ageLabel,
   });
 
   final String id;
@@ -33,6 +34,7 @@ class MomentStoryData {
   final Uint8List? imageBytes;
   final bool isUnseen;
   final bool isCircle;
+  final String? ageLabel;
 }
 
 enum MomentFeedItemType { imagePost, promo, textPost, futureVideoPost }
