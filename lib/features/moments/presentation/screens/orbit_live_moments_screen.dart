@@ -37,6 +37,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
   OrbitMomentAudienceOptions _options=
     const OrbitMomentAudienceOptions([],[],'Nobody');
   final Set<String> _likes={};
+  final Set<String> _bookmarked={};
   final Set<String> _seen={};
   bool _busy=true;
   String? _error;
@@ -78,6 +79,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         _rail=const [];
         _names.clear();
         _likes.clear();
+        _bookmarked.clear();
         _seen.clear();
         _busy=true;
       });
@@ -128,6 +130,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       try {options=await _repo.audienceOptions();}
       catch(_){options=const OrbitMomentAudienceOptions([],[],'Nobody');}
       final seen=await _repo.seenMomentIds(rail.map((m)=>m.id));
+      final saved=await _repo.bookmarkedMomentIds(moments);
       final names=<String,String>{};
       final previews=<String,Uint8List>{};
       final captions=<String,String>{};
@@ -156,6 +159,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         _evictDecodedMedia();
         _items=moments;_rail=rail;_options=options;
         _likes..clear()..addAll(moments.where((item)=>item.myReaction=='like').map((item)=>item.id));
+        _bookmarked..clear()..addAll(saved);
         _previews..clear()..addAll(previews);
         _names..clear()..addAll(names);
         _seen..clear()..addAll(seen);
@@ -248,6 +252,21 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       });
     }catch(_){if(mounted)unawaited(_load());}
   }
+  Future<void> _setBookmark(MomentImageFeedItem item,bool saved) async {
+    OrbitLiveMoment? current;
+    for(final entry in _items)if(entry.id==item.id){current=entry;break;}
+    if(current==null)return;
+    try {
+      await _repo.setBookmark(current,saved:saved);
+      if(mounted)setState((){
+        if(saved)_bookmarked.add(item.id);
+        else _bookmarked.remove(item.id);
+      });
+    }catch(_){
+      if(mounted)unawaited(_load());
+    }
+  }
+
   MomentCameraScreen _camera() => MomentCameraScreen(
     privateSaver:(bytes,progress) async {
       final saved=await OrbitMomentMediaStager()
@@ -309,12 +328,14 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         location:_places[m.id]??'',
         likeCount:0,commentCount:0,countsKnown:false,
         isLiked:_likes.contains(m.id),
+        isBookmarked:_bookmarked.contains(m.id),
       ),
     ];
     return Stack(children:[
       MomentsScreen(
       key:const Key('orbit_m7_live_moments'),
       stories:stories,feedItems:feed,privateMode:true,
+      privateBookmarking:true,
       viewState:_busy?MomentsViewState.loading:
         _error!=null?MomentsViewState.error:
         feed.isEmpty?MomentsViewState.empty:MomentsViewState.populated,
@@ -324,7 +345,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       onStoryPressed:(story)=>_openById(story.id,storyGroup:true),
       onLikeChanged:(item,liked)=>unawaited(_react(item,liked)),
       onCommentPressed:(item)=>_openById(item.id),
-      onBookmarkChanged:(item,value){},
+      onBookmarkChanged:(item,value)=>unawaited(_setBookmark(item,value)),
       onSharePressed:(item){},
       onTextMenuPressed:(item){},
       onFeedItemPressed:(item)=>_openById(item.id),
