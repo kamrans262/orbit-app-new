@@ -62,4 +62,9 @@ class OrbitMomentAudienceMemory {
   }
 
   Future<void> clear() async => _vault.delete(await _key());
+
+  Future<void> purge(String oldOwner) async {
+    if(oldOwner.isEmpty)return;
+    await _vault.delete('orbit.m7.previous-audience.$oldOwner');
+  }
 }

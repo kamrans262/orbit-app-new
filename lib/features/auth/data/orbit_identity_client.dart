@@ -11,6 +11,8 @@ import 'orbit_offline_profile_snapshot.dart';
 import '../../circles/data/orbit_m5_firebase_change_source.dart';
 import '../../media/data/orbit_media_outbox.dart';
 import '../../moments/data/orbit_moment_offline_cache.dart';
+import '../../moments/data/orbit_moment_capture_vault.dart';
+import '../../moments/data/orbit_moment_audience_memory.dart';
 
 enum OrbitRestoreState { signedOut, authenticated, deviceRegistration, deletionPending, offlineProfile }
 
@@ -241,6 +243,8 @@ class OrbitIdentityClient {
           catch (_) { /* Block cross-account access even if disk cleanup fails. */ }
           try { await OrbitMomentOfflineCache().purge(lastUser); }
           catch (_) { /* Never transfer stale offline previews to another user. */ }
+          try { await OrbitMomentCaptureVault().purge(lastUser); }catch(_){}
+          try { await OrbitMomentAudienceMemory().purge(lastUser); }catch(_){}
         }
         await OrbitM5FirebaseChangeSource.instance.stop();
         _startupProfile = null;
@@ -360,6 +364,8 @@ class OrbitIdentityClient {
       catch (_) { /* Session revocation proceeds even if storage is unavailable. */ }
       try { await OrbitMomentOfflineCache().purge(oldMediaOwner); }
       catch (_) { /* Local secure read keys are best-effort purged on logout. */ }
+      try { await OrbitMomentCaptureVault().purge(oldMediaOwner); }catch(_){}
+      try { await OrbitMomentAudienceMemory().purge(oldMediaOwner); }catch(_){}
     }
     abandonStandardSignup();
     _access = null;

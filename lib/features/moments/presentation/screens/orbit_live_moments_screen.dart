@@ -417,7 +417,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
     momentAudienceCircles:_options.circles,
     momentAudienceFriends:_options.friends,
     momentPrivacyAudience:_options.privacy,
-    publishMoment:(request,progress) async {
+    publishMoment:OrbitM7Rollout.enabled ? (request,progress) async {
       if(mounted)setState((){
         _publishingNow=true;
         _lastPublishFailure=null;
@@ -433,8 +433,49 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       }finally{
         if(mounted)setState(()=>_publishingNow=false);
       }
-    },
+    } : null,
   );
+
+  /// The unconfirmed item belongs in the local feed, not a fabricated
+  /// backend Moment. It has no like/comment/share actions or fake receipt.
+  Widget? _pendingCard(){
+    if(!_publishingNow && _pendingPublishCount==0 &&
+       _lastPublishFailure==null)return null;
+    final label=_publishingNow?'Sending encrypted Moment…':
+      _pendingWarning!=null?'Failed / Waiting for connection: $_pendingWarning':
+      _lastPublishFailure??'Waiting for connection · $_pendingPublishCount encrypted Moment draft(s)';
+    return Material(
+      color:AppColors.background,
+      elevation:2,
+      borderRadius:BorderRadius.circular(20),
+      child:Padding(padding:const EdgeInsets.all(12),
+        child:Column(mainAxisSize:MainAxisSize.min,children:[
+          Row(children:[
+            const Icon(Icons.lock_outline_rounded,
+              color:AppColors.primaryEnd,size:22),
+            const SizedBox(width:8),
+            Expanded(child:Text(label,style:AppTypography.body)),
+          ]),
+          const SizedBox(height:8),
+          if(!_publishingNow &&
+             ((_pendingWarning??'').startsWith('Draft needs review') ||
+              (_pendingWarning??'').startsWith('Encrypted draft is incomplete')))
+            AppPrimaryButton(label:'Discard unrecoverable draft',
+              enabled:!_retrying,
+              onPressed:()=>unawaited(_discardUnrecoverable()))
+          else if(!_publishingNow && _pendingPublishCount>0)
+            AppPrimaryButton(
+              label:_retrying?'Sending…':'Retry encrypted draft',
+              enabled:!_retrying,
+              onPressed:()=>unawaited(_retryEncryptedDrafts())),
+          if(!_publishingNow && _pendingPublishCount==0 &&
+             _lastPublishFailure!=null)
+            TextButton(onPressed:()=>setState(()=>_lastPublishFailure=null),
+              child:const Text('Dismiss')),
+        ]),
+      ),
+    );
+  }
   @override
   Widget build(BuildContext context){
     final groups=<String,OrbitLiveMoment>{};
@@ -486,6 +527,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       MomentsScreen(
       key:const Key('orbit_m7_live_moments'),
       stories:stories,feedItems:feed,privateMode:true,
+      pendingCard:_pendingCard(),
       privateReadOnly:_showingOfflinePreviews,
       privateBookmarking:true,
       privateSharing:true,
@@ -517,40 +559,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
             textAlign:TextAlign.center,style:AppTypography.bodyMuted)),
       ),
     ),
-    if(_publishingNow || _pendingPublishCount>0 || _lastPublishFailure!=null)Positioned(
-      bottom:90,left:16,right:16,
-      child:Material(
-        color:AppColors.background,
-        elevation:4,
-        borderRadius:BorderRadius.circular(20),
-        child:Padding(
-          padding:const EdgeInsets.all(12),
-          child:Column(mainAxisSize:MainAxisSize.min,children:[
-            Text(
-              _publishingNow?'Sending encrypted Moment…':
-              _pendingWarning!=null?'Failed / Waiting for connection: $_pendingWarning':
-              _lastPublishFailure??'Waiting for connection · $_pendingPublishCount encrypted Moment draft(s)',
-              textAlign:TextAlign.center,style:AppTypography.body),
-            const SizedBox(height:8),
-            if(!_publishingNow && ((_pendingWarning??'').startsWith('Draft needs review') ||
-                (_pendingWarning??'').startsWith('Encrypted draft is incomplete')))
-              AppPrimaryButton(label:'Discard unrecoverable draft',
-                enabled:!_retrying,
-                onPressed:()=>unawaited(_discardUnrecoverable()))
-            else if(!_publishingNow && _pendingPublishCount>0)
-              AppPrimaryButton(
-                label:_retrying?'Sending…':'Retry encrypted draft',
-                enabled:!_retrying,
-                onPressed:()=>unawaited(_retryEncryptedDrafts())),
-            if(!_publishingNow && _pendingPublishCount==0 && _lastPublishFailure!=null)
-              TextButton(
-                onPressed:()=>setState(()=>_lastPublishFailure=null),
-                child:const Text('Dismiss'),
-              ),
-          ]),
-        ),
-      ),
-    ),
+
     ]);
   }
 }

@@ -168,7 +168,7 @@ class OrbitEncryptedClipStager {
     if(owner==null)throw OrbitIdentityException('Please sign in.',401);
     final device=await _identity.trustedMediaDevice();
     final prepared=await (_processor is OrbitNativeVideoProcessor
-      ? (_processor as OrbitNativeVideoProcessor).prepareForNetwork(original,
+      ? _processor.prepareForNetwork(original,
           stripAudio:muteAudio,lowBandwidth:lowBandwidth,
           onProgress:onProgress)
       : (muteAudio||lowBandwidth)

@@ -67,6 +67,7 @@ class MomentsScreen extends StatefulWidget {
     this.privateBookmarking=false,
     this.privateSharing=false,
     this.onRefresh,
+    this.pendingCard,
     super.key,
   });
 
@@ -171,6 +172,7 @@ class MomentsScreen extends StatefulWidget {
   final bool privateBookmarking;
   final bool privateSharing;
   final Future<void> Function()? onRefresh;
+  final Widget? pendingCard;
 
   @override
   State<MomentsScreen> createState() => _MomentsScreenState();
@@ -254,6 +256,10 @@ class _MomentsScreenState extends State<MomentsScreen> {
                 sliver: SliverToBoxAdapter(child: _buildHeader()),
               ),
               const SliverToBoxAdapter(child: SizedBox(height: _sectionGap)),
+              if(widget.pendingCard!=null)SliverPadding(
+                padding:const EdgeInsets.fromLTRB(20,0,20,16),
+                sliver:SliverToBoxAdapter(child:widget.pendingCard!),
+              ),
               ..._buildContentSlivers(),
               const SliverToBoxAdapter(child: SizedBox(height: 20)),
             ],
