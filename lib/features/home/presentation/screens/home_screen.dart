@@ -62,6 +62,7 @@ class HomeScreen extends StatefulWidget {
   });
 
   factory HomeScreen.demo({
+    VoidCallback? onNotificationPressed,
     ValueChanged<int>? onTabSelected,
     VoidCallback? onAddPressed,
     bool enableDemoCircleNavigation = true,
@@ -179,7 +180,7 @@ class HomeScreen extends StatefulWidget {
           senderAvatarPath: 'assets/Sophia.png',
         ),
       ],
-      onNotificationPressed: () {},
+      onNotificationPressed: onNotificationPressed ?? () {},
       onQuickActionPressed: (action) {},
       onPlanPressed: (plan) {},
       onPromoPressed: () {},
