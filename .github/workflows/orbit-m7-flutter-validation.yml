@@ -41,6 +41,7 @@ jobs:
           flutter test test/features/moments/data/orbit_moment_offline_cache_test.dart
           flutter test test/features/moments/data/orbit_moment_bookmark_vault_test.dart
           flutter test test/features/moments/presentation/widgets/orbit_m7_stage4_revocation_test.dart
+          flutter test test/features/moments/presentation/moments_screen_test.dart
 
   android-native-compile:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.target == 'android' }}
