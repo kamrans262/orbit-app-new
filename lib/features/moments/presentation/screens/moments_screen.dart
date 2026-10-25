@@ -68,6 +68,9 @@ class MomentsScreen extends StatefulWidget {
     this.privateSharing=false,
     this.onRefresh,
     this.pendingCard,
+    this.onLoadMore,
+    this.hasMore=false,
+    this.loadingMore=false,
     super.key,
   });
 
@@ -173,6 +176,8 @@ class MomentsScreen extends StatefulWidget {
   final bool privateSharing;
   final Future<void> Function()? onRefresh;
   final Widget? pendingCard;
+  final VoidCallback? onLoadMore;
+  final bool hasMore,loadingMore;
 
   @override
   State<MomentsScreen> createState() => _MomentsScreenState();
@@ -570,6 +575,16 @@ class _MomentsScreenState extends State<MomentsScreen> {
         ),
       ),
     );
+    if(widget.hasMore && widget.onLoadMore!=null){
+      slivers.add(SliverPadding(
+        padding:const EdgeInsets.fromLTRB(20,16,20,30),
+        sliver:SliverToBoxAdapter(child:OutlinedButton(
+          key:const Key('moments_load_more'),
+          onPressed:widget.loadingMore?null:widget.onLoadMore,
+          child:Text(widget.loadingMore?'Loading more…':'Load more Moments'),
+        )),
+      ));
+    }
     return slivers;
   }
 
