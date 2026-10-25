@@ -222,6 +222,20 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
     try {lines=await widget.repository.allComments(item);}
     catch(_){error='Comments are unavailable. Please try again.';}
     try {viewerId=await widget.repository.currentUserId();} catch (_) {}
+    final grouped=<({String id,String author,String body,String? parent})>[];
+    for(final parent in lines.where((entry)=>entry.parent==null)){
+      grouped.add(parent);
+      grouped.addAll(lines.where((entry)=>entry.parent==parent.id));
+    }
+    grouped.addAll(lines.where((entry)=>entry.parent!=null &&
+      !grouped.any((existing)=>existing.id==entry.id)));
+    lines=grouped;
+    final names=<String,String>{};
+    for(final author in lines.map((entry)=>entry.author).toSet().take(30)){
+      if(author==viewerId){names[author]='You';continue;}
+      try {names[author]=await widget.repository.name(author);}
+      catch(_){names[author]='Orbit member';}
+    }
     if(!mounted){controller.dispose();return;}
     String? replyingTo;
     await showModalBottomSheet<void>(
@@ -242,8 +256,13 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
                 padding:const EdgeInsets.only(bottom:12),
                 child:ListTile(
                   title:Text(lines[index].body,style:AppTypography.body),
-                  subtitle:Text(lines[index].parent==null
-                      ? 'Reply':'Reply in thread',style:AppTypography.bodyMuted),
+                  subtitle:Text(
+                    (names[lines[index].author]??'Orbit member')+
+                    (lines[index].parent==null?' · Comment':' · Reply'),
+                    style:AppTypography.bodyMuted),
+                  leading:lines[index].parent==null?null:
+                    const Icon(Icons.subdirectory_arrow_right_rounded,
+                      color:AppColors.primaryEnd),
                   onTap:()=>setSheet(()=>replyingTo=lines[index].id),
                   trailing:Row(mainAxisSize:MainAxisSize.min,children:[
                     if(viewerId!=null &&
