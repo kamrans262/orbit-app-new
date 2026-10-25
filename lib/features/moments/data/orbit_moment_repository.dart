@@ -397,6 +397,30 @@ class OrbitMomentRepository {
     return 'Encrypted Moment waiting to publish.';
   }
 
+  /// Explicitly discard only unrecoverable entries, never healthy pending
+  /// uploads. The original media never exists in this vault, only ciphertext.
+  Future<int> discardUnrecoverableDrafts() async {
+    final owner=await _identity.currentLocalSocialOwner();
+    if(owner==null)return 0;
+    final encrypted=await OrbitMediaOutbox().pending(owner);
+    final parents=encrypted.where((e)=>e.variant=='original')
+      .map((e)=>e.transfer).toSet();
+    final now=DateTime.now().toUtc();
+    var removed=0;
+    for(final intent in await _intents.pending(owner)){
+      final stale=now.difference(intent.createdAt)>const Duration(days:7)
+        || !parents.contains(intent.transfer);
+      if(!stale)continue;
+      for(final entry in encrypted.where((e)=>
+          e.transfer==intent.transfer || e.parentTransferId==intent.transfer)){
+        await OrbitMediaOutbox().discard(entry);
+      }
+      await _intents.remove(owner,intent.transfer);
+      removed++;
+    }
+    return removed;
+  }
+
   /// User-initiated or foreground retry only. Never publish from a background
   /// worker, and do not treat encrypted upload success as Moment publication.
   Future<int> resumePendingPublishes({
