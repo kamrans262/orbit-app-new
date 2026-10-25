@@ -61,6 +61,11 @@ class MomentsScreen extends StatefulWidget {
     this.viewState = MomentsViewState.populated,
     this.errorMessage = 'Something went wrong. Please try again.',
     this.cameraBuilder,
+    this.privateMode=false,
+    this.privateReadOnly=false,
+    this.privateFiltering=false,
+    this.privateBookmarking=false,
+    this.privateSharing=false,
     super.key,
   });
 
@@ -159,6 +164,11 @@ class MomentsScreen extends StatefulWidget {
   final MomentsViewState viewState;
   final String errorMessage;
   final WidgetBuilder? cameraBuilder;
+  final bool privateMode;
+  final bool privateReadOnly;
+  final bool privateFiltering;
+  final bool privateBookmarking;
+  final bool privateSharing;
 
   @override
   State<MomentsScreen> createState() => _MomentsScreenState();
@@ -167,6 +177,7 @@ class MomentsScreen extends StatefulWidget {
 class _MomentsScreenState extends State<MomentsScreen> {
   final OrbitSearchController _searchController = OrbitSearchController();
   String _searchQuery = '';
+  bool _savedOnly=false;
 
   static const double _horizontalPadding = 20;
   static const double _sectionGap = 20;
@@ -371,7 +382,13 @@ class _MomentsScreenState extends State<MomentsScreen> {
       },
       searchButtonKey: MomentsKeys.searchButton,
       trailingActions: <Widget>[
-        Theme(
+        if(widget.privateMode && widget.privateBookmarking)
+          AppCircularIconButton(
+            semanticLabel:_savedOnly?'Show all Moments':'Show saved Moments',
+            onPressed:()=>setState(()=>_savedOnly=!_savedOnly),
+            icon:_savedOnly?Icons.bookmark_rounded:Icons.bookmarks_outlined,
+            iconSize:20,size:40),
+        if(!widget.privateMode || widget.privateFiltering)Theme(
           data: noFlashTheme(context),
           child: AppCircularIconButton(
             key: MomentsKeys.filterButton,
@@ -383,7 +400,7 @@ class _MomentsScreenState extends State<MomentsScreen> {
             size: 40,
           ),
         ),
-        Theme(
+        if(!widget.privateMode)Theme(
           data: noFlashTheme(context),
           child: AppCircularIconButton(
             key: MomentsKeys.messagesButton,
@@ -413,9 +430,13 @@ class _MomentsScreenState extends State<MomentsScreen> {
 
   List<MomentFeedItem> get _visibleFeedItems {
     final query = _searchQuery.trim().toLowerCase();
-    if (query.isEmpty) return widget.feedItems;
+    final visible=widget.privateBookmarking && _savedOnly
+        ? widget.feedItems.where((item)=>item is MomentImageFeedItem &&
+            (_bookmarkedById[item.id]??item.isBookmarked)).toList()
+        : widget.feedItems;
+    if (query.isEmpty) return visible;
 
-    return widget.feedItems
+    return visible
         .where((item) {
           if (item is MomentImageFeedItem) {
             return item.author.name.toLowerCase().contains(query) ||
@@ -536,7 +557,7 @@ class _MomentsScreenState extends State<MomentsScreen> {
 
     return SizedBox(
       key: MomentsKeys.storiesList,
-      height: 76,
+      height: stories.any((entry)=>entry.ageLabel!=null)?96:76,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: EdgeInsets.zero,
@@ -562,6 +583,10 @@ class _MomentsScreenState extends State<MomentsScreen> {
         final imageItem = item as MomentImageFeedItem;
         return MomentImageCard(
           data: imageItem,
+          privateMode:widget.privateMode,
+          privateBookmarking:widget.privateBookmarking,
+          privateSharing:widget.privateSharing,
+          onViewPressed:()=>widget.onFeedItemPressed(imageItem),
           isLiked: _likedById[imageItem.id] ?? imageItem.isLiked,
           isBookmarked: _bookmarkedById[imageItem.id] ?? imageItem.isBookmarked,
           onLikePressed: () => _toggleLike(imageItem),
@@ -688,6 +713,7 @@ class _MomentsScreenState extends State<MomentsScreen> {
 
   void _shareMoment(MomentImageFeedItem item) {
     widget.onSharePressed(item);
+    if(widget.privateMode)return;
     unawaited(
       OrbitShareService.shareMoment(
         authorName: item.author.name,
@@ -698,12 +724,14 @@ class _MomentsScreenState extends State<MomentsScreen> {
   }
 
   void _toggleLike(MomentImageFeedItem item) {
+    if(widget.privateReadOnly)return;
     final nextValue = !(_likedById[item.id] ?? item.isLiked);
     setState(() => _likedById[item.id] = nextValue);
     widget.onLikeChanged(item, nextValue);
   }
 
   void _toggleBookmark(MomentImageFeedItem item) {
+    if(widget.privateReadOnly)return;
     final nextValue = !(_bookmarkedById[item.id] ?? item.isBookmarked);
     setState(() => _bookmarkedById[item.id] = nextValue);
     widget.onBookmarkChanged(item, nextValue);

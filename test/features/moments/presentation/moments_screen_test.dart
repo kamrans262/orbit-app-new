@@ -172,6 +172,51 @@ void main() {
     },
   );
 
+  testWidgets('M7 offline private previews never optimistically like or save',
+      (tester) async {
+    await setPhoneSize(tester,const Size(390,844));
+    const item=MomentImageFeedItem(
+      id:'cached-preview',
+      author:MomentAuthorData(id:'owner',name:'Orbit member'),
+      timeLabel:'Offline',title:'',location:'',
+      imagePath:'assets/does_not_exist.jpg',
+      likeCount:0,commentCount:0,
+    );
+    var likes=0,saves=0;
+    await tester.pumpWidget(wrap(MomentsScreen(
+      privateMode:true,privateReadOnly:true,privateBookmarking:true,
+      stories:const [],feedItems:const <MomentFeedItem>[item],
+      viewState:MomentsViewState.populated,
+      onSearchPressed:(){},onFilterPressed:(){},onMessagesPressed:(){},
+      onStoryPressed:(_){},onLikeChanged:(_,__)=>likes++,
+      onCommentPressed:(_){},onBookmarkChanged:(_,__)=>saves++,
+      onSharePressed:(_){},onTextMenuPressed:(_){},
+      onFeedItemPressed:(_){},onTabSelected:(_){},onAddPressed:(){},
+    )));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(MomentsKeys.feedItem('cached-preview')),200,
+      scrollable:find.descendant(
+        of:find.byKey(MomentsKeys.feed),
+        matching:find.byType(Scrollable)).first,
+    );
+    await tester.pumpAndSettle();
+    Finder action(String label)=>find.byWidgetPredicate(
+      (w)=>w is Semantics && w.properties.label==label);
+    final like=action('Like moment');
+    await tester.ensureVisible(like);
+    await tester.tap(like);
+    await tester.pump();
+    expect(likes,0);
+    expect(action('Unlike moment'),findsNothing);
+    final bookmark=action('Bookmark moment');
+    await tester.ensureVisible(bookmark);
+    await tester.tap(bookmark);
+    await tester.pump();
+    expect(saves,0);
+    expect(action('Remove bookmark'),findsNothing);
+  });
+
   testWidgets('dynamic feed accepts mixed order and future video items', (
     tester,
   ) async {

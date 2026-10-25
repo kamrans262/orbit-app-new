@@ -4,6 +4,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:compress_video/compress_video.dart';
+import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
@@ -40,7 +41,22 @@ class OrbitNativeVideoProcessor implements OrbitVideoProcessor {
 
   @override
   Future<OrbitPreparedVideo> prepare(File input,
-      {void Function(double progress)? onProgress}) async {
+      {void Function(double progress)? onProgress}) =>
+    _prepare(input,onProgress:onProgress,stripAudio:false);
+
+  Future<OrbitPreparedVideo> prepareWithoutAudio(File input,
+      {void Function(double progress)? onProgress}) =>
+    _prepare(input,onProgress:onProgress,stripAudio:true);
+
+  Future<OrbitPreparedVideo> prepareForNetwork(File input,
+      {bool stripAudio=false,bool lowBandwidth=false,
+       void Function(double progress)? onProgress}) =>
+    _prepare(input,onProgress:onProgress,
+      stripAudio:stripAudio,lowBandwidth:lowBandwidth);
+
+  Future<OrbitPreparedVideo> _prepare(File input,
+      {void Function(double progress)? onProgress,
+       required bool stripAudio,bool lowBandwidth=false}) async {
     if(!await input.exists() || await input.length()>maxUncompressedBytes
         || await input.length()==0) {
       throw const FormatException('Video file exceeds the capture limits.');
@@ -52,7 +68,10 @@ class OrbitNativeVideoProcessor implements OrbitVideoProcessor {
     // Native Media3/AVFoundation encoding; strips original EXIF/GPS metadata
     // and makes a bounded MP4 before per-part authenticated encryption.
     final job=_compressor.compress(input.path,
-      options:const CompressOptions(preset:CompressPreset.p720));
+      options:CompressOptions(preset:CompressPreset.p720,
+        maxLongSidePx:1280,maxFps:30,
+        videoBitrateBps:lowBandwidth?2000000:4000000,
+        audio:stripAudio?const AudioStrip():const AudioPassthrough()));
     final progress=job.progress.listen((value) {
       onProgress?.call((value/100).clamp(0.0,1.0));
     });
@@ -65,17 +84,21 @@ class OrbitNativeVideoProcessor implements OrbitVideoProcessor {
     // The plugin's never-larger fallback can return the unchanged camera
     // original. Never upload it: source location tags and non-H.264 codecs
     // have not been re-encoded or removed in that case.
-    if(result.usedOriginal) {
-      throw const FormatException('A privacy-safe video re-encode is required.');
-    }
     final path=result.outputPath;
     final output=File(path);
+    try {
+      if(result.usedOriginal || output.path==input.path) {
+        throw const FormatException('A privacy-safe video re-encode is required.');
+      }
     if(!await output.exists() ||
        await output.length()<1 ||
        await output.length()>OrbitMediaFormat.videoLimit) {
       throw const FormatException('Compressed video exceeds upload limits.');
     }
     final info=await _compressor.getMediaInfo(output.path);
+    if(stripAudio && info.audioCodec!=null){
+      throw const FormatException('Muted Moment export still contains audio.');
+    }
     if(info.durationMs<=0 || info.durationMs>maxDurationMs ||
         info.widthPx<=0 || info.heightPx<=0 ||
         max(info.widthPx,info.heightPx)>1280 ||
@@ -91,6 +114,17 @@ class OrbitNativeVideoProcessor implements OrbitVideoProcessor {
     final poster=OrbitMediaCrypto.preparePhoto(bytes).thumbnail;
     return OrbitPreparedVideo(file:output,posterJpeg:poster,
       durationMs:info.durationMs,width:info.widthPx,height:info.heightPx);
+    } catch (_) {
+      // Plugin output is still plaintext until the caller encrypts it. Any
+      // metadata/codec/thumbnail validation error must not leave an unsealed
+      // transcoded clip in the application's temporary storage.
+      if(output.path!=input.path){
+        try {
+          if(await output.exists())await output.delete();
+        } catch (_) { /* Preserve the original validation failure. */ }
+      }
+      rethrow;
+    }
   }
 }
 
@@ -124,13 +158,23 @@ class OrbitEncryptedClipStager {
   final Future<Directory> Function() _temp;
 
   Future<OrbitStagedClip> stageVideo(File original,
-      {void Function(double progress)? onProgress}) async {
+      {void Function(double progress)? onProgress,
+       Future<void> Function(OrbitSealedMedia original, OrbitSealedMedia poster,
+         String mediaId)? onReadyForAudience,
+       Future<void> Function(String originalTransfer)? onQueued,
+       bool muteAudio=false,bool lowBandwidth=false}) async {
     return OrbitMediaTransferGate.run(() async {
     final owner=await _identity.currentLocalSocialOwner();
     if(owner==null)throw OrbitIdentityException('Please sign in.',401);
     final device=await _identity.trustedMediaDevice();
-    final prepared=await _processor.prepare(original,
-      onProgress:(p)=>onProgress?.call(p*0.35));
+    final prepared=await (_processor is OrbitNativeVideoProcessor
+      ? (_processor as OrbitNativeVideoProcessor).prepareForNetwork(original,
+          stripAudio:muteAudio,lowBandwidth:lowBandwidth,
+          onProgress:onProgress)
+      : (muteAudio||lowBandwidth)
+        ? throw StateError('Selected video processor cannot enforce export options.')
+        : _processor.prepare(original,onProgress:onProgress));
+    try {
     final root=Directory((await _temp()).path+'/orbit-m6-transcode');
     await root.create(recursive:true);
     final videoId=const Uuid().v4(),posterId=const Uuid().v4();
@@ -146,9 +190,8 @@ class OrbitEncryptedClipStager {
       durationMs:prepared.durationMs);
     var second=await _outbox.enqueue(poster,kind:'image',
       mime:'image/jpeg',parentTransferId:videoId);
+    if(onQueued!=null)await onQueued(videoId);
     try {
-      if(await prepared.file.exists() &&
-          prepared.file.path!=original.path)await prepared.file.delete();
       await video.file.delete();
       await poster.file.delete();
       final receipt=await _media.upload(await _outbox.restore(first),
@@ -173,6 +216,9 @@ class OrbitEncryptedClipStager {
             'wrapped_key_ciphertext':await _crypto.wrapKey(poster,device.publicKey)},
         ]));
       if(grants.isEmpty)throw StateError('Device grants not confirmed.');
+      if(onReadyForAudience!=null){
+        await onReadyForAudience(video,poster,receipt.mediaId);
+      }
       await _outbox.discard(first);
       await _outbox.discard(second);
       onProgress?.call(1);
@@ -182,47 +228,131 @@ class OrbitEncryptedClipStager {
       // Ciphertext-only drafts remain in the offline outbox for explicit retry.
       rethrow;
     }
+    } finally {
+      // This native transcode is plaintext until its encrypted queue copy is
+      // durably saved. Clean it up even when sealing or enqueue fails before
+      // the upload/catch block starts. Never delete the user's gallery source.
+      if(prepared.file.path!=original.path){
+        try {
+          if(await prepared.file.exists())await prepared.file.delete();
+        } catch (_) { /* Keep original failure; OS temporary cleanup is best effort. */ }
+      }
+    }
     });
   }
 
   /// Voice recordings are already AAC/MP4/OGG from the existing capture
   /// module. No separate voice record popup or codec fallback is added here.
+  static Uint8List _voiceWaveformJpeg(List<double> levels) {
+    if(levels.length>500)throw const FormatException('Too many voice samples.');
+    final bitmap=img.Image(width:320,height:96);
+    for(var y=0;y<96;y++){
+      for(var x=0;x<320;x++)bitmap.setPixelRgb(x,y,250,250,250);
+    }
+    final peaks=levels.isEmpty?const [0.02]:levels;
+    for(var i=0;i<32;i++){
+      final level=peaks[(i*peaks.length/32).floor()
+        .clamp(0,peaks.length-1).toInt()].clamp(0.01,1.0);
+      final h=(level*72).round().clamp(2,72).toInt();
+      final x=8+i*10;
+      img.drawLine(bitmap,x1:x,y1:48-h~/2,x2:x,y2:48+h~/2,
+        color:img.ColorRgb8(79,55,140),thickness:4);
+    }
+    return Uint8List.fromList(img.encodeJpg(bitmap,quality:78));
+  }
+
   Future<OrbitStagedClip> stageAudio(File encoded,{
-    required String mime, required int durationMs,
+    required String mime,required int durationMs,
+    String purpose='message',
+    List<double> waveformLevels=const [],
+    Future<void> Function(OrbitSealedMedia original,
+      OrbitSealedMedia? waveform,String mediaId)? onReadyForAudience,
+    Future<void> Function(String originalTransfer)? onQueued,
     void Function(double progress)? onProgress,
   }) async {
     return OrbitMediaTransferGate.run(() async {
-    if(!['audio/mp4','audio/aac','audio/ogg'].contains(mime) ||
-       durationMs<=0 || durationMs>60000) {
-      throw const FormatException('Unsupported encoded voice clip.');
-    }
-    final owner=await _identity.currentLocalSocialOwner();
-    if(owner==null)throw OrbitIdentityException('Please sign in.',401);
-    final device=await _identity.trustedMediaDevice();
-    final temp=await _temp(); final id=const Uuid().v4();
-    final sealed=await _crypto.sealFile(encoded,
-      destination:File(temp.path+'/'+id+'.voice.cipher'),ownerId:owner,
-      transferId:id,purpose:'message',
-      maxInputBytes:OrbitMediaFormat.audioLimit);
-    final draft=await _outbox.enqueue(sealed,kind:'audio',mime:mime,
-      durationMs:durationMs);
-    try {
-      await sealed.file.delete();
-      final uploaded=await _media.upload(await _outbox.restore(draft),
-        kind:'audio',mime:mime,durationMs:durationMs,onProgress:onProgress);
-      if(!uploaded.ready)throw StateError('Voice upload is still verifying.');
-      final grants=await _media.createGrants(uploaded.mediaId,
-        audience:'only_me',recipients:const [],
-        idempotencyKey:id,keyEnvelopes:await _outbox.grantEnvelopeOnce(owner,id,() async => [
-          {'device_id':device.id,'variant':'original','key_version':'v1',
-            'algorithm':OrbitMediaFormat.envelopeAlgorithm,
-            'wrapped_key_ciphertext':await _crypto.wrapKey(sealed,device.publicKey)},
-        ]));
-      if(grants.isEmpty)throw StateError('Voice key grant not confirmed.');
-      await _outbox.discard(draft);
-      return OrbitStagedClip(mediaId:uploaded.mediaId,
+      if(!['audio/mp4','audio/aac','audio/ogg'].contains(mime) ||
+          durationMs<=0 || durationMs>60000){
+        throw const FormatException('Unsupported encoded voice clip.');
+      }
+      if(!['message','moment'].contains(purpose)){
+        throw ArgumentError('Invalid audio purpose.');
+      }
+      final owner=await _identity.currentLocalSocialOwner();
+      if(owner==null)throw OrbitIdentityException('Please sign in.',401);
+      final device=await _identity.trustedMediaDevice();
+      final temp=await _temp();
+      final id=const Uuid().v4();
+      final sealed=await _crypto.sealFile(encoded,
+        destination:File(temp.path+'/'+id+'.voice.cipher'),
+        ownerId:owner,transferId:id,purpose:purpose,
+        maxInputBytes:OrbitMediaFormat.audioLimit);
+      final draft=await _outbox.enqueue(sealed,kind:'audio',mime:mime,
+        durationMs:durationMs);
+      OrbitSealedMedia? waveform;
+      OrbitQueuedMedia? waveformDraft;
+      if(purpose=='moment'){
+        final waveId=const Uuid().v4();
+        waveform=await _crypto.sealBytes(_voiceWaveformJpeg(waveformLevels),
+          destination:File(temp.path+'/'+waveId+'.wave.cipher'),
+          ownerId:owner,transferId:waveId,purpose:'moment',variant:'waveform');
+        waveformDraft=await _outbox.enqueue(waveform,kind:'image',
+          mime:'image/jpeg',parentTransferId:id,width:320,height:96);
+      }
+      if(onQueued!=null)await onQueued(id);
+      try{
+        await sealed.file.delete();
+        if(waveform!=null)await waveform.file.delete();
+        final uploaded=await _media.upload(await _outbox.restore(draft),
+          kind:'audio',mime:mime,durationMs:durationMs,
+          onProgress:(value)=>onProgress?.call(value*0.80));
+        if(!uploaded.ready)throw StateError('Voice upload still verifying.');
+        if(waveformDraft!=null){
+          waveformDraft=await _outbox.bindVariantParent(
+            waveformDraft,uploaded.mediaId);
+          final derivative=await _media.upload(
+            await _outbox.restore(waveformDraft),
+            kind:'image',mime:'image/jpeg',
+            parentMediaId:uploaded.mediaId,
+            onProgress:(value)=>onProgress?.call(0.80+value*0.18));
+          if(!derivative.ready){
+            throw StateError('Voice waveform verification pending.');
+          }
+        }
+        final envelopes=await _outbox.grantEnvelopeOnce(owner,id,() async {
+          final keys=<Map<String,Object?>>[
+            {'device_id':device.id,'variant':'original','key_version':'v1',
+              'algorithm':OrbitMediaFormat.envelopeAlgorithm,
+              'wrapped_key_ciphertext':await _crypto.wrapKey(
+                sealed,device.publicKey)},
+          ];
+          if(waveform!=null){
+            keys.add({
+              'device_id':device.id,'variant':'waveform','key_version':'v1',
+              'algorithm':OrbitMediaFormat.envelopeAlgorithm,
+              'wrapped_key_ciphertext':await _crypto.wrapKey(
+                waveform,device.publicKey),
+            });
+          }
+          return keys;
+        });
+        final grants=await _media.createGrants(uploaded.mediaId,
+          audience:'only_me',recipients:const [],
+          idempotencyKey:id,keyEnvelopes:envelopes);
+        if(grants.isEmpty)throw StateError('Voice key grant not confirmed.');
+        if(onReadyForAudience!=null){
+          await onReadyForAudience(sealed,waveform,uploaded.mediaId);
+        }
+        if(waveformDraft!=null)await _outbox.discard(waveformDraft);
+        await _outbox.discard(draft);
+        onProgress?.call(1);
+        return OrbitStagedClip(mediaId:uploaded.mediaId,
           verified:true,privateGrantConfirmed:true);
-    } catch (_) { rethrow; }
+      }catch(_){
+        // Failed uploads retain only encrypted private outbox artifacts.
+        rethrow;
+      }
     });
   }
+
 }

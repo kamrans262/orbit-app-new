@@ -7,6 +7,7 @@ import 'orbit_camera_permission_memory.dart';
 import 'screens/moment_camera_screen.dart';
 import '../domain/models/moment_publish_models.dart';
 import '../../media/data/orbit_moment_media_stager.dart';
+import '../data/orbit_moment_repository.dart';
 
 /// Central launcher for the global Orbit bottom-bar Add action.
 ///
@@ -17,6 +18,23 @@ import '../../media/data/orbit_moment_media_stager.dart';
 /// If the user never grants camera access, or camera initialization never
 /// succeeds, the education popup is not permanently skipped.
 abstract final class OrbitMomentCameraLauncher {
+  /// Resolve actual, permitted recipients before opening the existing camera.
+  /// If M7 is unavailable, preserve M6 private save without demo publishing.
+  static void openLive(BuildContext context) {
+    unawaited(() async {
+      final repo=OrbitMomentRepository();
+      try {
+        final options=await repo.audienceOptions();
+        if(!context.mounted)return;
+        await _open(context,publisher:repo.publish,
+          circles:options.circles,friends:options.friends,
+          privacy:options.privacy);
+      }catch(_){
+        if(context.mounted)await _open(context,circles:const []);
+      }
+    }());
+  }
+
   static void open(BuildContext context, {
     MomentPublisher? confirmedPublisher,
     List<MomentAudienceCircle> circles = const [],
@@ -27,6 +45,8 @@ abstract final class OrbitMomentCameraLauncher {
   static Future<void> _open(BuildContext context, {
     MomentPublisher? publisher,
     required List<MomentAudienceCircle> circles,
+    List<MomentAudienceCircle> friends=const [],
+    String privacy='Nobody',
   }) async {
     final alreadyConfirmed =
         await OrbitCameraPermissionMemory.hasConfirmedCameraAccess();
@@ -36,7 +56,7 @@ abstract final class OrbitMomentCameraLauncher {
     }
 
     if (alreadyConfirmed) {
-      _pushCamera(context, publisher: publisher, circles: circles);
+      _pushCamera(context, publisher: publisher, circles: circles, friends:friends, privacy:privacy);
       return;
     }
 
@@ -46,7 +66,7 @@ abstract final class OrbitMomentCameraLauncher {
         if (!context.mounted) {
           return;
         }
-        _pushCamera(context, publisher: publisher, circles: circles);
+        _pushCamera(context, publisher: publisher, circles: circles, friends:friends, privacy:privacy);
       },
       onNotNow: () {},
     );
@@ -55,11 +75,15 @@ abstract final class OrbitMomentCameraLauncher {
   static void _pushCamera(BuildContext context, {
     MomentPublisher? publisher,
     required List<MomentAudienceCircle> circles,
+    List<MomentAudienceCircle> friends=const [],
+    String privacy='Nobody',
   }) {
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(builder: (_) => MomentCameraScreen(
         publishMoment: publisher,
         momentAudienceCircles: circles,
+        momentAudienceFriends:friends,
+        momentPrivacyAudience:privacy,
         privateSaver: (bytes, progress) async {
           final saved = await OrbitMomentMediaStager()
               .stagePhoto(bytes, onProgress: progress);

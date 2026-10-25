@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'dart:typed_data';
 
 @immutable
 class MomentAuthorData {
@@ -20,12 +21,20 @@ class MomentStoryData {
     required this.name,
     this.imagePath,
     this.isAddStory = false,
+    this.imageBytes,
+    this.isUnseen=false,
+    this.isCircle=false,
+    this.ageLabel,
   });
 
   final String id;
   final String name;
   final String? imagePath;
   final bool isAddStory;
+  final Uint8List? imageBytes;
+  final bool isUnseen;
+  final bool isCircle;
+  final String? ageLabel;
 }
 
 enum MomentFeedItemType { imagePost, promo, textPost, futureVideoPost }
@@ -51,6 +60,8 @@ class MomentImageFeedItem extends MomentFeedItem {
     required this.commentCount,
     this.isLiked = false,
     this.isBookmarked = false,
+    this.imageBytes,
+    this.countsKnown = true,
   });
 
   final MomentAuthorData author;
@@ -62,6 +73,8 @@ class MomentImageFeedItem extends MomentFeedItem {
   final int commentCount;
   final bool isLiked;
   final bool isBookmarked;
+  final Uint8List? imageBytes;
+  final bool countsKnown;
 
   @override
   MomentFeedItemType get type => MomentFeedItemType.imagePost;

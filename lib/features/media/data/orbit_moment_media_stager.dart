@@ -47,7 +47,10 @@ class OrbitMomentMediaStager {
   /// *before* the first network operation. On failures neither is claimed as
   /// published; the caller can retry the secure outbox.
   Future<OrbitStagedPhoto> stagePhoto(Uint8List captured,
-      {void Function(double fraction)? onProgress}) async {
+      {void Function(double fraction)? onProgress,
+       Future<void> Function(OrbitSealedMedia original, OrbitSealedMedia thumbnail,
+         String mediaId)? onReadyForAudience,
+       Future<void> Function(String originalTransfer)? onQueued}) async {
     return OrbitMediaTransferGate.run(() async {
     final owner=await _identity.currentLocalSocialOwner();
     if(owner==null)throw OrbitIdentityException('Please sign in first.',401);
@@ -70,6 +73,7 @@ class OrbitMomentMediaStager {
     var thumbDraft=await _outbox.enqueue(thumb,kind:'image',
       mime:'image/jpeg',parentTransferId:originalId,width:320,
       height:(prepared.height*320/prepared.width).round());
+    if(onQueued!=null)await onQueued(originalId);
     try {
       if(await original.file.exists())await original.file.delete();
       if(await thumb.file.exists())await thumb.file.delete();
@@ -104,6 +108,11 @@ class OrbitMomentMediaStager {
             'wrapped_key_ciphertext':await _crypto.wrapKey(thumb,device.publicKey)},
         ]));
       if(grantIds.isEmpty)throw StateError('Private media grant not confirmed.');
+      // M7 creates real recipient envelopes and publishes while ephemeral
+      // content keys are still available. Never discard on failed publish.
+      if(onReadyForAudience!=null) {
+        await onReadyForAudience(original,thumb,readyOriginal.mediaId);
+      }
       onProgress?.call(1);
       await _outbox.discard(originalDraft);
       await _outbox.discard(thumbDraft);
@@ -120,6 +129,10 @@ class OrbitMomentMediaStager {
   /// Uploading bytes is never equivalent to publishing an M7 Moment.
   Future<List<OrbitMediaReceipt>> retryPending({
     void Function(double fraction)? onProgress,
+    Future<void> Function(String transfer,OrbitSealedMedia original,
+      OrbitSealedMedia? derivative,String mediaId)? onRecovered,
+    bool Function(OrbitQueuedMedia parent)? shouldRetry,
+    Future<void> Function(OrbitQueuedMedia parent)? onRetryStart,
   }) async {
     return OrbitMediaTransferGate.run(() async {
     final owner=await _identity.currentLocalSocialOwner();
@@ -127,6 +140,8 @@ class OrbitMomentMediaStager {
     final results=<OrbitMediaReceipt>[];
     final drafts=await _outbox.pending(owner);
     for(final parent in drafts.where((x)=>x.variant=='original')) {
+      if(shouldRetry!=null && !shouldRetry(parent))continue;
+      if(onRetryStart!=null)await onRetryStart(parent);
       final sealed=await _outbox.restore(parent);
       final main=await _repo.upload(sealed,kind:parent.kind,mime:parent.mime,
         width:parent.width,height:parent.height,durationMs:parent.durationMs,
@@ -139,7 +154,7 @@ class OrbitMomentMediaStager {
       // A crash between enqueuing original and derivative is NOT a complete
       // photo/video upload. Never grant/discard a Moment without its variant.
       if(parent.purpose=='moment' &&
-          (parent.kind=='image' || parent.kind=='video') &&
+          (parent.kind=='image' || parent.kind=='video' || parent.kind=='audio') &&
           children.isEmpty) continue;
       final refreshedChildren=<OrbitQueuedMedia>[];
       var complete=true;
@@ -182,6 +197,15 @@ class OrbitMomentMediaStager {
         audience:'only_me',recipients:const [],
         keyEnvelopes:allEnvelopes,idempotencyKey:parent.transfer);
       if(granted.isEmpty)throw StateError('Encrypted media grant not confirmed.');
+      // M7 publication uses the OS-vault-preserved account consent; a failed
+      // network commit MUST keep M6 encrypted drafts for another attempt.
+      if(onRecovered!=null){
+        OrbitSealedMedia? derivative;
+        if(refreshedChildren.isNotEmpty){
+          derivative=await _outbox.restore(refreshedChildren.first);
+        }
+        await onRecovered(parent.transfer,sealed,derivative,main.mediaId);
+      }
       for(final child in refreshedChildren){await _outbox.discard(child);}
       await _outbox.discard(parent);
     }

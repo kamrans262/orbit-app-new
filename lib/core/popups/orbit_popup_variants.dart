@@ -12,6 +12,8 @@ enum OrbitPopupType {
   liveLocation,
   logout,
   deleteAccount,
+  deleteMoment,
+  discardMomentDraft,
   stayConnected,
   cameraPermission,
   momentError,
@@ -114,6 +116,44 @@ Future<void> showDeleteAccountPopup(
     primaryStyle: OrbitPopupActionStyle.destructive,
   );
 }
+
+/// Reuses Orbit's existing destructive confirmation presentation. Deleting
+/// a Moment hides it immediately and queues encrypted-media purge; physical
+/// ciphertext erasure is asynchronous and controlled by the M6 worker.
+Future<void> showDeleteMomentPopup(
+  BuildContext context, {required OrbitPopupCallback onDelete},
+) {
+  return _showConfiguredPopup(
+    context,
+    type: OrbitPopupType.deleteMoment,
+    title: 'Delete Moment',
+    description: 'Delete this Moment for everyone? It cannot be restored.',
+    assetPath: 'assets/popup/delete.svg',
+    motion: OrbitPopupIllustrationMotion.scaleIn,
+    illustrationSvgSize: 82,
+    primaryLabel: 'Delete Moment',
+    onPrimary: onDelete,
+    primaryStyle: OrbitPopupActionStyle.destructive,
+    secondaryLabel: 'Cancel',
+    secondaryStyle: OrbitPopupActionStyle.text,
+  );
+}
+
+Future<void> showDiscardMomentDraftPopup(
+  BuildContext context,{required OrbitPopupCallback onDiscard},
+) => _showConfiguredPopup(
+  context,type:OrbitPopupType.discardMomentDraft,
+  title:'Discard encrypted draft',
+  description:'This draft can no longer be recovered safely. Discard its encrypted files? This cannot be undone.',
+  assetPath:'assets/popup/delete.svg',
+  motion:OrbitPopupIllustrationMotion.scaleIn,
+  illustrationSvgSize:82,
+  primaryLabel:'Discard draft',
+  primaryStyle:OrbitPopupActionStyle.destructive,
+  onPrimary:onDiscard,
+  secondaryLabel:'Cancel',
+  secondaryStyle:OrbitPopupActionStyle.text,
+);
 
 Future<void> showStayConnectedPopup(
   BuildContext context, {

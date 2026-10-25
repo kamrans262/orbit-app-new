@@ -1,7 +1,13 @@
+import 'dart:io';
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
+import '../../data/moment_photo_processor.dart';
+import 'orbit_moment_draft_player.dart';
+
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
@@ -15,6 +21,9 @@ typedef OrbitPrivatePhotoSaver = Future<void> Function(
 abstract final class MomentPublishKeys {
   static const sheet = Key('moment_publish_sheet');
   static const review = Key('moment_publish_review');
+  static const photoFilter = Key('moment_publish_photo_filter');
+  static const overlayText = Key('moment_publish_overlay_text');
+  static const photoDrawing = Key('moment_publish_photo_draw');
   static const caption = Key('moment_publish_caption');
   static const chooseAudience = Key('moment_publish_choose_audience');
   static const audience = Key('moment_publish_audience');
@@ -34,11 +43,20 @@ enum _PublishStep { review, audience, uploading, failed, finished }
 Future<void> showMomentPublishingSheet(
   BuildContext context, {
   required Uint8List photoBytes,
+  File? mediaFile,
+  String mediaKind='image',
+  int? durationMs,
+  List<double> waveformLevels=const [],
+  bool enableNativePreview=true,
+  String initialOverlayText='',
   required List<MomentAudienceCircle> circles,
+  List<MomentAudienceCircle> friends = const [],
+  String privacyAudience = 'Nobody',
   MomentPublisher? publisher,
   OrbitPrivatePhotoSaver? privateSaver,
 }) async {
-  if (photoBytes.isEmpty) return;
+  if(mediaKind=='image' && photoBytes.isEmpty)return;
+  if(mediaKind!='image' && (mediaFile==null || !['video','audio'].contains(mediaKind)))return;
   await showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -53,7 +71,15 @@ Future<void> showMomentPublishingSheet(
       heightFactor: 0.97,
       child: MomentPublishSheet(
         photoBytes: photoBytes,
+        mediaFile:mediaFile,
+        mediaKind:mediaKind,
+        durationMs:durationMs,
+        waveformLevels:waveformLevels,
+        enableNativePreview:enableNativePreview,
+        initialOverlayText:initialOverlayText,
         circles: circles,
+        friends: friends,
+        privacyAudience: privacyAudience,
         publisher: publisher,
         privateSaver: privateSaver,
       ),
@@ -65,13 +91,29 @@ class MomentPublishSheet extends StatefulWidget {
   const MomentPublishSheet({
     required this.photoBytes,
     required this.circles,
+    this.mediaFile,
+    this.mediaKind='image',
+    this.durationMs,
+    this.waveformLevels=const [],
+    this.enableNativePreview=true,
+    this.initialOverlayText='',
+    this.friends = const [],
+    this.privacyAudience = 'Nobody',
     this.publisher,
     this.privateSaver,
     super.key,
   });
 
   final Uint8List photoBytes;
+  final File? mediaFile;
+  final String mediaKind;
+  final int? durationMs;
+  final List<double> waveformLevels;
+  final bool enableNativePreview;
+  final String initialOverlayText;
   final List<MomentAudienceCircle> circles;
+  final List<MomentAudienceCircle> friends;
+  final String privacyAudience;
   final MomentPublisher? publisher;
   final OrbitPrivatePhotoSaver? privateSaver;
 
@@ -81,6 +123,74 @@ class MomentPublishSheet extends StatefulWidget {
 
 class _MomentPublishSheetState extends State<MomentPublishSheet> {
   final TextEditingController _caption = TextEditingController();
+  final TextEditingController _overlayText=TextEditingController();
+  final TextEditingController _placeLabel=TextEditingController();
+  bool _locationConsent=false;
+  bool _muteVideo=false;
+  bool _dataSaver=false;
+  final Set<String> _taggedPeople={};
+
+  MomentFilter _filter=MomentFilter.natural;
+  double _beautyStrength=0;
+  bool _drawing=false;
+  final List<MomentDrawStroke> _strokes=[];
+  List<Offset> _activeStroke=[];
+  Uint8List? _editedPreview;
+  Timer? _previewDebounce;
+  int _previewGeneration=0;
+  bool _previewBusy=false;
+
+  Future<Uint8List> _encodeImage() async {
+    if(widget.mediaKind!='image')return widget.photoBytes;
+    final edit=MomentPhotoEdit(filter:_filter,
+      beautyStrength:_beautyStrength,maxLongSide:_dataSaver?1080:1440,
+      text:_overlayText.text,
+      strokes:List<MomentDrawStroke>.unmodifiable(_strokes));
+    // CPU-heavy image transformations stay off the UI isolate.
+    return compute(_renderMomentEdits,(widget.photoBytes,edit));
+  }
+  void _queuePreview(){
+    if(widget.mediaKind!='image')return;
+    _previewDebounce?.cancel();
+    final generation=++_previewGeneration;
+    _previewDebounce=Timer(const Duration(milliseconds:260),()async{
+      if(!mounted)return;
+      setState(()=>_previewBusy=true);
+      try{
+        final encoded=await _encodeImage();
+        if(mounted && generation==_previewGeneration){
+          setState(()=>_editedPreview=encoded);
+        }
+      }catch(_){
+        if(mounted && generation==_previewGeneration){
+          setState(()=>_editedPreview=null);
+        }
+      }finally{
+        if(mounted && generation==_previewGeneration){
+          setState(()=>_previewBusy=false);
+        }
+      }
+    });
+  }
+  void _beginStroke(Offset position,Size size){
+    if(!_drawing || _strokes.length>=48 ||
+        size.width<=0 || size.height<=0)return;
+    setState(()=>_activeStroke=[_normalized(position,size)]);
+  }
+  void _extendStroke(Offset position,Size size){
+    if(!_drawing || _activeStroke.isEmpty || _activeStroke.length>=2000)return;
+    setState(()=>_activeStroke.add(_normalized(position,size)));
+  }
+  Offset _normalized(Offset position,Size size)=>Offset(
+    (position.dx/size.width).clamp(0.0,1.0).toDouble(),
+    (position.dy/size.height).clamp(0.0,1.0).toDouble());
+  void _finishStroke(){
+    if(_activeStroke.length>1){
+      _strokes.add(MomentDrawStroke(List<Offset>.unmodifiable(_activeStroke)));
+      _queuePreview();
+    }
+    if(mounted)setState(()=>_activeStroke=[]);
+  }
   final Set<String> _selectedIds = <String>{};
   _PublishStep _step = _PublishStep.review;
   double _progress = 0;
@@ -88,17 +198,52 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
   bool _busy = false;
   bool _simulated = false;
   bool _savedPrivate = false;
+  String _audienceKind = 'only_me';
+
+  @override
+  void initState() {
+    super.initState();
+    if(widget.initialOverlayText.isNotEmpty){
+      _overlayText.text=widget.initialOverlayText.length>80
+        ? widget.initialOverlayText.substring(0,80)
+        : widget.initialOverlayText;
+      WidgetsBinding.instance.addPostFrameCallback((_){
+        if(mounted)_queuePreview();
+      });
+    }
+    // Legacy injected publisher tests and preview flows started with Circles.
+    // Authenticated M7 always gets the explicit privacyAudience from server.
+    if(widget.publisher!=null && widget.circles.isNotEmpty &&
+       widget.privacyAudience=='Nobody')_audienceKind='selected_circles';
+  }
+  final String _clientId = const Uuid().v4();
 
   // A live repository must inject circles and a publisher together. A missing
   // publisher deliberately never claims a post was published.
   bool get _canPublish => widget.publisher != null;
-  bool get _canSavePrivate => widget.privateSaver != null && !_canPublish;
-  bool get _hasAudience => _selectedIds.isNotEmpty;
-  String get _audienceLabel =>
-      '${_selectedIds.length} ${_selectedIds.length == 1 ? 'circle' : 'circles'}';
+  bool get _canSavePrivate => widget.privateSaver != null;
+  bool get _hasAudience => _canPublish
+      ? (_audienceKind=='only_me' ||
+        (_audienceKind=='accepted_friends' && widget.friends.isNotEmpty) ||
+        _selectedIds.isNotEmpty)
+      : _selectedIds.isNotEmpty;
+  String get _audienceLabel {
+    if(!_canPublish) return _selectedIds.length.toString()+
+      (_selectedIds.length==1?' circle':' circles');
+    switch(_audienceKind){
+      case 'only_me': return 'Only Me';
+      case 'accepted_friends': return 'All Friends';
+      case 'selected_friends': return _selectedIds.length.toString()+' friends';
+      default: return _selectedIds.length.toString()+
+        (_selectedIds.length==1?' circle':' circles');
+    }
+  }
 
   @override
   void dispose() {
+    _previewDebounce?.cancel();
+    _overlayText.dispose();
+    _placeLabel.dispose();
     _caption.dispose();
     super.dispose();
   }
@@ -108,6 +253,8 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
     if (privateOnly && !_canSavePrivate) return;
     if (!privateOnly && !_hasAudience) return;
     if (!previewOnly && !privateOnly && !_canPublish) return;
+    if(_locationConsent && _placeLabel.text.trim().isEmpty)return;
+    if(_taggedPeople.length>20)return;
     FocusScope.of(context).unfocus();
     setState(() {
       _busy = true;
@@ -121,7 +268,10 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
       if (privateOnly) {
         // Explicit user action. M6 encrypts and saves to the creator's own
         // trusted device, but does not publish or notify a Circle.
-        await widget.privateSaver!(widget.photoBytes, (fraction) {
+        final edited=widget.mediaKind=='image'?
+          await _encodeImage():widget.photoBytes;
+        if(!mounted)return;
+        await widget.privateSaver!(edited, (fraction) {
           if (!mounted) return;
           setState(() => _progress = fraction.clamp(0.0, 1.0).toDouble());
         });
@@ -133,10 +283,25 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
           setState(() => _progress = progress);
         }
       } else {
+        final edited=widget.mediaKind=='image'?
+          await _encodeImage():widget.photoBytes;
+        if(!mounted)return;
         final request = MomentPublishRequest(
-          photoBytes: widget.photoBytes,
-          circleIds: _selectedIds,
+          photoBytes: edited,
+          mediaFile:widget.mediaFile,
+          mediaKind:widget.mediaKind,
+          durationMs:widget.durationMs,
+          muteVideo:_muteVideo,
+          dataSaver:_dataSaver,
+          waveformLevels:widget.waveformLevels,
+          placeLabel:_locationConsent?_placeLabel.text.trim():'',
+          locationConsent:_locationConsent && _placeLabel.text.trim().isNotEmpty,
+          taggedUserIds:_taggedPeople,
+          circleIds: _audienceKind=='selected_circles' ? _selectedIds : const <String>{},
           caption: _caption.text.trim(),
+          audienceKind:_audienceKind,
+          targetIds:_selectedIds,
+          clientId:_clientId,
         );
         final receipt = await widget.publisher!(request, (fraction) {
           if (!mounted) return;
@@ -254,16 +419,119 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
           borderRadius: BorderRadius.circular(22),
           child: SizedBox(
             height: compact ? 160 : 255,
-            child: Image.memory(
-              widget.photoBytes,
-              fit: BoxFit.contain,
-              errorBuilder: (_, error, stack) => const ColoredBox(
-                color: Colors.black12,
-                child: Center(child: Text('Unable to preview this photo')),
-              ),
-            ),
+            child: widget.mediaKind!='image'
+              ? (widget.enableNativePreview
+                  ? OrbitMomentDraftPlayer(
+                      file:widget.mediaFile!,kind:widget.mediaKind,
+                      muted:_muteVideo)
+                  : Center(child:Text(
+                      widget.mediaKind=='video'
+                        ? 'Video ready to encrypt':'Voice ready to encrypt',
+                      style:AppTypography.body)))
+              : LayoutBuilder(builder:(context,size)=>Stack(
+                fit:StackFit.expand,
+                children:[
+                  Image.memory(_editedPreview??widget.photoBytes,
+                    fit:BoxFit.fill,
+                    errorBuilder:(_,error,stack)=>const Center(
+                      child:Text('Unable to preview this photo'))),
+                  if(_drawing)GestureDetector(
+                    behavior:HitTestBehavior.opaque,
+                    onPanStart:(details)=>_beginStroke(
+                      details.localPosition,size.biggest),
+                    onPanUpdate:(details)=>_extendStroke(
+                      details.localPosition,size.biggest),
+                    onPanEnd:(_)=>_finishStroke(),
+                    child:CustomPaint(
+                      painter:_MomentStrokePainter([
+                        ..._strokes,MomentDrawStroke(_activeStroke)]),
+                    )),
+                  if(_previewBusy)const Align(
+                    alignment:Alignment.topRight,
+                    child:Padding(padding:EdgeInsets.all(8),
+                      child:SizedBox(width:14,height:14,
+                        child:CircularProgressIndicator(strokeWidth:2))),
+                  ),
+                ],
+              )),
           ),
         ),
+        if(widget.mediaKind=='image'||widget.mediaKind=='video')
+          SwitchListTile(
+            value:_dataSaver,
+            activeColor:AppColors.primaryEnd,
+            title:Text('Save mobile data',style:AppTypography.body),
+            subtitle:Text(
+              widget.mediaKind=='video'?'Lower video bitrate (2 Mbps)':
+                'Smaller photo (1080 px)',
+              style:AppTypography.bodyMuted),
+            onChanged:(value){
+              setState(()=>_dataSaver=value);
+              _queuePreview();
+            },
+          ),
+        if(widget.mediaKind=='video')SwitchListTile(
+          value:_muteVideo,
+          activeColor:AppColors.primaryEnd,
+          title:Text('Mute video audio',style:AppTypography.body),
+          subtitle:Text('Remove audio from the encrypted video export',
+            style:AppTypography.bodyMuted),
+          onChanged:(value)=>setState(()=>_muteVideo=value),
+        ),
+        if(widget.mediaKind=='image') ...[
+          const SizedBox(height:10),
+          SizedBox(height:43,child:ListView(
+            key:MomentPublishKeys.photoFilter,
+            scrollDirection:Axis.horizontal,
+            children:MomentFilter.values.map((filter)=>Padding(
+              padding:const EdgeInsets.only(right:8),
+              child:ChoiceChip(
+                label:Text(filter.label,style:AppTypography.body),
+                selected:_filter==filter,
+                selectedColor:AppColors.background,
+                onSelected:(_){
+                  setState(()=>_filter=filter);
+                  _queuePreview();
+                }),
+            )).toList(),
+          )),
+          const SizedBox(height:8),
+          Row(children:[
+            Expanded(child:Text('Subtle smoothing (optional)',
+              style:AppTypography.body)),
+            Text(_beautyStrength==0?'Off':'On',style:AppTypography.bodyMuted),
+          ]),
+          Slider(value:_beautyStrength,min:0,max:0.25,divisions:5,
+            activeColor:AppColors.primaryEnd,
+            onChanged:(value){
+              setState(()=>_beautyStrength=value);
+              _queuePreview();
+            }),
+          const SizedBox(height:8),
+          TextField(
+            key:MomentPublishKeys.overlayText,
+            controller:_overlayText,
+            maxLength:80,maxLines:1,
+            decoration:const InputDecoration(
+              hintText:'Text on photo (optional)'),
+            style:AppTypography.body,
+            onChanged:(_)=>_queuePreview(),
+          ),
+          Row(children:[
+            OutlinedButton.icon(
+              key:MomentPublishKeys.photoDrawing,
+              onPressed:()=>setState(()=>_drawing=!_drawing),
+              icon:Icon(_drawing?Icons.check:Icons.draw_outlined),
+              label:Text(_drawing?'Finish drawing':'Draw on photo')),
+            const SizedBox(width:8),
+            if(_strokes.isNotEmpty)TextButton(
+              onPressed:(){
+                setState(()=>_strokes.removeLast());
+                _queuePreview();
+              },
+              child:const Text('Undo')),
+          ]),
+        ],
         const SizedBox(height: 16),
         TextField(
           key: MomentPublishKeys.caption,
@@ -286,14 +554,50 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
             ),
           ),
         ),
+        if(_canPublish) ...[
+          const SizedBox(height:8),
+          TextField(
+            controller:_placeLabel,
+            maxLength:90,maxLines:1,
+            style:AppTypography.body,
+            decoration:const InputDecoration(
+              hintText:'Place (optional; entered manually)'),
+            onChanged:(_)=>setState(()=>_locationConsent=false),
+          ),
+          CheckboxListTile(
+              value:_locationConsent,
+              title:Text('Include this place for the selected audience',
+                style:AppTypography.body),
+              subtitle:Text('Optional consent. Orbit does not collect GPS.',
+                style:AppTypography.bodyMuted),
+              activeColor:AppColors.primaryEnd,
+              contentPadding:EdgeInsets.zero,
+              onChanged:_placeLabel.text.trim().isEmpty?null:
+                (value)=>setState(()=>_locationConsent=value==true),
+            ),
+          if(widget.friends.isNotEmpty && _audienceKind!='only_me') ...[
+            Text('Tag eligible friends (optional)',style:AppTypography.body),
+            const SizedBox(height:8),
+            Wrap(spacing:6,runSpacing:6,
+              children:widget.friends.map((friend)=>FilterChip(
+                label:Text(friend.name,style:AppTypography.body),
+                selected:_taggedPeople.contains(friend.id),
+                onSelected:(selected)=>setState((){
+                  if(selected)_taggedPeople.add(friend.id);
+                  else _taggedPeople.remove(friend.id);
+                }),
+              )).toList(),
+            ),
+          ],
+        ],
         const SizedBox(height: 6),
-        if (!_canSavePrivate)
+        if (_canPublish || !_canSavePrivate)
           Text(
-            'Share only with circles you choose.',
+            'Choose who can see your encrypted Moment.',
             style: AppTypography.bodyMuted,
           ),
         const SizedBox(height: 10),
-        if (!_canSavePrivate)
+        if (_canPublish || !_canSavePrivate)
         OutlinedButton.icon(
           key: MomentPublishKeys.chooseAudience,
           onPressed: () => setState(() => _step = _PublishStep.audience),
@@ -324,7 +628,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
               ),
             ),
           ),
-        if (_canSavePrivate)
+        if (_canSavePrivate && widget.mediaKind=='image')
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: Text(
@@ -334,15 +638,19 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
             ),
           ),
         AppPrimaryButton(
-          label: _canSavePrivate
-              ? 'Save privately'
-              : (_canPublish ? 'Publish Moment' : 'Preview publishing flow'),
-          enabled: _canSavePrivate || _hasAudience,
+          label: _canPublish ? 'Publish Moment'
+              : (_canSavePrivate ? 'Save privately' : 'Preview publishing flow'),
+          enabled: _canPublish ? _hasAudience : (_canSavePrivate || _hasAudience),
           onPressed: () => unawaited(_submit(
-            privateOnly: _canSavePrivate,
+            privateOnly: !_canPublish && _canSavePrivate,
             previewOnly: !_canPublish && !_canSavePrivate,
           )),
         ),
+        if(_canPublish && _canSavePrivate && widget.mediaKind=='image')
+          TextButton(
+            onPressed:()=>unawaited(_submit(privateOnly:true)),
+            child:const Text('Save privately without publishing'),
+          ),
         const SizedBox(height: 10),
         TextButton(
           onPressed: _back,
@@ -353,76 +661,83 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
   }
 
   Widget _audience() {
-    final validCircles = widget.circles
-        .where((circle) => circle.id.trim().isNotEmpty)
-        .toList();
+    final live=_canPublish;
+    final choices=live
+        ? (_audienceKind=='selected_circles'?widget.circles:widget.friends)
+        : widget.circles;
+    final types=live
+        ? <(String,String)>[
+            ('only_me','Only Me'),
+            if(widget.privacyAudience=='Selected People') ...[
+              ('accepted_friends','All Friends'),
+              ('selected_friends','Selected Friends'),
+            ],
+            if(widget.privacyAudience=='My Circle')
+              ('selected_circles','Selected Circles'),
+          ] : const <(String,String)>[];
     return Column(
-      key: MomentPublishKeys.audience,
-      children: <Widget>[
+      key:MomentPublishKeys.audience,
+      children:<Widget>[
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-          child: Text(
-            _canPublish ? 'Select one or more of your circles.' : 'Sample circles for UI preview only. This selection does not share your photo.',
-            style: AppTypography.bodyMuted,
-          ),
+          padding:const EdgeInsets.fromLTRB(20,0,20,12),
+          child:Text(live
+            ? 'Sharing follows your existing Orbit privacy settings.'
+            : 'Sample circles for UI preview only. Nothing is shared.',
+            style:AppTypography.bodyMuted),
         ),
-        Expanded(
-          child: validCircles.isEmpty
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(
-                      'No circles available. Create or join a circle first.',
-                      textAlign: TextAlign.center,
-                      style: AppTypography.bodyMuted,
+        Expanded(child:ListView(
+          padding:const EdgeInsets.symmetric(horizontal:20),
+          children:<Widget>[
+            for(final type in types)
+              Padding(padding:const EdgeInsets.only(bottom:8),
+                child:Material(
+                  color:AppColors.white,
+                  borderRadius:BorderRadius.circular(20),
+                  child:RadioListTile<String>(
+                    value:type.$1,groupValue:_audienceKind,
+                    title:Text(type.$2,style:AppTypography.body),
+                    activeColor:AppColors.primaryEnd,
+                    onChanged:(v){
+                      if(v!=null)setState((){
+                        _audienceKind=v;_selectedIds.clear();
+                        _taggedPeople.clear();
+                      });
+                    },
+                  ),
+                )),
+            if(!live || _audienceKind=='selected_circles' ||
+                _audienceKind=='selected_friends')
+              if(choices.isEmpty)
+                Padding(padding:const EdgeInsets.all(20),child:Text(
+                  'No eligible members available. Check your existing privacy and Circle settings.',
+                  textAlign:TextAlign.center,style:AppTypography.bodyMuted))
+              else
+                for(final item in choices)Padding(
+                  padding:const EdgeInsets.only(bottom:8),
+                  child:Material(key:MomentPublishKeys.circle(item.id),
+                    color:AppColors.white,
+                    borderRadius:BorderRadius.circular(20),
+                    child:CheckboxListTile(
+                      title:Text(item.name,style:AppTypography.body),
+                      value:_selectedIds.contains(item.id),
+                      activeColor:AppColors.primaryEnd,
+                      shape:RoundedRectangleBorder(
+                        borderRadius:BorderRadius.circular(20)),
+                      onChanged:(v)=>setState((){
+                        if(v==true)_selectedIds.add(item.id);
+                        else _selectedIds.remove(item.id);
+                      }),
                     ),
                   ),
-                )
-              : ListView.separated(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  itemCount: validCircles.length,
-                  separatorBuilder: (_, index) => const SizedBox(height: 10),
-                  itemBuilder: (context, index) {
-                    final circle = validCircles[index];
-                    final selected = _selectedIds.contains(circle.id);
-                    return Material(
-                      key: MomentPublishKeys.circle(circle.id),
-                      color: AppColors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      child: CheckboxListTile(
-                        value: selected,
-                        title: Text(
-                          circle.name,
-                          style: AppTypography.body.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        activeColor: AppColors.primaryEnd,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        onChanged: (value) => setState(() {
-                          if (value == true) {
-                            _selectedIds.add(circle.id);
-                          } else {
-                            _selectedIds.remove(circle.id);
-                          }
-                        }),
-                      ),
-                    );
-                  },
                 ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-          child: AppPrimaryButton(
-            label: _hasAudience
-                ? 'Continue with $_audienceLabel'
-                : 'Select a circle',
-            enabled: _hasAudience,
-            onPressed: () => setState(() => _step = _PublishStep.review),
-          ),
-        ),
+          ],
+        )),
+        Padding(padding:const EdgeInsets.fromLTRB(20,12,20,20),
+          child:AppPrimaryButton(
+            label:_hasAudience ? 'Continue with '+_audienceLabel : (live?'Choose audience':'Select a circle'),
+            enabled:_hasAudience,
+            onPressed:()=>setState(()=>_step=_PublishStep.review),
+          )),
       ],
     );
   }
@@ -518,4 +833,33 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
       ),
     );
   }
+}
+
+
+Uint8List _renderMomentEdits((Uint8List,MomentPhotoEdit) args)=>
+  MomentPhotoProcessor.render(args.$1,args.$2);
+
+class _MomentStrokePainter extends CustomPainter{
+  const _MomentStrokePainter(this.strokes);
+  final List<MomentDrawStroke> strokes;
+  @override
+  void paint(Canvas canvas,Size size){
+    final paint=Paint()
+      ..color=Colors.white
+      ..strokeWidth=3
+      ..style=PaintingStyle.stroke
+      ..strokeCap=StrokeCap.round;
+    for(final stroke in strokes){
+      if(stroke.points.length<2)continue;
+      final path=Path();
+      final first=stroke.points.first;
+      path.moveTo(first.dx*size.width,first.dy*size.height);
+      for(final p in stroke.points.skip(1)){
+        path.lineTo(p.dx*size.width,p.dy*size.height);
+      }
+      canvas.drawPath(path,paint);
+    }
+  }
+  @override
+  bool shouldRepaint(covariant _MomentStrokePainter old)=>true;
 }

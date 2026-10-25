@@ -1,7 +1,19 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_ui/features/media/data/orbit_media_recovery_coordinator.dart';
+import 'package:orbit_ui/features/media/data/orbit_media_outbox.dart';
 
 void main() {
+  test('generic M6 recovery never consumes M7 publication drafts', () {
+    OrbitQueuedMedia draft(String purpose) => OrbitQueuedMedia(
+      owner:'account-a',transfer:'00000000-0000-4000-8000-000000000001',
+      purpose:purpose,kind:'image',mime:'image/jpeg',variant:'original',
+      fileName:'encrypted.cipher',cipherSha256:List.filled(64,'a').join(),
+      cipherBytes:100,plainBytes:50,noncePrefix:'nonce',
+    );
+    expect(OrbitMediaRecoveryCoordinator.canGenericRetry(draft('moment')),isFalse);
+    expect(OrbitMediaRecoveryCoordinator.canGenericRetry(draft('message')),isTrue);
+  });
+
   test('does not retry when unauthenticated or outbox is empty', () async {
     var resumes = 0;
     final coordinator = OrbitMediaRecoveryCoordinator(

@@ -32,7 +32,7 @@ class HomeRecentMomentTile extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: <Widget>[
-              HomeMediaImage(path: data.imagePath, fit: BoxFit.cover),
+              HomeMediaImage(path: data.imagePath, bytes:data.encryptedImageBytes, fit: BoxFit.cover),
               const DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(

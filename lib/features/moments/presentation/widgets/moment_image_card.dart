@@ -16,6 +16,10 @@ class MomentImageCard extends StatelessWidget {
     required this.onCommentPressed,
     required this.onBookmarkPressed,
     required this.onSharePressed,
+    this.onViewPressed,
+    this.privateMode=false,
+    this.privateSharing=false,
+    this.privateBookmarking=false,
     super.key,
   });
 
@@ -26,6 +30,10 @@ class MomentImageCard extends StatelessWidget {
   final VoidCallback onCommentPressed;
   final VoidCallback onBookmarkPressed;
   final VoidCallback onSharePressed;
+  final VoidCallback? onViewPressed;
+  final bool privateMode;
+  final bool privateSharing;
+  final bool privateBookmarking;
 
   @override
   Widget build(BuildContext context) {
@@ -38,12 +46,15 @@ class MomentImageCard extends StatelessWidget {
         children: <Widget>[
           ClipRRect(
             borderRadius: BorderRadius.circular(16),
-            child: AspectRatio(
+            child: GestureDetector(
+              onTap:onViewPressed,
+              behavior:HitTestBehavior.translucent,
+              child:AspectRatio(
               aspectRatio: 1.06,
               child: Stack(
                 fit: StackFit.expand,
                 children: <Widget>[
-                  MomentMediaImage(path: data.imagePath, fit: BoxFit.cover),
+                  MomentMediaImage(path: data.imagePath, bytes:data.imageBytes, fit: BoxFit.cover),
                   const DecoratedBox(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
@@ -65,7 +76,8 @@ class MomentImageCard extends StatelessWidget {
                     right: 12,
                     child: _ImageCardHeader(
                       data: data,
-                      onSharePressed: onSharePressed,
+                      onSharePressed:onSharePressed,
+                      showShare:!privateMode || privateSharing,
                     ),
                   ),
                   Positioned(
@@ -76,9 +88,13 @@ class MomentImageCard extends StatelessWidget {
                   ),
                 ],
               ),
+              ),
             ),
           ),
           _EngagementBar(
+            privateMode:privateMode,
+            privateBookmarking:privateBookmarking,
+            countsKnown:data.countsKnown,
             likeCount: data.likeCount,
             commentCount: data.commentCount,
             isLiked: isLiked,
@@ -94,10 +110,11 @@ class MomentImageCard extends StatelessWidget {
 }
 
 class _ImageCardHeader extends StatelessWidget {
-  const _ImageCardHeader({required this.data, required this.onSharePressed});
+  const _ImageCardHeader({required this.data, required this.onSharePressed,this.showShare=true});
 
   final MomentImageFeedItem data;
   final VoidCallback onSharePressed;
+  final bool showShare;
 
   @override
   Widget build(BuildContext context) {
@@ -155,7 +172,7 @@ class _ImageCardHeader extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        IconButton(
+        if(showShare)IconButton(
           tooltip: 'Share moment',
           onPressed: onSharePressed,
           iconSize: 20,
@@ -248,7 +265,13 @@ class _EngagementBar extends StatelessWidget {
     required this.onLikePressed,
     required this.onCommentPressed,
     required this.onBookmarkPressed,
+    this.privateMode=false,
+    this.privateBookmarking=false,
+    this.countsKnown=true,
   });
+  final bool privateMode;
+  final bool privateBookmarking;
+  final bool countsKnown;
 
   final int likeCount;
   final int commentCount;
@@ -273,6 +296,7 @@ class _EngagementBar extends StatelessWidget {
                 ? const Color(0xFFFF4757)
                 : const Color(0xFF8A85A8),
             value: likeCount,
+            showValue:countsKnown,
             onTap: onLikePressed,
           ),
           const SizedBox(width: 16),
@@ -281,10 +305,11 @@ class _EngagementBar extends StatelessWidget {
             icon: Icons.chat_bubble_outline_rounded,
             iconColor: const Color(0xFF8A85A8),
             value: commentCount,
+            showValue:countsKnown,
             onTap: onCommentPressed,
           ),
           const Spacer(),
-          Semantics(
+          if(!privateMode||privateBookmarking)Semantics(
             button: true,
             label: isBookmarked ? 'Remove bookmark' : 'Bookmark moment',
             child: InkResponse(
@@ -317,12 +342,14 @@ class _EngagementAction extends StatelessWidget {
     required this.iconColor,
     required this.value,
     required this.onTap,
+    this.showValue=true,
   });
 
   final String semanticLabel;
   final IconData icon;
   final Color iconColor;
   final int value;
+  final bool showValue;
   final VoidCallback onTap;
 
   @override
@@ -340,8 +367,8 @@ class _EngagementAction extends StatelessWidget {
               padding: const EdgeInsets.all(5),
               child: Icon(icon, size: 20, color: iconColor),
             ),
-            const SizedBox(width: 2),
-            Text(
+            if(showValue)const SizedBox(width: 2),
+            if(showValue)Text(
               _compactCount(value),
               style: const TextStyle(
                 fontFamily: AppTypography.fontFamily,

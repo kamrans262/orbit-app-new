@@ -2,11 +2,17 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:camera/camera.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:compress_video/compress_video.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:record/record.dart';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../../app/theme/app_typography.dart';
+import '../../../../app/theme/app_colors.dart';
 import '../../domain/models/moment_publish_models.dart';
 import '../widgets/moment_publish_sheet.dart';
 import '../../../../core/widgets/app_bottom_navigation_bar.dart';
@@ -23,11 +29,16 @@ abstract final class MomentCameraKeys {
   static const stickersButton = Key('moment_camera_stickers_button');
   static const textButton = Key('moment_camera_text_button');
   static const captureButton = Key('moment_camera_capture_button');
+  static const galleryButton = Key('moment_camera_gallery_button');
+  static const videoMode = Key('moment_camera_video_mode');
+  static const voiceMode = Key('moment_camera_voice_mode');
   static const sendButton = Key('moment_camera_send_button');
   static const countdown = Key('moment_camera_countdown');
   static const capturedPreview = Key('moment_camera_captured_preview');
   static const cameraError = Key('moment_camera_error');
 }
+
+enum _OrbitCaptureMode { photo, video, voice }
 
 class MomentCameraScreen extends StatefulWidget {
   const MomentCameraScreen({
@@ -37,7 +48,10 @@ class MomentCameraScreen extends StatefulWidget {
     this.onStickersPressed,
     this.onCaptured,
     this.onSendPressed,
+    this.galleryPicker,
     this.momentAudienceCircles = const <MomentAudienceCircle>[],
+    this.momentAudienceFriends = const <MomentAudienceCircle>[],
+    this.momentPrivacyAudience = 'Nobody',
     this.publishMoment,
     this.privateSaver,
     this.enableCamera = true,
@@ -52,10 +66,14 @@ class MomentCameraScreen extends StatefulWidget {
   final VoidCallback? onStickersPressed;
   final ValueChanged<Uint8List>? onCaptured;
   final ValueChanged<Uint8List>? onSendPressed;
+  /// Testable native photo-picker adapter; actual device picker is the default.
+  final Future<Uint8List?> Function()? galleryPicker;
 
   /// Inject real memberships and a confirmed publisher with the backend.
   /// Without a publisher the photo flow is explicitly UI-preview only.
   final List<MomentAudienceCircle> momentAudienceCircles;
+  final List<MomentAudienceCircle> momentAudienceFriends;
+  final String momentPrivacyAudience;
   final MomentPublisher? publishMoment;
   final OrbitPrivatePhotoSaver? privateSaver;
 
@@ -80,6 +98,19 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   String? _cameraError;
   Uint8List? _capturedBytes;
   bool _publishSheetOpen = false;
+  _OrbitCaptureMode _mode=_OrbitCaptureMode.photo;
+  final AudioRecorder _audioRecorder=AudioRecorder();
+  File? _capturedClip;
+  int? _capturedDurationMs;
+  DateTime? _recordStart;
+  Timer? _recordLimit;
+  Timer? _recordTicker;
+  StreamSubscription<Amplitude>? _amplitudeSubscription;
+  final List<double> _waveform=[];
+  int _elapsedSeconds=0;
+  bool _stopWhenStarted=false;
+  bool _recording=false;
+  double _zoomStart=1,_currentZoom=1,_minZoom=1,_maxZoom=1;
 
   FlashMode _flashMode = FlashMode.off;
   Duration _captureDelay = Duration.zero;
@@ -103,6 +134,13 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _recordLimit?.cancel();
+    _recordTicker?.cancel();
+    unawaited(_amplitudeSubscription?.cancel());
+    if(_recording && _mode==_OrbitCaptureMode.voice)unawaited(_audioRecorder.stop());
+    unawaited(_audioRecorder.dispose());
+    final captured=_capturedClip;
+    if(captured!=null)unawaited(_deleteClip(captured));
     final controller = _controller;
     _controller = null;
     unawaited(controller?.dispose());
@@ -116,6 +154,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     }
 
     if (state == AppLifecycleState.inactive) {
+      if(_recording)unawaited(_finishRecording());
       // Android's runtime permission UI temporarily moves the activity to an
       // inactive state while CameraController.initialize() is still waiting
       // for the permission result. Disposing/restarting here creates two
@@ -220,10 +259,17 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       final controller = CameraController(
         camera,
         widget.resolutionPreset,
-        enableAudio: false,
+        enableAudio: _mode==_OrbitCaptureMode.video,
       );
 
       await controller.initialize();
+      try{
+        _minZoom=await controller.getMinZoomLevel();
+        _maxZoom=await controller.getMaxZoomLevel();
+        _currentZoom=_minZoom.clamp(_minZoom,_maxZoom).toDouble();
+      }catch(_){
+        _minZoom=1;_maxZoom=1;_currentZoom=1;
+      }
 
       if (!mounted) {
         await controller.dispose();
@@ -313,6 +359,28 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     }
   }
 
+  Future<void> _focusAt(Offset point,Size size) async {
+    final c=_controller;
+    if(c==null || !c.value.isInitialized ||
+       size.width<=0 || size.height<=0 || _recording)return;
+    final normalized=Offset(
+      (point.dx/size.width).clamp(0.0,1.0).toDouble(),
+      (point.dy/size.height).clamp(0.0,1.0).toDouble());
+    try{await c.setFocusPoint(normalized);}catch(_){}
+    try{await c.setExposurePoint(normalized);}catch(_){}
+  }
+
+  void _startZoom(ScaleStartDetails details){_zoomStart=_currentZoom;}
+  void _zoomCamera(ScaleUpdateDetails details) {
+    final c=_controller;
+    if(c==null || !c.value.isInitialized ||
+       _capturedClip!=null || _capturedBytes!=null || _maxZoom<=_minZoom)return;
+    final value=(_zoomStart*details.scale).clamp(_minZoom,_maxZoom).toDouble();
+    if((value-_currentZoom).abs()<0.05)return;
+    _currentZoom=value;
+    unawaited(c.setZoomLevel(value).catchError((_){ }));
+  }
+
   Future<void> _toggleFlash() async {
     final controller = _controller;
     if (controller == null ||
@@ -398,11 +466,195 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   }
 
   Future<void> _handleCapturePressed() async {
-    if (_capturedBytes != null) {
+    if(_recording){
+      await _finishRecording();
+      return;
+    }
+    if (_capturedBytes != null || _capturedClip != null) {
       await _retake();
       return;
     }
+    if(_mode!=_OrbitCaptureMode.photo){
+      _stopWhenStarted=false;
+      await _beginRecording();
+      return;
+    }
     await _captureMoment();
+  }
+
+  Future<void> _deleteClip(File file) async {
+    try{if(await file.exists())await file.delete();}catch(_){}
+  }
+
+  Future<void> _selectCaptureMode(_OrbitCaptureMode next) async {
+    if(_isCapturing || _recording || _publishSheetOpen ||
+       _capturedBytes!=null || _capturedClip!=null || _mode==next)return;
+    setState(()=>_mode=next);
+    if(widget.enableCamera){
+      // Video requires microphone access, requested only on explicit selection.
+      await _initializeCamera(preferredCamera:_activeCamera);
+    }
+  }
+
+  Future<void> _beginRecording() async {
+    if(_isCapturing || _recording || _capturedClip!=null || !mounted)return;
+    try {
+      if(_mode==_OrbitCaptureMode.video){
+        final camera=_controller;
+        if(camera==null || !camera.value.isInitialized)return;
+        await camera.startVideoRecording();
+      }else {
+        if(!await _audioRecorder.hasPermission()){
+          throw StateError('Microphone permission is required.');
+        }
+        final root=await getTemporaryDirectory();
+        final path='${root.path}/orbit-m7-voice-${DateTime.now().microsecondsSinceEpoch}.m4a';
+        await _audioRecorder.start(const RecordConfig(
+          encoder:AudioEncoder.aacLc,bitRate:64000,
+          sampleRate:44100,numChannels:1),path:path);
+        _capturedClip=File(path);
+        await _amplitudeSubscription?.cancel();
+        _amplitudeSubscription=_audioRecorder.onAmplitudeChanged(
+          const Duration(milliseconds:150)).listen((amplitude){
+          if(!mounted || !_recording)return;
+          final value=((amplitude.current+52)/52).clamp(0.04,1.0).toDouble();
+          setState((){
+            _waveform.add(value);
+            if(_waveform.length>36)_waveform.removeAt(0);
+          });
+        });
+      }
+      _recordStart=DateTime.now();
+      if(mounted)setState((){
+        _recording=true;
+        _elapsedSeconds=0;
+      });
+      _recordTicker?.cancel();
+      _waveform.clear();
+      _recordTicker=Timer.periodic(const Duration(seconds:1),(_){
+        if(!mounted || !_recording)return;
+        setState(()=>_elapsedSeconds=
+            DateTime.now().difference(_recordStart!).inSeconds.clamp(0,60));
+      });
+      if(_stopWhenStarted){
+        _stopWhenStarted=false;
+        unawaited(_finishRecording());
+        return;
+      }
+      _recordLimit?.cancel();
+      _recordLimit=Timer(const Duration(seconds:60),(){
+        if(mounted && _recording)unawaited(_finishRecording());
+      });
+    }catch(_){
+      _stopWhenStarted=false;
+      final temp=_capturedClip;
+      if(temp!=null && _mode==_OrbitCaptureMode.voice){
+        await _deleteClip(temp);
+        _capturedClip=null;
+      }
+      if(mounted)ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content:Text('Unable to start recording. Check camera and microphone permissions.')));
+    }
+  }
+
+  Future<void> _finishRecording() async {
+    if(!_recording)return;
+    _recordLimit?.cancel();
+    _recordTicker?.cancel();
+    await _amplitudeSubscription?.cancel();
+    _amplitudeSubscription=null;
+    _recording=false;
+    final duration=DateTime.now().difference(_recordStart??DateTime.now())
+      .inMilliseconds.clamp(1,60000);
+    File? clip;
+    try{
+      if(_mode==_OrbitCaptureMode.video){
+        final camera=_controller;
+        if(camera==null)return;
+        final recorded=await camera.stopVideoRecording();
+        clip=File(recorded.path);
+      }else{
+        final path=await _audioRecorder.stop();
+        clip=path==null?null:File(path);
+      }
+      if(clip==null || !await clip.exists() || await clip.length()<1){
+        throw const FormatException('Recorded clip is empty.');
+      }
+      if(!mounted){await _deleteClip(clip);return;}
+      setState((){
+        _capturedClip=clip;
+        _capturedDurationMs=duration;
+      });
+    }catch(_){
+      // A failed stop/empty-file validation can leave a plaintext native
+      // recording behind before it was assigned to the preview state.
+      if(clip!=null)await _deleteClip(clip);
+      if(mounted)ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content:Text('Recording could not be completed.')));
+    }finally{
+      _stopWhenStarted=false;
+      if(mounted)setState(()=>_recording=false);
+    }
+  }
+
+  Future<void> _pickPhotoFromGallery() async {
+    if(_isCapturing || _recording || _publishSheetOpen ||
+       _capturedBytes!=null || _capturedClip!=null) return;
+    if(_mode==_OrbitCaptureMode.voice)return;
+    setState(()=>_isCapturing=true);
+    try {
+      if(_mode==_OrbitCaptureMode.video && widget.galleryPicker==null){
+        final clip=await ImagePicker().pickVideo(
+          source:ImageSource.gallery,
+          maxDuration:const Duration(seconds:60));
+        if(clip==null)return;
+        if(await clip.length()>500*1024*1024 ||
+           await clip.length()==0) {
+          throw const FormatException('Video exceeds capture size limits.');
+        }
+        final info=await CompressVideo().getMediaInfo(clip.path);
+        if(info.durationMs<1 || info.durationMs>60000){
+          throw const FormatException('Video must be 60 seconds or shorter.');
+        }
+        if(!mounted)return;
+        try{await _controller?.pausePreview();}catch(_){}
+        setState((){
+          _capturedClip=File(clip.path);
+          _capturedDurationMs=info.durationMs;
+        });
+        return;
+      }
+      final picker=widget.galleryPicker;
+      Uint8List? bytes;
+      if(picker!=null){
+        bytes=await picker();
+      }else{
+        // System gallery selection does not request whole-library access.
+        final selected=await ImagePicker().pickImage(
+          source:ImageSource.gallery,maxWidth:1440,imageQuality:80);
+        if(selected==null)return;
+        if(await selected.length()>26*1024*1024){
+          throw const FormatException('Image is too large for an encrypted Moment.');
+        }
+        bytes=await selected.readAsBytes();
+      }
+      if(bytes==null || bytes.isEmpty)return;
+      if(bytes.length>26*1024*1024)throw const FormatException('Photo exceeds 26 MB.');
+      if(!mounted)return;
+      final controller=_controller;
+      try {await controller?.pausePreview();}catch(_){}
+      setState(()=>_capturedBytes=bytes);
+      widget.onCaptured?.call(bytes);
+    }catch(_){
+      if(mounted){
+        // The app-wide ScaffoldMessenger already renders Orbit's approved
+        // gradient snackbar: no additional color or popup design is used.
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content:Text('Unable to open this gallery photo.')));
+      }
+    }finally{
+      if(mounted)setState(()=>_isCapturing=false);
+    }
   }
 
   Future<void> _captureMoment() async {
@@ -477,7 +729,14 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       return;
     }
 
-    setState(() => _capturedBytes = null);
+    _stopWhenStarted=false;
+    final old=_capturedClip;
+    if(old!=null)await _deleteClip(old);
+    setState(() {
+      _capturedBytes = null;
+      _capturedClip=null;
+      _capturedDurationMs=null;
+    });
     final controller = _controller;
     if (controller != null && controller.value.isInitialized) {
       try {
@@ -490,15 +749,64 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     }
   }
 
-  Future<void> _handleSendPressed() async {
-    final captured = _capturedBytes;
-    if (captured == null) {
+  Future<void> _openEditorTool(String tool) async {
+    if(_publishSheetOpen || !mounted)return;
+    if(_capturedBytes==null && _capturedClip==null){
+      if(_mode!=_OrbitCaptureMode.photo){
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content:Text('Record the Moment before editing it.')));
+        return;
+      }
       await _captureMoment();
+      if(!mounted||_capturedBytes==null)return;
+    }
+    String initialText='';
+    if(tool=='sticker'){
+      if(_mode!=_OrbitCaptureMode.photo){
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content:Text('Stickers are available for photos only.')));
+        return;
+      }
+      final selected=await showModalBottomSheet<String>(
+        context:context,useSafeArea:true,
+        backgroundColor:AppColors.background,
+        shape:const RoundedRectangleBorder(
+          borderRadius:BorderRadius.vertical(top:Radius.circular(28))),
+        builder:(sheet)=>Padding(
+          padding:const EdgeInsets.all(20),
+          child:Column(mainAxisSize:MainAxisSize.min,
+            crossAxisAlignment:CrossAxisAlignment.start,children:[
+            Text('Choose a photo sticker',style:AppTypography.smallHeading),
+            const SizedBox(height:12),
+            Wrap(spacing:8,runSpacing:8,children:[
+              for(final label in const ['LOVE!','WOW!','YES!','GO!','SMILE!'])
+                ActionChip(label:Text(label,style:AppTypography.body),
+                  onPressed:()=>Navigator.of(sheet).pop(label)),
+            ]),
+          ]),
+        ),
+      );
+      if(selected==null||!mounted)return;
+      initialText=selected;
+    }
+    await _handleSendPressed(initialOverlayText:initialText);
+  }
+
+  Future<void> _handleSendPressed({String initialOverlayText=''}) async {
+    final captured = _capturedBytes;
+    if(_recording){await _finishRecording();return;}
+    if (captured == null && _capturedClip==null) {
+      if(_mode==_OrbitCaptureMode.photo) {
+        await _captureMoment();
+      } else {
+        _stopWhenStarted=false;
+        await _beginRecording();
+      }
       return;
     }
     // Preserve existing explicit Send integrations, including legacy tests.
     final legacySend = widget.onSendPressed;
-    if (legacySend != null) {
+    if (legacySend != null && captured != null) {
       legacySend(captured);
       return;
     }
@@ -509,9 +817,17 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     try {
       await showMomentPublishingSheet(
         context,
-        photoBytes: captured,
+        photoBytes: captured ?? Uint8List(0),
+        mediaFile:_capturedClip,
+        mediaKind:_capturedClip==null?'image':
+          (_mode==_OrbitCaptureMode.video?'video':'audio'),
+        durationMs:_capturedDurationMs,
+        waveformLevels:List<double>.unmodifiable(_waveform),
+        initialOverlayText:initialOverlayText,
         // An authenticated account must never show fabricated Circle names.
         circles: widget.momentAudienceCircles,
+        friends: widget.momentAudienceFriends,
+        privacyAudience: widget.momentPrivacyAudience,
         publisher: widget.publishMoment,
         privateSaver: widget.privateSaver,
       );
@@ -566,7 +882,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
                           key: MomentCameraKeys.filterButton,
                           semanticLabel: 'Camera filters and settings',
                           assetPath: 'assets/icons/filter.svg',
-                          onTap: widget.onFilterPressed ?? () {},
+                          onTap: widget.onFilterPressed ?? ()=>unawaited(_openEditorTool('filter')), 
                         ),
                       ),
                       Positioned(
@@ -583,7 +899,39 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
                           compact: constraints.maxWidth <= 440,
                         ),
                       ),
-                      if (_countdownValue != null)
+                      if(_mode==_OrbitCaptureMode.voice &&
+                          (_recording || _capturedClip!=null) &&
+                          _waveform.isNotEmpty)
+                         Positioned(
+                           left:edgePadding+14,right:edgePadding+14,
+                           bottom:194,
+                           child:Row(
+                             mainAxisAlignment:MainAxisAlignment.center,
+                             children:_waveform.map((value)=>Container(
+                               width:4,height:5+value*38,
+                               margin:const EdgeInsets.symmetric(horizontal:2),
+                               decoration:BoxDecoration(
+                                 color:Colors.white,
+                                 borderRadius:BorderRadius.circular(2)),
+                             )).toList(),
+                           ),
+                         ),
+                       if (_recording)
+                         Positioned(
+                           bottom:100,left:edgePadding,right:edgePadding,
+                           child:Center(child:Semantics(
+                             liveRegion:true,
+                             label:'Recording ${_elapsedSeconds} of 60 seconds',
+                             child:Text(
+                               'REC  ${(_elapsedSeconds ~/ 60).toString().padLeft(2,'0')}:${(_elapsedSeconds % 60).toString().padLeft(2,'0')} / 01:00',
+                               key:const Key('moment_camera_recording_elapsed'),
+                               style:AppTypography.body.copyWith(
+                                 color:Colors.white,
+                                 fontWeight:FontWeight.w600),
+                             ),
+                           )),
+                         ),
+                       if (_countdownValue != null)
                         Center(
                           child: Text(
                             '${_countdownValue!}',
@@ -621,6 +969,17 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
 
   Widget _buildCameraBackground() {
     final captured = _capturedBytes;
+    if(_capturedClip!=null){
+      return ColoredBox(color:Colors.black,
+        child:Center(child:Column(mainAxisSize:MainAxisSize.min,children:[
+          Icon(_mode==_OrbitCaptureMode.video
+            ? Icons.videocam_outlined:Icons.mic_none_outlined,
+            color:Colors.white,size:62),
+          const SizedBox(height:12),
+          Text(_mode==_OrbitCaptureMode.video?'Video ready':'Voice ready',
+            style:AppTypography.body.copyWith(color:Colors.white)),
+        ])));
+    }
     if (captured != null) {
       return Image.memory(
         captured,
@@ -636,7 +995,14 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
 
     final controller = _controller;
     if (controller != null && controller.value.isInitialized) {
-      return _CoverCameraPreview(controller: controller);
+      return LayoutBuilder(builder:(context,constraints)=>GestureDetector(
+        behavior:HitTestBehavior.translucent,
+        onTapUp:(tap)=>unawaited(_focusAt(
+          tap.localPosition,constraints.biggest)),
+        onScaleStart:_startZoom,
+        onScaleUpdate:_zoomCamera,
+        child:_CoverCameraPreview(controller:controller),
+      ));
     }
 
     if (_cameraError != null) {
@@ -730,11 +1096,47 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
         _CameraToolItem(
+          semanticLabel:'Photo mode',
+          assetPath:'assets/icons/flip.svg',
+          icon:Icons.photo_camera_outlined,
+          label:'Photo',
+          onTap:()=>unawaited(_selectCaptureMode(_OrbitCaptureMode.photo)),
+        ),
+        const SizedBox(height:10),
+        _CameraToolItem(
           key: MomentCameraKeys.flashButton,
           semanticLabel: flashSemantic,
           assetPath: 'assets/icons/flash.svg',
           label: 'Flash',
           onTap: _toggleFlash,
+        ),
+        const SizedBox(height: 10),
+        _CameraToolItem(
+          key:MomentCameraKeys.videoMode,
+          semanticLabel:'Video recording mode (60 seconds maximum)',
+          assetPath:'assets/icons/video.svg',
+          label:'Video',
+          onTap:()=>unawaited(_selectCaptureMode(_OrbitCaptureMode.video)),
+        ),
+        const SizedBox(height:10),
+        _CameraToolItem(
+          key:MomentCameraKeys.voiceMode,
+          semanticLabel:'Voice recording mode (60 seconds maximum)',
+          assetPath:'assets/icons/flip.svg',
+          icon:Icons.mic_none_outlined,
+          label:'Voice',
+          onTap:()=>unawaited(_selectCaptureMode(_OrbitCaptureMode.voice)),
+        ),
+        const SizedBox(height:10),
+        _CameraToolItem(
+          key: MomentCameraKeys.galleryButton,
+          semanticLabel: _mode==_OrbitCaptureMode.video
+            ? 'Choose video up to 60 seconds from gallery'
+            : 'Choose photo from gallery',
+          assetPath: 'assets/icons/flip.svg',
+          icon:Icons.photo_library_outlined,
+          label: 'Gallery',
+          onTap:_mode==_OrbitCaptureMode.voice?null:_pickPhotoFromGallery,
         ),
         const SizedBox(height: 10),
         _CameraToolItem(
@@ -758,7 +1160,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
           semanticLabel: 'Open stickers',
           assetPath: 'assets/icons/sticker.svg',
           label: 'Stickers',
-          onTap: widget.onStickersPressed ?? () {},
+          onTap: widget.onStickersPressed ?? ()=>unawaited(_openEditorTool('sticker')), 
         ),
       ],
     );
@@ -772,7 +1174,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
           alignment: Alignment.centerLeft,
           child: _CameraTextButton(
             key: MomentCameraKeys.textButton,
-            onTap: widget.onTextPressed ?? () {},
+            onTap: widget.onTextPressed ?? ()=>unawaited(_openEditorTool('text')), 
           ),
         ),
         Align(
@@ -781,6 +1183,16 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
             key: MomentCameraKeys.captureButton,
             isBusy: _isCapturing,
             onTap: _handleCapturePressed,
+            recordMode:_mode!=_OrbitCaptureMode.photo,
+            isRecording:_recording,
+            onHoldStart:(){
+              _stopWhenStarted=false;
+              if(!_recording)unawaited(_beginRecording());
+            },
+            onHoldEnd:(){
+              _stopWhenStarted=true;
+              if(_recording)unawaited(_finishRecording());
+            },
           ),
         ),
         Align(
@@ -839,7 +1251,7 @@ class _CameraTopButton extends StatelessWidget {
 
   final String semanticLabel;
   final String assetPath;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -893,11 +1305,13 @@ class _CameraToolItem extends StatelessWidget {
     required this.assetPath,
     required this.label,
     required this.onTap,
+    this.icon,
     super.key,
   });
 
   final String semanticLabel;
   final String assetPath;
+  final IconData? icon;
   final String label;
   final VoidCallback onTap;
 
@@ -921,15 +1335,13 @@ class _CameraToolItem extends StatelessWidget {
                 border: Border.all(width: 1, color: const Color(0x2EFFFFFF)),
               ),
               child: Center(
-                child: SvgPicture.asset(
-                  assetPath,
-                  width: 22,
-                  height: 22,
-                  colorFilter: const ColorFilter.mode(
-                    Colors.white,
-                    BlendMode.srcIn,
-                  ),
-                ),
+                child: icon != null
+                    ? Icon(icon,size:22,color:Colors.white)
+                    : SvgPicture.asset(
+                        assetPath,width:22,height:22,
+                        colorFilter:const ColorFilter.mode(
+                          Colors.white,BlendMode.srcIn),
+                      ),
               ),
             ),
             const SizedBox(height: 4),
@@ -989,18 +1401,25 @@ class _CameraTextButton extends StatelessWidget {
 }
 
 class _CaptureButton extends StatelessWidget {
-  const _CaptureButton({required this.isBusy, required this.onTap, super.key});
+  const _CaptureButton({required this.isBusy, required this.onTap,
+    this.recordMode=false,this.isRecording=false,
+    this.onHoldStart,this.onHoldEnd,super.key});
 
   final bool isBusy;
   final VoidCallback onTap;
+  final bool recordMode,isRecording;
+  final VoidCallback? onHoldStart,onHoldEnd;
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
       button: true,
-      label: isBusy ? 'Capturing moment' : 'Capture moment',
+      label: isBusy?'Capturing moment':(isRecording?'Recording moment':
+        (recordMode?'Hold to record moment':'Capture moment')),
       child: InkResponse(
         onTap: isBusy ? null : onTap,
+        onLongPress:recordMode && !isBusy ? onHoldStart : null,
+        onLongPressUp:recordMode && !isBusy ? onHoldEnd : null,
         customBorder: const CircleBorder(),
         radius: 42,
         child: Container(

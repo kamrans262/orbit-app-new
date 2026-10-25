@@ -7,7 +7,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_bottom_navigation_bar.dart';
 import '../../../../core/widgets/app_circular_icon_button.dart';
 import '../../../orbit/presentation/screens/orbit_screen.dart';
-import '../../../moments/presentation/screens/moments_screen.dart';
+import '../../../moments/presentation/screens/orbit_live_moments_screen.dart';
 import '../../../moments/presentation/orbit_moment_camera_launcher.dart';
 import '../../../profile/presentation/navigation/profile_navigation.dart';
 import '../../domain/models/home_models.dart';
@@ -57,14 +57,18 @@ class HomeScreen extends StatefulWidget {
     this.onSeeAllMomentsPressed,
     this.selectedBottomIndex = 0,
     this.isLoading = false,
+    this.useLiveDate = false,
     this.enableDemoCircleNavigation = false,
     super.key,
   });
 
   factory HomeScreen.demo({
+    VoidCallback? onNotificationPressed,
     ValueChanged<int>? onTabSelected,
     VoidCallback? onAddPressed,
     bool enableDemoCircleNavigation = true,
+    List<MomentData>? realRecentMoments,
+    ValueChanged<MomentData>? onRealMomentPressed,
   }) {
     const participants = <ParticipantData>[
       ParticipantData(id: 'emma', name: 'Emma', imagePath: 'assets/Emma.png'),
@@ -147,7 +151,7 @@ class HomeScreen extends StatefulWidget {
           imagePath: 'assets/Sophia.png',
         ),
       ],
-      recentMoments: const <MomentData>[
+      recentMoments: realRecentMoments ?? const <MomentData>[
         MomentData(
           id: 'm1',
           name: 'Finn',
@@ -177,13 +181,13 @@ class HomeScreen extends StatefulWidget {
           senderAvatarPath: 'assets/Sophia.png',
         ),
       ],
-      onNotificationPressed: () {},
+      onNotificationPressed: onNotificationPressed ?? () {},
       onQuickActionPressed: (action) {},
       onPlanPressed: (plan) {},
       onPromoPressed: () {},
       onFavoritePersonPressed: (person) {},
       onFavoriteToggle: (person) {},
-      onMomentPressed: (moment) {},
+      onMomentPressed: onRealMomentPressed ?? (moment) {},
       onTabSelected: onTabSelected ?? (index) {},
       onAddPressed: onAddPressed ?? () {},
       enableDemoCircleNavigation:enableDemoCircleNavigation,
@@ -212,6 +216,7 @@ class HomeScreen extends StatefulWidget {
   final VoidCallback onAddPressed;
   final int selectedBottomIndex;
   final bool isLoading;
+  final bool useLiveDate;
   /// Preserves approved design-preview fixture behavior but never opens
   /// fabricated Circle rosters in authenticated production navigation.
   final bool enableDemoCircleNavigation;
@@ -305,7 +310,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _openMoments() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (routeContext) => MomentsScreen.demo(
+        builder: (routeContext) => OrbitLiveMomentsScreen(
           onTabSelected: (momentsIndex) {
             if (momentsIndex == 0) {
               Navigator.of(routeContext).pop();
@@ -337,7 +342,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _openMomentCamera() {
-    OrbitMomentCameraLauncher.open(context);
+    OrbitMomentCameraLauncher.openLive(context);
   }
 
   void _openFindFriends() {
@@ -350,6 +355,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _handleNotificationPressed() {
     widget.onNotificationPressed();
+    // Authenticated M7 Home already opens its permission-checked inbox.
+    // Do not stack the demonstration friend-request screen above it.
+    if(!widget.enableDemoCircleNavigation)return;
     Navigator.of(context).push<void>(
       AppFadeSlidePageRoute<void>(
         builder: (requestContext) => RequestScreen.demo(
@@ -457,7 +465,13 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildGreeting() {
     final trimmedName = widget.greetingName.trim();
     final displayName = trimmedName.isEmpty ? 'there' : trimmedName;
-    const dateLabel = 'Sunday, September 22';
+    final today=DateTime.now();
+    final weekdays=const ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+    final months=const ['January','February','March','April','May','June',
+      'July','August','September','October','November','December'];
+    final dateLabel=widget.useLiveDate
+      ? '${weekdays[today.weekday-1]}, ${months[today.month-1]} ${today.day}'
+      : 'Sunday, September 22';
     final nearby = widget.nearbyFriendsCount;
     final nearbyLabel = nearby == null
         ? 'Nearby friends unavailable'
@@ -662,7 +676,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 data: person,
                 onTap: () {
                   widget.onFavoritePersonPressed(person);
-                  _openFavoriteCircleDetails();
+                  if(widget.enableDemoCircleNavigation)_openFavoriteCircleDetails();
                 },
               );
             },
