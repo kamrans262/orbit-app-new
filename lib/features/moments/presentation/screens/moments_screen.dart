@@ -62,6 +62,7 @@ class MomentsScreen extends StatefulWidget {
     this.errorMessage = 'Something went wrong. Please try again.',
     this.cameraBuilder,
     this.privateMode=false,
+    this.privateBookmarking=false,
     super.key,
   });
 
@@ -161,6 +162,7 @@ class MomentsScreen extends StatefulWidget {
   final String errorMessage;
   final WidgetBuilder? cameraBuilder;
   final bool privateMode;
+  final bool privateBookmarking;
 
   @override
   State<MomentsScreen> createState() => _MomentsScreenState();
@@ -169,6 +171,7 @@ class MomentsScreen extends StatefulWidget {
 class _MomentsScreenState extends State<MomentsScreen> {
   final OrbitSearchController _searchController = OrbitSearchController();
   String _searchQuery = '';
+  bool _savedOnly=false;
 
   static const double _horizontalPadding = 20;
   static const double _sectionGap = 20;
@@ -373,6 +376,12 @@ class _MomentsScreenState extends State<MomentsScreen> {
       },
       searchButtonKey: MomentsKeys.searchButton,
       trailingActions: <Widget>[
+        if(widget.privateMode && widget.privateBookmarking)
+          AppCircularIconButton(
+            semanticLabel:_savedOnly?'Show all Moments':'Show saved Moments',
+            onPressed:()=>setState(()=>_savedOnly=!_savedOnly),
+            icon:_savedOnly?Icons.bookmark_rounded:Icons.bookmarks_outlined,
+            iconSize:20,size:40),
         if(!widget.privateMode)Theme(
           data: noFlashTheme(context),
           child: AppCircularIconButton(
@@ -415,9 +424,13 @@ class _MomentsScreenState extends State<MomentsScreen> {
 
   List<MomentFeedItem> get _visibleFeedItems {
     final query = _searchQuery.trim().toLowerCase();
-    if (query.isEmpty) return widget.feedItems;
+    final visible=widget.privateBookmarking && _savedOnly
+        ? widget.feedItems.where((item)=>item is MomentImageFeedItem &&
+            (_bookmarkedById[item.id]??item.isBookmarked)).toList()
+        : widget.feedItems;
+    if (query.isEmpty) return visible;
 
-    return widget.feedItems
+    return visible
         .where((item) {
           if (item is MomentImageFeedItem) {
             return item.author.name.toLowerCase().contains(query) ||
@@ -565,6 +578,7 @@ class _MomentsScreenState extends State<MomentsScreen> {
         return MomentImageCard(
           data: imageItem,
           privateMode:widget.privateMode,
+          privateBookmarking:widget.privateBookmarking,
           onViewPressed:()=>widget.onFeedItemPressed(imageItem),
           isLiked: _likedById[imageItem.id] ?? imageItem.isLiked,
           isBookmarked: _bookmarkedById[imageItem.id] ?? imageItem.isBookmarked,
