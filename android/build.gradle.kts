@@ -24,14 +24,15 @@ subprojects {
     if (name == "workmanager_android") {
         pluginManager.withPlugin("com.android.library") {
             pluginManager.apply("org.jetbrains.kotlin.android")
-            // Workmanager Android 0.9.2 defaults JavaCompile to 1.8 while
-            // Orbit's KGP compiles its Kotlin sources to JVM 17. Gradle
-            // rejects mixed bytecode targets in the same plugin module.
-            // Align ONLY this plugin's Java tasks; do not alter the app's
-            // or any other dependency's compilation configuration.
-            tasks.withType<JavaCompile>().configureEach {
-                sourceCompatibility = "17"
-                targetCompatibility = "17"
+            // AGP configures JavaCompile after the library plugin is applied.
+            // Override the final Java target once project evaluation completes,
+            // otherwise AGP restores Java 1.8 against KGP's JVM 17 target.
+            // This affects only the Workmanager Android library.
+            afterEvaluate {
+                tasks.withType<JavaCompile>().configureEach {
+                    sourceCompatibility = "17"
+                    targetCompatibility = "17"
+                }
             }
         }
     }
