@@ -106,6 +106,14 @@ class MomentStoryAvatar extends StatelessWidget {
                 color: Color(0xFF94A3B8),
               ),
             ),
+            if(data.ageLabel!=null)Text(
+              data.ageLabel!,
+              maxLines:1,overflow:TextOverflow.ellipsis,
+              textAlign:TextAlign.center,
+              style:const TextStyle(
+                fontFamily:AppTypography.fontFamily,fontSize:10,
+                height:1.15,color:AppColors.textMuted),
+            ),
           ],
         ),
       ),
