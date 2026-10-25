@@ -40,6 +40,7 @@ jobs:
           flutter test test/features/moments/data/moment_photo_processor_test.dart
           flutter test test/features/media/orbit_media_recovery_coordinator_test.dart
           flutter test test/features/moments/data/orbit_moment_offline_cache_test.dart
+          flutter test --dart-define=ORBIT_M7_MOMENTS_ENABLED=true test/features/moments/data/orbit_m7_background_retry_test.dart
           flutter test test/features/moments/data/orbit_moment_bookmark_vault_test.dart
           flutter test test/features/moments/presentation/widgets/orbit_m7_stage4_revocation_test.dart
           flutter test test/features/moments/presentation/widgets/orbit_m7_circle_profile_privacy_test.dart
