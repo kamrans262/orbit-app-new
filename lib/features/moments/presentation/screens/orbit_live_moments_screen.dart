@@ -130,7 +130,10 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       try {options=await _repo.audienceOptions();}
       catch(_){options=const OrbitMomentAudienceOptions([],[],'Nobody');}
       final seen=await _repo.seenMomentIds(rail.map((m)=>m.id));
-      final saved=await _repo.bookmarkedMomentIds(moments);
+      Set<String> saved=<String>{};
+      try{saved=await _repo.bookmarkedMomentIds(moments);}catch(_){
+        // Corrupt local bookmark metadata must not block the authorized feed.
+      }
       final names=<String,String>{};
       final previews=<String,Uint8List>{};
       final captions=<String,String>{};
