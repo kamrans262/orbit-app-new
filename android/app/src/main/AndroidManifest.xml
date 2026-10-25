@@ -40,6 +40,13 @@
                       android:host="indigo-caribou-178970.hostingersite.com"
                       android:pathPrefix="/invite/circle/"/>
             </intent-filter>
+            <!-- Private Moment references contain no authorization material. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="orbit" android:host="moment"/>
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
