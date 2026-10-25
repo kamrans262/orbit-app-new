@@ -55,6 +55,7 @@ Future<void> showMomentPublishingSheet(
   String privacyAudience = 'Nobody',
   MomentPublisher? publisher,
   OrbitPrivatePhotoSaver? privateSaver,
+  Future<void> Function()? onCommitted,
 }) async {
   if(mediaKind=='image' && photoBytes.isEmpty)return;
   if(mediaKind!='image' && (mediaFile==null || !['video','audio'].contains(mediaKind)))return;
@@ -83,6 +84,7 @@ Future<void> showMomentPublishingSheet(
         privacyAudience: privacyAudience,
         publisher: publisher,
         privateSaver: privateSaver,
+        onCommitted:onCommitted,
       ),
     ),
   );
@@ -102,6 +104,7 @@ class MomentPublishSheet extends StatefulWidget {
     this.privacyAudience = 'Nobody',
     this.publisher,
     this.privateSaver,
+    this.onCommitted,
     super.key,
   });
 
@@ -117,6 +120,7 @@ class MomentPublishSheet extends StatefulWidget {
   final String privacyAudience;
   final MomentPublisher? publisher;
   final OrbitPrivatePhotoSaver? privateSaver;
+  final Future<void> Function()? onCommitted;
 
   @override
   State<MomentPublishSheet> createState() => _MomentPublishSheetState();
@@ -371,6 +375,9 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
           await _audienceMemory.save(_audienceKind,_selectedIds);
         }catch(_){ /* A storage failure cannot undo a confirmed publish. */ }
       }
+      // Publishing receipt or verified private media save is authoritative.
+      // Clearing the local capture after success must not invalidate it.
+      try { await widget.onCommitted?.call(); }catch(_){}
       if (!mounted) return;
       setState(() {
         _step = _PublishStep.finished;
