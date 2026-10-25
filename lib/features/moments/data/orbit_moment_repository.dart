@@ -769,6 +769,52 @@ class OrbitMomentRepository {
     return (response['audience_revision'] as num).toInt();
   }
 
+  Future<List<MomentAudienceCircle>> eligibleTagPeople(OrbitLiveMoment item) async {
+    if(await currentUserId()!=item.creatorId)return const [];
+    if(item.audienceKind=='only_me')return const [];
+    final eligible=<String>{};
+    if(item.audienceKind=='selected_friends'){
+      eligible.addAll(item.targetIds);
+    }else if(item.audienceKind=='selected_circles'){
+      for(final circle in item.targetIds){
+        eligible.addAll(await _members(circle));
+      }
+    }
+    final people=<MomentAudienceCircle>[];
+    for(var page=1;page<=5;page++){
+      final d=await _api('GET','/friends?page=$page');
+      final raw=d['items'];
+      if(raw is! List)throw const FormatException('Invalid friend list.');
+      for(final entry in raw){
+        if(entry is! Map || entry['id'] is! String)continue;
+        final id=entry['id'] as String;
+        if(item.audienceKind=='accepted_friends'||eligible.contains(id)){
+          people.add(MomentAudienceCircle(id:id,
+            name:entry['display_name'] as String? ?? 'Orbit member'));
+        }
+      }
+      if(d['has_more']!=true)break;
+      if(page==5)throw StateError('Friend list too large to tag safely.');
+    }
+    return people;
+  }
+
+  Future<int> updateTags(OrbitLiveMoment item,Set<String> tagged,
+      {int? version}) async {
+    if(await currentUserId()!=item.creatorId)throw StateError('Not the owner.');
+    if(tagged.length>20)throw StateError('Too many tagged people.');
+    final eligible=(await eligibleTagPeople(item)).map((e)=>e.id).toSet();
+    if(!eligible.containsAll(tagged))throw StateError('People are not eligible.');
+    final response=await _api('PATCH','/moments/${Uri.encodeComponent(item.id)}',
+      body:{'revision':version??item.publishVersion,
+        'tagged_user_ids':tagged.toList()});
+    final next=response['publish_version'];
+    if(next is! num || next.toInt()<=(version??item.publishVersion)){
+      throw StateError('Tag edit not confirmed.');
+    }
+    return next.toInt();
+  }
+
   Future<int> updateCaption(OrbitLiveMoment item,String text,{int? version}) async {
     final owner=await currentUserId();
     if(owner==null || owner!=item.creatorId)throw StateError('Not the Moment owner.');
