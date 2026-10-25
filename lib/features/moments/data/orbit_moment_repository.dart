@@ -14,6 +14,7 @@ import '../../media/data/orbit_encrypted_clip_stager.dart';
 import '../domain/models/moment_publish_models.dart';
 import 'orbit_moment_intent_vault.dart';
 import 'orbit_moment_seen_vault.dart';
+import 'orbit_moment_bookmark_vault.dart';
 import '../../media/data/orbit_media_outbox.dart';
 
 class OrbitLiveMoment {
@@ -63,7 +64,8 @@ class OrbitMomentRepository {
   OrbitMomentRepository({OrbitIdentityClient? identity,OrbitMediaRepository? media,
     OrbitMomentMediaStager? stager,OrbitMediaRecipientKeys? recipientKeys,
     OrbitCircleRepository? circles,OrbitMediaCrypto? crypto,
-    OrbitMomentIntentVault? intents,OrbitMomentSeenVault? seenVault})
+    OrbitMomentIntentVault? intents,OrbitMomentSeenVault? seenVault,
+    OrbitMomentBookmarkVault? bookmarkVault})
     : _identity=identity??OrbitIdentityClient.instance,
       _media=media??OrbitMediaRepository(identity:identity),
       _stager=stager??OrbitMomentMediaStager(identity:identity),
@@ -72,6 +74,8 @@ class OrbitMomentRepository {
       _crypto=crypto??OrbitMediaCrypto(),
       _intents=intents??OrbitMomentIntentVault(),
       _seenVault=seenVault??OrbitMomentSeenVault(
+        owner:(identity??OrbitIdentityClient.instance).currentLocalSocialOwner),
+      _bookmarks=bookmarkVault??OrbitMomentBookmarkVault(
         owner:(identity??OrbitIdentityClient.instance).currentLocalSocialOwner);
   final OrbitIdentityClient _identity;
   final OrbitMediaRepository _media;
@@ -81,6 +85,7 @@ class OrbitMomentRepository {
   final OrbitMediaCrypto _crypto;
   final OrbitMomentIntentVault _intents;
   final OrbitMomentSeenVault _seenVault;
+  final OrbitMomentBookmarkVault _bookmarks;
   static const Uuid _uuid=Uuid();
   // Track app-session native players; opening another Moment must not remove
   // a different still-playing clip. Files from crashed sessions are not in
@@ -603,6 +608,24 @@ class OrbitMomentRepository {
     if(cipher==null || cipher.isEmpty)return null;
     return _openText(cipher,await _key(item.mediaId),item.mediaId,
       'place','self');
+  }
+
+  Future<Set<String>> bookmarkedMomentIds(Iterable<OrbitLiveMoment> items) async {
+    final entries=<String,DateTime>{
+      for(final moment in items)
+        '${moment.id}|${moment.contextId}':moment.publishedAt,
+    };
+    final allowed=await _bookmarks.authorizedIds(entries);
+    return items.where((m)=>allowed.contains('${m.id}|${m.contextId}'))
+        .map((m)=>m.id).toSet();
+  }
+
+  Future<void> setBookmark(OrbitLiveMoment item,{required bool saved}) async {
+    if(saved && !await remainsAuthorized(item)) {
+      throw StateError('This Moment is no longer available.');
+    }
+    await _bookmarks.setSaved(item.id,item.contextId,item.publishedAt,
+      saved:saved);
   }
 
   Future<Set<String>> seenMomentIds(Iterable<String> ids) async {
