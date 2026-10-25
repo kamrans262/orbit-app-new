@@ -14,6 +14,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../domain/models/moment_publish_models.dart';
+import '../../data/orbit_moment_capture_vault.dart';
 import '../widgets/moment_publish_sheet.dart';
 import '../../../../core/widgets/app_bottom_navigation_bar.dart';
 import '../../../../core/popups/orbit_popup_variants.dart';
@@ -100,6 +101,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   bool _publishSheetOpen = false;
   _OrbitCaptureMode _mode=_OrbitCaptureMode.photo;
   final AudioRecorder _audioRecorder=AudioRecorder();
+  final OrbitMomentCaptureVault _captureVault=OrbitMomentCaptureVault();
   File? _capturedClip;
   int? _capturedDurationMs;
   DateTime? _recordStart;
@@ -126,8 +128,58 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
 
     if (widget.enableCamera) {
       unawaited(_initializeCamera());
+      unawaited(_restoreEncryptedCapture());
     } else {
       _isInitializing = false;
+    }
+  }
+
+  Future<void> _restoreEncryptedCapture() async {
+    try {
+      final recovered=await _captureVault.restore();
+      if(recovered==null)return;
+      if(!mounted || _isCapturing || _recording ||
+          _capturedBytes!=null || _capturedClip!=null){
+        final clip=recovered.clip;
+        if(clip!=null)await _deleteClip(clip);
+        return;
+      }
+      try{await _controller?.pausePreview();}catch(_){}
+      if(!mounted){
+        final clip=recovered.clip;
+        if(clip!=null)await _deleteClip(clip);
+        return;
+      }
+      setState((){
+        _mode=recovered.kind=='video' ? _OrbitCaptureMode.video :
+          recovered.kind=='audio' ? _OrbitCaptureMode.voice :
+          _OrbitCaptureMode.photo;
+        _capturedBytes=recovered.photo;
+        _capturedClip=recovered.clip;
+        _capturedDurationMs=recovered.durationMs;
+      });
+    }catch(_){
+      // Corrupt/cross-account drafts never become a public-media fallback.
+    }
+  }
+
+  Future<void> _savePhotoDraft(Uint8List bytes) async {
+    if(!widget.enableCamera)return;
+    try{await _captureVault.savePhoto(bytes);}
+    catch(_){
+      if(mounted)ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content:Text(
+          'Capture preview is available, but encrypted draft recovery failed.')));
+    }
+  }
+
+  Future<void> _saveClipDraft(File clip,String kind,int duration) async {
+    if(!widget.enableCamera)return;
+    try{await _captureVault.saveClip(clip,kind:kind,durationMs:duration);}
+    catch(_){
+      if(mounted)ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content:Text(
+          'Recording is available now, but encrypted draft recovery failed.')));
     }
   }
 
@@ -580,6 +632,8 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       if(clip==null || !await clip.exists() || await clip.length()<1){
         throw const FormatException('Recorded clip is empty.');
       }
+      await _saveClipDraft(clip,
+        _mode==_OrbitCaptureMode.video?'video':'audio',duration);
       if(!mounted){await _deleteClip(clip);return;}
       setState((){
         _capturedClip=clip;
@@ -617,7 +671,9 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
           throw const FormatException('Video must be 60 seconds or shorter.');
         }
         if(!mounted)return;
+        await _saveClipDraft(File(clip.path),'video',info.durationMs);
         try{await _controller?.pausePreview();}catch(_){}
+        if(!mounted)return;
         setState((){
           _capturedClip=File(clip.path);
           _capturedDurationMs=info.durationMs;
@@ -643,6 +699,8 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       if(!mounted)return;
       final controller=_controller;
       try {await controller?.pausePreview();}catch(_){}
+      await _savePhotoDraft(bytes);
+      if(!mounted)return;
       setState(()=>_capturedBytes=bytes);
       widget.onCaptured?.call(bytes);
     }catch(_){
@@ -707,6 +765,8 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       if (!mounted) {
         return;
       }
+      await _savePhotoDraft(bytes);
+      if(!mounted)return;
       setState(() => _capturedBytes = bytes);
       widget.onCaptured?.call(bytes);
     } on CameraException catch (error) {
@@ -732,6 +792,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     _stopWhenStarted=false;
     final old=_capturedClip;
     if(old!=null)await _deleteClip(old);
+    try{await _captureVault.clear();}catch(_){}
     setState(() {
       _capturedBytes = null;
       _capturedClip=null;
@@ -830,6 +891,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         privacyAudience: widget.momentPrivacyAudience,
         publisher: widget.publishMoment,
         privateSaver: widget.privateSaver,
+        onCommitted:widget.enableCamera ? _captureVault.clear : null,
       );
     } finally {
       _publishSheetOpen = false;
