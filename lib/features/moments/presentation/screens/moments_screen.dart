@@ -62,6 +62,7 @@ class MomentsScreen extends StatefulWidget {
     this.errorMessage = 'Something went wrong. Please try again.',
     this.cameraBuilder,
     this.privateMode=false,
+    this.privateFiltering=false,
     this.privateBookmarking=false,
     super.key,
   });
@@ -162,6 +163,7 @@ class MomentsScreen extends StatefulWidget {
   final String errorMessage;
   final WidgetBuilder? cameraBuilder;
   final bool privateMode;
+  final bool privateFiltering;
   final bool privateBookmarking;
 
   @override
@@ -382,7 +384,7 @@ class _MomentsScreenState extends State<MomentsScreen> {
             onPressed:()=>setState(()=>_savedOnly=!_savedOnly),
             icon:_savedOnly?Icons.bookmark_rounded:Icons.bookmarks_outlined,
             iconSize:20,size:40),
-        if(!widget.privateMode)Theme(
+        if(!widget.privateMode || widget.privateFiltering)Theme(
           data: noFlashTheme(context),
           child: AppCircularIconButton(
             key: MomentsKeys.filterButton,
