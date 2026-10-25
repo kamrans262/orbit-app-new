@@ -1,8 +1,10 @@
 import 'dart:async';
+import '../../../auth/data/orbit_identity_client.dart';
 import 'package:flutter/material.dart';
 
 import '../../../moments/data/orbit_moment_repository.dart';
 import '../../../moments/presentation/screens/orbit_live_moment_viewer.dart';
+import '../../../moments/presentation/screens/orbit_live_moments_screen.dart';
 import '../../../moments/presentation/screens/orbit_live_moment_notifications_screen.dart';
 import '../../domain/models/home_models.dart';
 import 'home_screen.dart';
@@ -17,6 +19,7 @@ class OrbitLiveHomeScreen extends StatefulWidget {
 class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen> {
   final OrbitMomentRepository _moments=OrbitMomentRepository();
   List<MomentData> _recent=const [];
+  String _greeting='';
   final Map<String,OrbitLiveMoment> _byId={};
   final Map<String,String> _authors={};
   @override
@@ -26,6 +29,13 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen> {
   }
   Future<void> _reload() async {
     try {
+      try {
+        final person=await OrbitIdentityClient.instance.currentUser();
+        final data=person['data'];
+        if(data is Map && data['display_name'] is String && mounted){
+          setState(()=>_greeting=data['display_name'] as String);
+        }
+      }catch(_){}
       final rail=await _moments.feed(rail:true);
       final visible=<MomentData>[];
       final authorized=<String,OrbitLiveMoment>{};
@@ -78,12 +88,34 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => HomeScreen.demo(
-    enableDemoCircleNavigation:false,
+  Widget build(BuildContext context) => HomeScreen(
+    greetingName:_greeting,
+    useLiveDate:true,
+    quickActions:const <QuickActionData>[
+      QuickActionData(id:'moment',title:'Moment',
+        icon:Icons.photo_camera_outlined,
+        iconColor:Color(0xFF16B88B),iconBackground:Color(0xFFE2F8F2)),
+    ],
+    upcomingPlans:const <UpcomingPlanData>[],
+    promoBanner:null,
+    favoritePeople:const <FavoritePersonData>[],
+    recentMoments:_recent,
     onNotificationPressed:()=>unawaited(_openNotices()),
-    realRecentMoments:_recent,
-    onRealMomentPressed:(moment)=>unawaited(_view(moment)),
-    onTabSelected:(index){},
+    onQuickActionPressed:(action){
+      if(action.id=='moment') {
+        // Native capture is already wired through Orbit's existing launcher.
+        Navigator.of(context).push<void>(MaterialPageRoute(
+          builder:(_)=>OrbitLiveMomentsScreen(onTabSelected:(_){},
+            onAddPressed:(){})));
+      }
+    },
+    onPlanPressed:(_){},
+    onPromoPressed:(){},
+    onFavoritePersonPressed:(_){},
+    onFavoriteToggle:(_){},
+    onMomentPressed:(moment)=>unawaited(_view(moment)),
+    onTabSelected:(_){},
     onAddPressed:(){},
+    enableDemoCircleNavigation:false,
   );
 }
