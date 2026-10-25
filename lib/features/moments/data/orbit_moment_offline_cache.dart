@@ -184,6 +184,52 @@ class OrbitMomentOfflineCache {
           // Corrupt or replaced ciphertext is never returned.
         }
       }
+      // A missing, expired, corrupt or superseded preview is physically
+      // removed rather than merely hidden in the metadata index.
+      for(final entry in entries){
+        if(keep.contains(entry))continue;
+        final name=entry['file'];
+        if(name is String && RegExp(r'^[a-f0-9]{64}\.cipher
+    }finally{
+      key.fillRange(0,key.length,0);
+    }
+  }
+
+  /// Called only following a fresh successful authenticated feed response.
+  Future<void> reconcile(Set<String> authorized) async {
+    final account=await _account();
+    final root=await _root(account);
+    final entries=await _entries(account);
+    final keep=<Map<String,dynamic>>[];
+    for(final e in entries){
+      final id=e['id'];
+      if(id is String && authorized.contains(id)){
+        keep.add(e);continue;
+      }
+      final name=e['file'];
+      if(name is String && RegExp(r'^[a-f0-9]{64}\.cipher$').hasMatch(name)){
+        try{await File('${root.path}/$name').delete();}catch(_){}
+      }
+    }
+    await _vault.write(_index(account),jsonEncode(keep));
+  }
+
+  /// Logout, account switch or erasure must not retain readable cache keys.
+  /// Accepting an explicit account is safe: it can only erase local data.
+  Future<void> purge(String account) async {
+    await _vault.delete(_key(account));
+    await _vault.delete(_index(account));
+    await _vault.delete(_lastClock(account));
+    final base=await _directory();
+    final safe=account.replaceAll(RegExp(r'[^A-Za-z0-9_-]'),'_');
+    final root=Directory('${base.path}/orbit-m7-private-read/$safe');
+    if(await root.exists())await root.delete(recursive:true);
+  }
+}
+).hasMatch(name)){
+          try{await File('${root.path}/$name').delete();}catch(_){}
+        }
+      }
       await _vault.write(_index(account),jsonEncode(keep));
       return available;
     }finally{
