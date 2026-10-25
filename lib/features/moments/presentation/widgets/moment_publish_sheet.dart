@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import '../../data/moment_photo_processor.dart';
+import '../../data/orbit_moment_audience_memory.dart';
 import 'orbit_moment_draft_player.dart';
 
 import 'package:flutter/material.dart';
@@ -129,6 +130,8 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
   bool _muteVideo=false;
   bool _dataSaver=false;
   final Set<String> _taggedPeople={};
+  final OrbitMomentAudienceMemory _audienceMemory=OrbitMomentAudienceMemory();
+  OrbitMomentAudiencePreference? _previousAudience;
 
   MomentFilter _filter=MomentFilter.natural;
   double _beautyStrength=0;
@@ -203,6 +206,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
   @override
   void initState() {
     super.initState();
+    if(widget.publisher!=null)unawaited(_loadLastAudience());
     if(widget.initialOverlayText.isNotEmpty){
       _overlayText.text=widget.initialOverlayText.length>80
         ? widget.initialOverlayText.substring(0,80)
@@ -216,6 +220,59 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
     if(widget.publisher!=null && widget.circles.isNotEmpty &&
        widget.privacyAudience=='Nobody')_audienceKind='selected_circles';
   }
+  Future<void> _loadLastAudience() async {
+    try {
+      final previous=await _audienceMemory.read();
+      if(mounted)setState(()=>_previousAudience=previous);
+    }catch(_){
+      // Missing secure-storage/session state must never block composition.
+    }
+  }
+
+  bool get _previousAudienceEligible {
+    final previous=_previousAudience;
+    if(previous==null || widget.publisher==null)return false;
+    switch(previous.kind){
+      case 'only_me':return true;
+      case 'accepted_friends':
+        return widget.privacyAudience=='Selected People' &&
+          widget.friends.isNotEmpty;
+      case 'selected_friends':
+        final active=widget.friends.map((f)=>f.id).toSet();
+        return widget.privacyAudience=='Selected People' &&
+          previous.targetIds.isNotEmpty &&
+          active.containsAll(previous.targetIds);
+      case 'selected_circles':
+        final active=widget.circles.map((c)=>c.id).toSet();
+        return widget.privacyAudience=='My Circle' &&
+          previous.targetIds.isNotEmpty &&
+          active.containsAll(previous.targetIds);
+    }
+    return false;
+  }
+
+  void _selectPreviousAudience() {
+    if(!_previousAudienceEligible)return;
+    final previous=_previousAudience!;
+    setState((){
+      _audienceKind=previous.kind;
+      _selectedIds
+        ..clear()
+        ..addAll(previous.targetIds);
+      _taggedPeople.clear();
+    });
+  }
+
+  String get _previousAudienceLabel {
+    switch(_previousAudience?.kind){
+      case 'only_me':return 'Only Me';
+      case 'accepted_friends':return 'All Friends';
+      case 'selected_friends':return 'Selected Friends';
+      case 'selected_circles':return 'Selected Circles';
+    }
+    return '';
+  }
+
   final String _clientId = const Uuid().v4();
 
   // A live repository must inject circles and a publisher together. A missing
@@ -310,6 +367,9 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
         if (receipt.momentId.trim().isEmpty) {
           throw StateError('The server did not confirm the Moment.');
         }
+        try {
+          await _audienceMemory.save(_audienceKind,_selectedIds);
+        }catch(_){ /* A storage failure cannot undo a confirmed publish. */ }
       }
       if (!mounted) return;
       setState(() {
@@ -688,6 +748,14 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
         Expanded(child:ListView(
           padding:const EdgeInsets.symmetric(horizontal:20),
           children:<Widget>[
+            if(_previousAudienceEligible)Padding(
+              padding:const EdgeInsets.only(bottom:12),
+              child:TextButton.icon(
+                onPressed:_selectPreviousAudience,
+                icon:const Icon(Icons.history_rounded),
+                label:Text('Choose previous audience: $_previousAudienceLabel'),
+              ),
+            ),
             for(final type in types)
               Padding(padding:const EdgeInsets.only(bottom:8),
                 child:Material(
