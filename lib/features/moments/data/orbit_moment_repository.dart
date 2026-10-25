@@ -313,6 +313,7 @@ class OrbitMomentRepository {
         media:_media);
       if(request.mediaKind=='video'){
         await stager.stageVideo(source,muteAudio:request.muteVideo,
+          lowBandwidth:request.dataSaver,
           onProgress:(v)=>progress(v*0.82),
           onReadyForAudience:(video,poster,mediaId) async =>
             commit(video,poster,mediaId),onQueued:queued);
