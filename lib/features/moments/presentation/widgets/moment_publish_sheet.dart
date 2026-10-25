@@ -432,6 +432,8 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
                   _PublishStep.finished => _status(isCompact),
                 },
               ),
+              if(_step==_PublishStep.review && keyboard==0)
+                _reviewFooter(),
               if (keyboard == 0)
                 SizedBox(height: MediaQuery.paddingOf(context).bottom),
             ],
@@ -659,73 +661,54 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
             ),
           ],
         ],
-        const SizedBox(height: 6),
+      ],
+    );
+  }
+
+  /// Keeps the real audience scope, Publish and safe private-save action
+  /// visible while the photo/video editing controls scroll. This is the
+  /// existing Orbit button styling, not a second camera or publish flow.
+  Widget _reviewFooter(){
+    return Padding(
+      padding:const EdgeInsets.fromLTRB(20,8,20,8),
+      child:Column(mainAxisSize:MainAxisSize.min,children:[
         if (_canPublish || !_canSavePrivate)
-          Text(
-            'Choose who can see your encrypted Moment.',
-            style: AppTypography.bodyMuted,
-          ),
-        const SizedBox(height: 10),
-        if (_canPublish || !_canSavePrivate)
-        OutlinedButton.icon(
-          key: MomentPublishKeys.chooseAudience,
-          onPressed: () => setState(() => _step = _PublishStep.audience),
-          icon: const Icon(Icons.people_outline_rounded, size: 20),
-          label: Text(
-            _hasAudience ? '$_audienceLabel selected' : 'Choose audience',
-          ),
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size(double.infinity, 48),
-            foregroundColor: AppColors.primaryEnd,
-            side: const BorderSide(color: AppColors.primaryEnd),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
+          OutlinedButton.icon(
+            key:MomentPublishKeys.chooseAudience,
+            onPressed:()=>setState(()=>_step=_PublishStep.audience),
+            icon:const Icon(Icons.people_outline_rounded,size:20),
+            label:Text(_hasAudience?'$_audienceLabel selected':'Choose audience'),
+            style:OutlinedButton.styleFrom(
+              minimumSize:const Size(double.infinity,48),
+              foregroundColor:AppColors.primaryEnd,
+              side:const BorderSide(color:AppColors.primaryEnd),
+              shape:RoundedRectangleBorder(
+                borderRadius:BorderRadius.circular(24)),
             ),
           ),
-        ),
-        const SizedBox(height: 12),
-        if (!_canPublish && !_canSavePrivate)
-          Padding(
-            key: MomentPublishKeys.unavailable,
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Text(
-              'UI preview only. No account circles or publishing service are connected yet. '
-              'Previewing does not upload or notify anyone.',
-              style: AppTypography.body.copyWith(
-                color: AppColors.textMuted,
-                fontSize: 12,
-              ),
-            ),
-          ),
-        if (_canSavePrivate && widget.mediaKind=='image')
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Text(
-              'Save this photo as private encrypted media. Only your trusted '
-              'device receives its key; it is not published to any Circle.',
-              style: AppTypography.bodyMuted,
-            ),
-          ),
+        if(!_canPublish && !_canSavePrivate)
+          Text('UI preview only. No upload or notification is sent.',
+            style:AppTypography.bodyMuted),
+        if(_canSavePrivate && widget.mediaKind=='image')
+          Text('Private save uses only your trusted device; it does not post.',
+            style:AppTypography.bodyMuted),
+        const SizedBox(height:8),
         AppPrimaryButton(
-          label: _canPublish ? 'Publish Moment'
-              : (_canSavePrivate ? 'Save privately' : 'Preview publishing flow'),
-          enabled: _canPublish ? _hasAudience : (_canSavePrivate || _hasAudience),
-          onPressed: () => unawaited(_submit(
-            privateOnly: !_canPublish && _canSavePrivate,
-            previewOnly: !_canPublish && !_canSavePrivate,
-          )),
+          label:_canPublish?'Publish Moment':
+            (_canSavePrivate?'Save privately':'Preview publishing flow'),
+          enabled:_canPublish?_hasAudience:(_canSavePrivate||_hasAudience),
+          onPressed:()=>unawaited(_submit(
+            privateOnly:!_canPublish&&_canSavePrivate,
+            previewOnly:!_canPublish&&!_canSavePrivate)),
         ),
         if(_canPublish && _canSavePrivate && widget.mediaKind=='image')
           TextButton(
             onPressed:()=>unawaited(_submit(privateOnly:true)),
             child:const Text('Save privately without publishing'),
           ),
-        const SizedBox(height: 10),
-        TextButton(
-          onPressed: _back,
-          child: const Text('Retake / Back to Camera'),
-        ),
-      ],
+        TextButton(onPressed:_back,
+          child:const Text('Retake / Back to Camera')),
+      ]),
     );
   }
 
