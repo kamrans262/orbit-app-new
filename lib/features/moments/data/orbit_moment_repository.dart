@@ -771,12 +771,14 @@ class OrbitMomentRepository {
 
   Future<List<MomentAudienceCircle>> eligibleTagPeople(OrbitLiveMoment item) async {
     if(await currentUserId()!=item.creatorId)return const [];
-    if(item.audienceKind=='only_me')return const [];
+    final live=OrbitLiveMoment.fromJson(await _api('GET',
+      '/moments/${Uri.encodeComponent(item.id)}?context_id=self'));
+    if(live.audienceKind=='only_me')return const [];
     final eligible=<String>{};
-    if(item.audienceKind=='selected_friends'){
-      eligible.addAll(item.targetIds);
-    }else if(item.audienceKind=='selected_circles'){
-      for(final circle in item.targetIds){
+    if(live.audienceKind=='selected_friends'){
+      eligible.addAll(live.targetIds);
+    }else if(live.audienceKind=='selected_circles'){
+      for(final circle in live.targetIds){
         eligible.addAll(await _members(circle));
       }
     }
@@ -788,7 +790,7 @@ class OrbitMomentRepository {
       for(final entry in raw){
         if(entry is! Map || entry['id'] is! String)continue;
         final id=entry['id'] as String;
-        if(item.audienceKind=='accepted_friends'||eligible.contains(id)){
+        if(live.audienceKind=='accepted_friends'||eligible.contains(id)){
           people.add(MomentAudienceCircle(id:id,
             name:entry['display_name'] as String? ?? 'Orbit member'));
         }
