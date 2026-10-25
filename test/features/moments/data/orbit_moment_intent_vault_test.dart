@@ -37,6 +37,24 @@ void main(){
     await recreated.remove(owner,item.transfer);
     expect(await first.pending(owner),isEmpty);
   });
+  test('M7 signout/account switch purges secure publish metadata before auth is cleared',() async {
+    const previous='previous-account';
+    var current=previous;
+    final vaultStore=_MemoryVault();
+    final vault=OrbitMomentIntentVault(
+      vault:vaultStore,owner:() async=>current);
+    await vault.save(OrbitStoredMomentIntent(
+      owner:previous,transfer:'transfer-1',clientId:'publish-uuid-1',
+      audienceKind:'only_me',targetIds:const [],caption:'private caption',
+      createdAt:DateTime.now().toUtc()));
+    expect((await vault.pending(previous)),hasLength(1));
+    current='new-account';
+    await vault.purge(previous);
+    expect(vaultStore.data.keys.where((key)=>key.contains(previous)),isEmpty);
+    current=previous;
+    expect(await vault.pending(previous),isEmpty);
+  });
+
   test('M7 rejects reassigning one encrypted transfer to a different publish request',() async {
     const owner='owner';
     final vault=OrbitMomentIntentVault(vault:_MemoryVault(),
