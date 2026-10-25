@@ -64,6 +64,7 @@ class MomentsScreen extends StatefulWidget {
     this.privateMode=false,
     this.privateFiltering=false,
     this.privateBookmarking=false,
+    this.privateSharing=false,
     super.key,
   });
 
@@ -165,6 +166,7 @@ class MomentsScreen extends StatefulWidget {
   final bool privateMode;
   final bool privateFiltering;
   final bool privateBookmarking;
+  final bool privateSharing;
 
   @override
   State<MomentsScreen> createState() => _MomentsScreenState();
@@ -581,6 +583,7 @@ class _MomentsScreenState extends State<MomentsScreen> {
           data: imageItem,
           privateMode:widget.privateMode,
           privateBookmarking:widget.privateBookmarking,
+          privateSharing:widget.privateSharing,
           onViewPressed:()=>widget.onFeedItemPressed(imageItem),
           isLiked: _likedById[imageItem.id] ?? imageItem.isLiked,
           isBookmarked: _bookmarkedById[imageItem.id] ?? imageItem.isBookmarked,
