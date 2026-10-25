@@ -122,6 +122,22 @@ class OrbitMomentRepository {
 
   /// Opening a shared reference always performs a fresh server authorization
   /// check. The link itself contains no keys, grants, recipient lists or token.
+  Future<({DateTime issued,DateTime expires,DateTime viewExpires})>
+      offlinePreviewLease(OrbitLiveMoment item) async {
+    final data=await _api('GET',
+      '/moments/${Uri.encodeComponent(item.id)}/cache-lease?context_id='
+      '${Uri.encodeQueryComponent(item.contextId)}');
+    if(data['moment_id']!=item.id || data['context_id']!=item.contextId ||
+       data['audience_revision']!=item.audienceRevision){
+      throw StateError('Private cache lease context or revision changed.');
+    }
+    return (
+      issued:DateTime.parse(data['issued_at'] as String).toUtc(),
+      expires:DateTime.parse(data['expires_at'] as String).toUtc(),
+      viewExpires:DateTime.parse(data['view_expires_at'] as String).toUtc(),
+    );
+  }
+
   Future<OrbitLiveMoment> authorizedMoment(String id) async {
     final data=await _api('GET','/moments/${Uri.encodeComponent(id)}');
     return OrbitLiveMoment.fromJson(data);
