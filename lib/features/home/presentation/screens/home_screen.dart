@@ -353,6 +353,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _handleNotificationPressed() {
     widget.onNotificationPressed();
+    // Authenticated M7 Home already opens its permission-checked inbox.
+    // Do not stack the demonstration friend-request screen above it.
+    if(!widget.enableDemoCircleNavigation)return;
     Navigator.of(context).push<void>(
       AppFadeSlidePageRoute<void>(
         builder: (requestContext) => RequestScreen.demo(
