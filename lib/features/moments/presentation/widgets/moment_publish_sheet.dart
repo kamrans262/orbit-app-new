@@ -377,7 +377,9 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
       }
       // Publishing receipt or verified private media save is authoritative.
       // Clearing the local capture after success must not invalidate it.
-      try { await widget.onCommitted?.call(); }catch(_){}
+      if(!previewOnly){
+        try { await widget.onCommitted?.call(); }catch(_){}
+      }
       if (!mounted) return;
       setState(() {
         _step = _PublishStep.finished;
