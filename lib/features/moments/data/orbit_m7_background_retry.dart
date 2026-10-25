@@ -15,7 +15,7 @@ import 'orbit_moment_repository.dart';
 /// Android WorkManager and iOS BGTaskScheduler are opportunistic: an OS force
 /// stop, device policies, battery limits or iOS expiration can defer execution.
 abstract final class OrbitM7BackgroundRetry {
-  static const taskName='com.example.orbit_ui.m7.encrypted_retry';
+  static const taskName='com.example.orbitUi.m7.encrypted_retry';
   static bool _initialized=false;
 
   static Future<void> initialize() async {
