@@ -755,8 +755,14 @@ class OrbitMomentRepository {
     return out;
   }
 
+  Future<bool> volunteerEvidenceAllowed() async {
+    final data=await _api('GET','/moments/report-evidence-policy');
+    return data['voluntary_preview_enabled']==true;
+  }
+
   Future<void> report(OrbitLiveMoment item,String reason,
-      {String? commentId,bool account=false}) async {
+      {String? commentId,bool account=false,
+       Uint8List? volunteeredPreview}) async {
     final path='/moments/'+Uri.encodeComponent(item.id)+
       (commentId==null?'/reports':
         '/comments/'+Uri.encodeComponent(commentId)+'/reports');
@@ -764,7 +770,10 @@ class OrbitMomentRepository {
       body:{'context_id':item.contextId,'reason':reason,
         'report_target':account?'account':
           commentId!=null?'comment':'moment',
-        'evidence_consent':false});
+        'evidence_consent':volunteeredPreview!=null,
+        if(volunteeredPreview!=null)
+          'evidence_preview_base64':base64Encode(volunteeredPreview),
+      });
   }
   /// UI owner controls are gated against the currently signed-in account;
   /// Laravel independently re-checks ownership before any sensitive action.
