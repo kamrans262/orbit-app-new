@@ -18,6 +18,7 @@ class MomentPublishRequest {
     this.mediaKind='image',
     this.durationMs,
     this.muteVideo=false,
+    this.dataSaver=false,
     this.waveformLevels=const [],
     this.placeLabel='',
     this.locationConsent=false,
@@ -36,6 +37,7 @@ class MomentPublishRequest {
   final String mediaKind;
   final int? durationMs;
   final bool muteVideo;
+  final bool dataSaver;
   final List<double> waveformLevels;
   final String placeLabel;
   final bool locationConsent;
