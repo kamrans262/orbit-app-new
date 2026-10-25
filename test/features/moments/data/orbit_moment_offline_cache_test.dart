@@ -35,8 +35,9 @@ void main(){
       issuedAt:now,expiresAt:now.add(const Duration(minutes:3)),
       viewExpiresAt:now.add(const Duration(days:6)),preview:jpeg,
     );
-    final content=(await (await root.list(recursive:true).where((e)=>
-      e is File && e.path.endsWith('.cipher')).toList()).single as File);
+    final files=await root.list(recursive:true).where((e)=>
+      e is File && e.path.endsWith('.cipher')).toList();
+    final content=files.single as File;
     final ciphertext=await content.readAsBytes();
     expect(ciphertext, isNot(orderedEquals(jpeg)));
     final restored=await cache.read();
