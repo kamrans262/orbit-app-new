@@ -1198,7 +1198,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
           assetPath: 'assets/icons/flip.svg',
           icon:Icons.photo_library_outlined,
           label: 'Gallery',
-          onTap:_mode==_OrbitCaptureMode.voice?null:_pickPhotoFromGallery,
+          onTap:_mode==_OrbitCaptureMode.voice?null:()=>unawaited(_pickPhotoFromGallery()),
         ),
         const SizedBox(height: 10),
         _CameraToolItem(
