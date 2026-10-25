@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import '../../../../app/theme/app_colors.dart';
+import '../../../../core/popups/orbit_popup_variants.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_primary_button.dart';
 
@@ -110,6 +111,9 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       }
       var waiting=0;
       try{waiting=await _repo.pendingPublishCount();}catch(_){}
+      if(waiting>0 && pendingProblem==null){
+        try{pendingProblem=await _repo.pendingDraftNotice();}catch(_){}
+      }
       if(mounted && epoch==_loadEpoch)setState((){
         _pendingPublishCount=waiting;
         _pendingWarning=pendingProblem;
@@ -187,6 +191,19 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       }
     }
   }
+  Future<void> _discardUnrecoverable() async {
+    if(!mounted || _retrying)return;
+    await showDiscardMomentDraftPopup(context,onDiscard:() async {
+      try{
+        await _repo.discardUnrecoverableDrafts();
+        if(mounted)unawaited(_load());
+      }catch(_){
+        if(mounted)setState(()=>_pendingWarning=
+          'Encrypted drafts could not be discarded securely.');
+      }
+    });
+  }
+
   String _relative(DateTime timestamp) {
     final d=DateTime.now().difference(timestamp);
     if(d.inMinutes<1)return 'Just now';
@@ -311,10 +328,16 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
               _pendingWarning??'$_pendingPublishCount encrypted Moment draft(s) waiting to send',
               textAlign:TextAlign.center,style:AppTypography.body),
             const SizedBox(height:8),
-            AppPrimaryButton(
-              label:_retrying?'Sending…':'Retry encrypted draft',
-              enabled:!_retrying,
-              onPressed:()=>unawaited(_retryEncryptedDrafts())),
+            if((_pendingWarning??'').startsWith('Draft needs review') ||
+                (_pendingWarning??'').startsWith('Encrypted draft is incomplete'))
+              AppPrimaryButton(label:'Discard unrecoverable draft',
+                enabled:!_retrying,
+                onPressed:()=>unawaited(_discardUnrecoverable()))
+            else
+              AppPrimaryButton(
+                label:_retrying?'Sending…':'Retry encrypted draft',
+                enabled:!_retrying,
+                onPressed:()=>unawaited(_retryEncryptedDrafts())),
           ]),
         ),
       ),
