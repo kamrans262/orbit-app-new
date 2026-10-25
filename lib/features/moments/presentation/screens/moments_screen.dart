@@ -66,6 +66,7 @@ class MomentsScreen extends StatefulWidget {
     this.privateFiltering=false,
     this.privateBookmarking=false,
     this.privateSharing=false,
+    this.onRefresh,
     super.key,
   });
 
@@ -169,6 +170,7 @@ class MomentsScreen extends StatefulWidget {
   final bool privateFiltering;
   final bool privateBookmarking;
   final bool privateSharing;
+  final Future<void> Function()? onRefresh;
 
   @override
   State<MomentsScreen> createState() => _MomentsScreenState();
@@ -236,9 +238,13 @@ class _MomentsScreenState extends State<MomentsScreen> {
         ),
         body: SafeArea(
           bottom: false,
+          child: RefreshIndicator(
+          onRefresh:widget.onRefresh ?? () async {},
+          color:AppColors.primaryEnd,
           child: CustomScrollView(
             key: MomentsKeys.feed,
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            physics:const AlwaysScrollableScrollPhysics(),
             slivers: <Widget>[
               const SliverToBoxAdapter(child: SizedBox(height: 20)),
               SliverPadding(
@@ -251,6 +257,7 @@ class _MomentsScreenState extends State<MomentsScreen> {
               ..._buildContentSlivers(),
               const SliverToBoxAdapter(child: SizedBox(height: 20)),
             ],
+          ),
           ),
         ),
       ),
@@ -473,11 +480,19 @@ class _MomentsScreenState extends State<MomentsScreen> {
         return <Widget>[
           SliverFillRemaining(
             hasScrollBody: false,
-            child: _MomentsMessageState(
-              key: MomentsKeys.errorState,
-              icon: Icons.cloud_off_outlined,
-              title: 'Unable to load moments',
-              message: widget.errorMessage,
+            child: Column(mainAxisAlignment:MainAxisAlignment.center,
+              children:[
+                _MomentsMessageState(
+                  key: MomentsKeys.errorState,
+                  icon: Icons.cloud_off_outlined,
+                  title: 'Unable to load moments',
+                  message: widget.errorMessage,
+                ),
+                if(widget.onRefresh!=null)TextButton(
+                  onPressed:()=>unawaited(widget.onRefresh!()),
+                  child:const Text('Try again'),
+                ),
+              ],
             ),
           ),
         ];
