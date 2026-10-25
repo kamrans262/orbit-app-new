@@ -87,7 +87,7 @@ class _OrbitLiveMomentNotificationsScreenState
                   onRefresh:_load,
                   child:ListView.separated(
                     itemCount:_items.length,
-                    separatorBuilder:(_,_)=>const Divider(height:1),
+                    separatorBuilder:(_,index)=>const Divider(height:1),
                     itemBuilder:(context,index) {
                       final row=_items[index];
                       return ListTile(
