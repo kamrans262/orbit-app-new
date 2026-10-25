@@ -43,6 +43,7 @@ class FriendDetailsScreen extends StatefulWidget {
     this.viewState = FriendDetailsViewState.loaded,
     this.errorMessage = 'Something went wrong. Please try again.',
     this.onRetry,
+    this.momentsTabBuilder,
     super.key,
   });
 
@@ -157,6 +158,8 @@ class FriendDetailsScreen extends StatefulWidget {
   final FriendDetailsViewState viewState;
   final String errorMessage;
   final VoidCallback? onRetry;
+  /// Reuses the Circle detail screen for its authorized Moments tab.
+  final WidgetBuilder? momentsTabBuilder;
 
   @override
   State<FriendDetailsScreen> createState() => _FriendDetailsScreenState();
@@ -171,6 +174,7 @@ class _FriendDetailsScreenState extends State<FriendDetailsScreen> {
   static const double _groupCardHeight = 137;
 
   late FriendDetailsSegment _segment;
+  bool _showingMoments=false;
   late List<FriendMemberData> _members;
   late List<CircleGroupData> _groups;
 
@@ -231,7 +235,30 @@ class _FriendDetailsScreenState extends State<FriendDetailsScreen> {
               ),
               const SliverToBoxAdapter(child:SizedBox(height:_sectionGap)),
             ],
-            if (widget.showGroupSegment) ...<Widget>[
+            if(widget.momentsTabBuilder!=null &&
+               widget.viewState==FriendDetailsViewState.loaded) ...<Widget>[
+              SliverPadding(
+                padding:const EdgeInsets.symmetric(horizontal:_horizontalPadding),
+                sliver:SliverToBoxAdapter(child:Row(children:[
+                  Expanded(child:TextButton(
+                    key:const Key('circle_detail_members_tab'),
+                    onPressed:()=>setState(()=>_showingMoments=false),
+                    child:Text('Members',style:AppTypography.body.copyWith(
+                      color:!_showingMoments?AppColors.primaryEnd:AppColors.textMuted,
+                      fontWeight:!_showingMoments?FontWeight.w600:FontWeight.w400)),
+                  )),
+                  Expanded(child:TextButton(
+                    key:const Key('circle_detail_moments_tab'),
+                    onPressed:()=>setState(()=>_showingMoments=true),
+                    child:Text('Moments',style:AppTypography.body.copyWith(
+                      color:_showingMoments?AppColors.primaryEnd:AppColors.textMuted,
+                      fontWeight:_showingMoments?FontWeight.w600:FontWeight.w400)),
+                  )),
+                ])),
+              ),
+              const SliverToBoxAdapter(child:SizedBox(height:_sectionGap)),
+            ],
+            if (widget.showGroupSegment && !_showingMoments) ...<Widget>[
               SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal:_horizontalPadding),
                 sliver: SliverToBoxAdapter(
@@ -364,6 +391,13 @@ class _FriendDetailsScreenState extends State<FriendDetailsScreen> {
           ),
         ];
       case FriendDetailsViewState.loaded:
+        if(_showingMoments && widget.momentsTabBuilder!=null){
+          return <Widget>[SliverPadding(
+            padding:const EdgeInsets.symmetric(horizontal:_horizontalPadding),
+            sliver:SliverToBoxAdapter(
+              child:widget.momentsTabBuilder!(context)),
+          )];
+        }
         return _segment == FriendDetailsSegment.circle
             ? _buildCircleSlivers()
             : _buildGroupSlivers();

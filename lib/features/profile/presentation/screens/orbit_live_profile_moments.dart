@@ -14,57 +14,141 @@ import '../widgets/profile_moment_tile.dart';
 /// Uses the approved Profile Moment tile and masonry grid. Nothing is public:
 /// each original and thumbnail requires M3/M5/M6/M7 authorization.
 class OrbitLiveProfileMoments extends StatefulWidget {
-  const OrbitLiveProfileMoments({required this.profileId,super.key});
-  final String profileId;
+  const OrbitLiveProfileMoments({
+    this.profileId,this.circleId,this.repository,super.key,
+  }) : assert((profileId==null)!=(circleId==null),
+    'Select exactly one private Moment context.');
+  final String? profileId,circleId;
+  final OrbitMomentRepository? repository;
+
   @override
   State<OrbitLiveProfileMoments> createState()=>_OrbitLiveProfileMomentsState();
 }
-class _OrbitLiveProfileMomentsState extends State<OrbitLiveProfileMoments> {
-  final OrbitMomentRepository _repo=OrbitMomentRepository();
+
+class _OrbitLiveProfileMomentsState extends State<OrbitLiveProfileMoments>
+    with WidgetsBindingObserver {
+  late final OrbitMomentRepository _repo=widget.repository??OrbitMomentRepository();
   final List<OrbitLiveMoment> _authorized=[];
   final Map<String,Uint8List> _images={};
   bool _loading=true;
   String? _error;
+  int _epoch=0;
+  Timer? _authorizationTimer;
 
   @override
-  void initState(){super.initState();unawaited(_reload());}
+  void initState(){
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _authorizationTimer=Timer.periodic(const Duration(seconds:25),(_){
+      if(!mounted || _loading ||
+        WidgetsBinding.instance.lifecycleState!=AppLifecycleState.resumed ||
+        ModalRoute.of(context)?.isCurrent!=true)return;
+      unawaited(_reload());
+    });
+    unawaited(_reload());
+  }
+
+  @override
+  void didUpdateWidget(covariant OrbitLiveProfileMoments old){
+    super.didUpdateWidget(old);
+    if(old.profileId!=widget.profileId||old.circleId!=widget.circleId){
+      ++_epoch;
+      _discardMedia();
+      unawaited(_reload());
+    }
+  }
+
+  void _discardMedia(){
+    for(final bytes in _images.values){
+      unawaited(MemoryImage(bytes).evict());
+    }
+    _images.clear();
+    _authorized.clear();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state){
+    if(state==AppLifecycleState.inactive ||
+       state==AppLifecycleState.hidden ||
+       state==AppLifecycleState.paused){
+      ++_epoch;
+      if(mounted)setState((){
+        _discardMedia();
+        _loading=true;
+      });
+    }else if(state==AppLifecycleState.resumed && mounted){
+      unawaited(_reload());
+    }
+  }
+
+  @override
+  void dispose(){
+    ++_epoch;
+    _authorizationTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _discardMedia();
+    super.dispose();
+  }
 
   Future<void> _reload() async {
-    if(mounted)setState((){_loading=true;_error=null;});
+    if(!mounted)return;
+    final epoch=++_epoch;
+    setState((){
+      _discardMedia(); // Never render stale content during ACL revalidation.
+      _loading=true;_error=null;
+    });
+    final pics=<String,Uint8List>{};
     try{
-      final feed=await _repo.feed(profileId:widget.profileId,maxItems:40);
+      final feed=await _repo.feed(
+        profileId:widget.profileId,circleId:widget.circleId,maxItems:40);
       final shown=<OrbitLiveMoment>[];
-      final pics=<String,Uint8List>{};
-      for(final moment in feed) {
-        try {
+      for(final moment in feed){
+        if(!mounted || epoch!=_epoch)break;
+        try{
           final thumb=await _repo.photo(moment);
+          // Permission could change while the download/decrypt was running.
+          if(!await _repo.remainsAuthorized(moment)){
+            unawaited(MemoryImage(thumb).evict());
+            continue;
+          }
+          if(!mounted || epoch!=_epoch){
+            unawaited(MemoryImage(thumb).evict());
+            break;
+          }
           pics[moment.id]=thumb;
           shown.add(moment);
         }catch(_){
-          // Revoked, blocked and expired Moments do not create a tile.
+          // A denied or expired Moment never leaves a stale public thumbnail.
         }
       }
-      if(!mounted)return;
+      if(!mounted || epoch!=_epoch)return;
       setState((){
         _authorized..clear()..addAll(shown);
         _images..clear()..addAll(pics);
         _loading=false;
       });
     }catch(_){
-      if(mounted)setState((){
-        _error='Your Moments are unavailable. Check your connection.';
+      if(mounted && epoch==_epoch)setState((){
+        _discardMedia();
+        _error='Moments are unavailable. Check your connection.';
         _loading=false;
       });
+    }finally{
+      if(!mounted||epoch!=_epoch){
+        for(final bytes in pics.values)unawaited(MemoryImage(bytes).evict());
+      }
     }
   }
 
   Future<void> _open(OrbitLiveMoment moment) async {
-    if(!mounted)return;
+    if(!mounted || !await _repo.remainsAuthorized(moment)){
+      if(mounted)unawaited(_reload());
+      return;
+    }
     final current=_authorized.indexWhere((m)=>m.id==moment.id);
-    // Only one's own profile should display "You". A foreign user's
-    // accessible Moments must show the real authorized author identity.
+    if(current<0)return;
     String author='Orbit member';
-    try {author=await _repo.name(moment.creatorId);}catch(_){}
+    try{author=await _repo.name(moment.creatorId);}catch(_){}
     if(!mounted)return;
     await Navigator.of(context).push<void>(MaterialPageRoute(
       builder:(_)=>OrbitLiveMomentViewer(
