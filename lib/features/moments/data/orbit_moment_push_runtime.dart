@@ -83,7 +83,14 @@ class OrbitMomentPushRuntime {
       _configuredOwner=owner;
       _active=true;
       _tokenChanges=messaging.onTokenRefresh.listen((next){
-        if(next.isNotEmpty)unawaited(_register(next,owner));
+        if(next.isNotEmpty){
+          // Token rotation can fail when offline or after a logout. It must
+          // never become an unhandled asynchronous exception.
+          unawaited(_register(next,owner).catchError((Object _){
+            // Server-side trusted-device and active-session checks remain
+            // authoritative; the next foreground bootstrap can retry.
+          }));
+        }
       },onError:(_){});
       _foreground=FirebaseMessaging.onMessage.listen((msg){
         if(msg.data['type']=='moment_available')_updates.add(null);
