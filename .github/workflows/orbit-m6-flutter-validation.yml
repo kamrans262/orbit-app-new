@@ -1,0 +1,35 @@
+name: Orbit M6 Flutter media validation
+on:
+  push:
+    branches: [feature/m6-media-flutter-integration]
+  pull_request:
+    branches: [feature/m5-circles-flutter-integration]
+permissions:
+  contents: read
+concurrency:
+  group: orbit-m6-flutter-branch
+  cancel-in-progress: true
+jobs:
+  media:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - name: Resolve dependencies
+        run: flutter pub get
+      - name: Analyze M6 implementation
+        run: dart analyze lib/features/media test/features/media lib/features/moments/presentation/orbit_moment_camera_launcher.dart
+      - name: Test M6 crypto and uploads
+        run: flutter test test/features/media
+      - name: Regression existing Moment widgets
+        run: flutter test test/features/moments
+      - name: Analyze integrated Orbit navigation and approved friend UI
+        run: |
+          dart analyze lib/features/connectivity/presentation/orbit_connectivity_runtime.dart lib/features/home/presentation/screens/home_screen.dart lib/features/friends/presentation/screens/orbit_discover_friends_screen.dart lib/features/friends/presentation/screens/orbit_friend_requests_screen.dart lib/features/friends/presentation/widgets/friend_request_segmented_control.dart
+      - name: Regression friend screens and request control
+        run: flutter test test/features/friends

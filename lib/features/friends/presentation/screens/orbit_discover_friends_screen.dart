@@ -258,7 +258,7 @@ class _OrbitDiscoverFriendsScreenState extends State<OrbitDiscoverFriendsScreen>
                 icon: Icons.manage_accounts_outlined,
                 iconSize: 24,
                 iconColor: Colors.black,
-                size: 30,
+                size: 40,
                 onPressed: () => Navigator.of(context).push<void>(
                   AppFadeSlidePageRoute<void>(builder: (_) =>
                     OrbitDiscoveryPreferencesScreen(repository: _repo))),

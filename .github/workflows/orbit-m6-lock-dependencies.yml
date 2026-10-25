@@ -1,0 +1,30 @@
+name: Orbit M6 lock Flutter native media dependencies
+on:
+  push:
+    branches: [feature/m6-media-flutter-integration]
+    paths: [docs/M6_DEPENDENCY_LOCK_REQUEST.md]
+permissions:
+  contents: write
+jobs:
+  lock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.47.7'
+          cache: true
+      - name: Reconcile lockfile with explicitly pinned Flutter media packages
+        run: flutter pub get
+      - name: Commit lockfile to existing M6 branch only
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pubspec.lock
+          if ! git diff --cached --quiet; then
+            git commit -m "M6 Flutter: lock native media codec dependencies"
+            git fetch origin feature/m6-media-flutter-integration
+            git rebase origin/feature/m6-media-flutter-integration
+            git push origin HEAD:feature/m6-media-flutter-integration
+          fi

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
@@ -38,6 +39,7 @@ class MomentCameraScreen extends StatefulWidget {
     this.onSendPressed,
     this.momentAudienceCircles = const <MomentAudienceCircle>[],
     this.publishMoment,
+    this.privateSaver,
     this.enableCamera = true,
     this.initialCameraDirection = CameraLensDirection.front,
     this.resolutionPreset = ResolutionPreset.high,
@@ -55,6 +57,7 @@ class MomentCameraScreen extends StatefulWidget {
   /// Without a publisher the photo flow is explicitly UI-preview only.
   final List<MomentAudienceCircle> momentAudienceCircles;
   final MomentPublisher? publishMoment;
+  final OrbitPrivatePhotoSaver? privateSaver;
 
   /// Defaults to true in the real app. Tests can turn this off so widget tests
   /// never invoke a platform camera channel.
@@ -429,7 +432,19 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       setState(() => _countdownValue = null);
 
       final file = await controller.takePicture();
-      final bytes = await file.readAsBytes();
+      late final Uint8List bytes;
+      try {
+        bytes = await file.readAsBytes();
+      } finally {
+        // The camera plugin stages an unencrypted temporary original.
+        // Never retain that file after moving the photo into memory.
+        final plaintext = File(file.path);
+        if (await plaintext.exists()) {
+          try { await plaintext.delete(); } on FileSystemException {
+            // OS cleanup remains a separate fallback; no plaintext is uploaded.
+          }
+        }
+      }
 
       try {
         await controller.pausePreview();
@@ -495,18 +510,10 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       await showMomentPublishingSheet(
         context,
         photoBytes: captured,
-        circles:
-            widget.publishMoment == null && widget.momentAudienceCircles.isEmpty
-            ? const <MomentAudienceCircle>[
-                MomentAudienceCircle(
-                  id: 'demo-best-friends',
-                  name: 'Best Friends',
-                ),
-                MomentAudienceCircle(id: 'demo-family', name: 'Family'),
-                MomentAudienceCircle(id: 'demo-weekend', name: 'Weekend Crew'),
-              ]
-            : widget.momentAudienceCircles,
+        // An authenticated account must never show fabricated Circle names.
+        circles: widget.momentAudienceCircles,
         publisher: widget.publishMoment,
+        privateSaver: widget.privateSaver,
       );
     } finally {
       _publishSheetOpen = false;
@@ -573,7 +580,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
                         bottom: 10,
                         height: 78,
                         child: _buildBottomControls(
-                          compact: constraints.maxWidth <= 340,
+                          compact: constraints.maxWidth <= 440,
                         ),
                       ),
                       if (_countdownValue != null)
@@ -1042,10 +1049,10 @@ class _SendToButton extends StatelessWidget {
               constraints: const BoxConstraints(minWidth: 108, minHeight: 46),
               child: Padding(
                 padding: EdgeInsets.symmetric(
-                  horizontal: compact ? 12 : 18,
+                  horizontal: compact ? 1 : 18,
                   vertical: 13,
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: <Widget>[
@@ -1058,16 +1065,16 @@ class _SendToButton extends StatelessWidget {
                           'Apple Color Emoji',
                           'Segoe UI Emoji',
                         ],
-                        fontSize: 15,
+                        fontSize: compact ? 12 : 15,
                         height: 1.2,
                         fontWeight: FontWeight.w600,
                         color: Colors.white,
                       ),
                     ),
-                    SizedBox(width: 5),
+                    SizedBox(width: compact ? 3 : 5),
                     Icon(
                       Icons.chevron_right_rounded,
-                      size: 18,
+                      size: compact ? 16 : 18,
                       color: Colors.white,
                     ),
                   ],

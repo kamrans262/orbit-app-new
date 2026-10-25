@@ -16,6 +16,7 @@ import '../../../messages/presentation/screens/messages_screen.dart';
 import 'moment_camera_screen.dart';
 import '../orbit_camera_permission_memory.dart';
 import '../widgets/moment_image_card.dart';
+import '../../../media/data/orbit_moment_media_stager.dart';
 import '../widgets/moment_story_avatar.dart';
 import '../widgets/moment_text_card.dart';
 import '../widgets/moment_video_placeholder_card.dart';
@@ -330,7 +331,15 @@ class _MomentsScreenState extends State<MomentsScreen> {
     final cameraBuilder = widget.cameraBuilder;
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: cameraBuilder ?? (_) => const MomentCameraScreen(),
+        builder: cameraBuilder ?? (_) => MomentCameraScreen(
+          privateSaver: (bytes, progress) async {
+            final saved = await OrbitMomentMediaStager()
+                .stagePhoto(bytes, onProgress: progress);
+            if (!saved.thumbnailVerified || !saved.privateGrantConfirmed) {
+              throw StateError('Private encrypted storage not confirmed.');
+            }
+          },
+        ),
       ),
     );
   }

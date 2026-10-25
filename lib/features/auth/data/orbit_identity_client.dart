@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -8,6 +9,7 @@ import 'package:uuid/uuid.dart';
 
 import 'orbit_offline_profile_snapshot.dart';
 import '../../circles/data/orbit_m5_firebase_change_source.dart';
+import '../../media/data/orbit_media_outbox.dart';
 
 enum OrbitRestoreState { signedOut, authenticated, deviceRegistration, deletionPending, offlineProfile }
 
@@ -17,6 +19,18 @@ class OrbitIdentityException implements Exception {
   final int? statusCode;
   @override
   String toString() => message;
+}
+
+
+/// M6 key-material view is allowed only after a fresh trusted-device API read.
+/// Never persist the private key in app preferences, logs or an upload request.
+class OrbitMediaTrustedDevice {
+  const OrbitMediaTrustedDevice({
+    required this.id, required this.publicKey, required this.privateKey,
+  });
+  final String id;
+  final List<int> publicKey;
+  final List<int> privateKey;
 }
 
 /// Only consumer credentials live here; admin authentication is independent.
@@ -221,6 +235,10 @@ class OrbitIdentityClient {
       final nextUser = user['id'] as String;
       final lastUser = await _storage.read(key: _userIdKey);
       if (lastUser != nextUser) {
+        if(lastUser != null && lastUser.isNotEmpty) {
+          try { await OrbitMediaOutbox().purge(lastUser); }
+          catch (_) { /* Block cross-account access even if disk cleanup fails. */ }
+        }
         await OrbitM5FirebaseChangeSource.instance.stop();
         _startupProfile = null;
         _startupNotifications = null;
@@ -332,7 +350,12 @@ class OrbitIdentityClient {
   }
 
   Future<void> clearSession() async {
+    final oldMediaOwner=await _storage.read(key:_userIdKey);
     await OrbitM5FirebaseChangeSource.instance.stop();
+    if(oldMediaOwner != null && oldMediaOwner.isNotEmpty) {
+      try { await OrbitMediaOutbox().purge(oldMediaOwner); }
+      catch (_) { /* Session revocation proceeds even if storage is unavailable. */ }
+    }
     abandonStandardSignup();
     _access = null;
     _startupProfile = null;
@@ -351,6 +374,41 @@ class OrbitIdentityClient {
     } finally {
       await clearSession();
     }
+  }
+
+
+  Future<OrbitMediaTrustedDevice> trustedMediaDevice() async {
+    final owner=await currentLocalSocialOwner();
+    if(owner==null)throw OrbitIdentityException('Sign in before accessing encrypted media.',401);
+    // Always validate the live server trust state. An offline profile or stale
+    // cached device record can never authorize an encrypted media action.
+    final live=await devices();
+    Map<String,dynamic>? active;
+    for(final d in live){
+      if(d['is_current']==true && d['trust_state']=='trusted' &&
+         d['revoked_at']==null && d['key_registered']==true){
+        active=d; break;
+      }
+    }
+    if(active==null)throw OrbitIdentityException('Trusted device required.',403);
+    final public=await _storage.read(key:_publicKey);
+    final private=await _storage.read(key:_privateKey);
+    if(public==null || private==null){
+      throw OrbitIdentityException('Device encryption key is unavailable.',403);
+    }
+    late final List<int> pubBytes;
+    late final List<int> privateBytes;
+    try {
+      pubBytes=base64Decode(public);
+      privateBytes=base64Decode(private);
+    } catch (_) {
+      throw OrbitIdentityException('Device encryption key is invalid.',403);
+    }
+    if(pubBytes.length!=32 || privateBytes.length!=32){
+      throw OrbitIdentityException('Device encryption key is invalid.',403);
+    }
+    return OrbitMediaTrustedDevice(id:active['id'] as String,
+      publicKey:pubBytes,privateKey:privateBytes);
   }
 
   Future<bool> registerDevice() async {
@@ -543,6 +601,62 @@ class OrbitIdentityClient {
 
   Future<void> clearCirclesSnapshot() =>
       _storage.delete(key: _circlesCacheKey);
+
+
+  /// Fetch/submit *only* binary ciphertext through the authenticated Orbit
+  /// API. No refresh token, access token or media key is sent to an external
+  /// storage URL. Bound to a maximum response to avoid device memory attacks.
+  Future<Uint8List> mediaBinaryRequest(String method,String path,{
+    Uint8List? body, Map<String,String> headers=const {},
+    int maxResponseBytes=27*1024*1024, bool retry=true,
+  }) async {
+    if(!path.startsWith('/media/') || path.startsWith('//') ||
+       path.contains('..') || path.contains('://') ||
+       !['GET','PUT'].contains(method)) {
+      throw ArgumentError.value(path,'path','Unsafe private-media API route');
+    }
+    if(_access==null)await refresh();
+    final request=http.Request(method,Uri.parse('$_origin$path'));
+    request.headers['Accept']='application/octet-stream';
+    if(_access!=null)request.headers['Authorization']='Bearer $_access';
+    request.headers.addAll(headers);
+    if(body!=null) {
+      if(body.length>1024*1024)throw ArgumentError('Private media chunk too large.');
+      request.headers['Content-Type']='application/octet-stream';
+      request.bodyBytes=body;
+    }
+    late final http.StreamedResponse response;
+    try {
+      response=await _http.send(request).timeout(const Duration(seconds:90));
+    } catch (_) {
+      throw OrbitIdentityException('Unable to transfer encrypted media.');
+    }
+    if(response.statusCode==401 && retry) {
+      await response.stream.drain<void>();
+      _access=null;
+      await refresh();
+      return mediaBinaryRequest(method,path,body:body,headers:headers,
+          maxResponseBytes:maxResponseBytes,retry:false);
+    }
+    final buffered=BytesBuilder(copy:false);
+    var total=0;
+    try {
+      await for(final chunk in response.stream.timeout(
+          const Duration(seconds:90))) {
+        total+=chunk.length;
+        if(total>maxResponseBytes)throw OrbitIdentityException(
+            'Encrypted media response exceeded safe limits.',413);
+        buffered.add(chunk);
+      }
+    } catch (_) {
+      throw OrbitIdentityException('Encrypted media transfer was interrupted.');
+    }
+    if(response.statusCode<200 || response.statusCode>=300) {
+      throw OrbitIdentityException('Encrypted media transfer was denied.',
+          response.statusCode);
+    }
+    return buffered.toBytes();
+  }
 
   Future<Map<String, dynamic>> socialRequest(String method, String path,
       {Map<String, Object?>? body, String? idempotencyKey}) {
