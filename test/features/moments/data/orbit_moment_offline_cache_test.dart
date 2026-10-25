@@ -51,6 +51,41 @@ void main(){
     expect(await content.exists(),isFalse);
   });
 
+  test('M7 stores ciphertext up to seven days but never decrypts past ACL lease',() async {
+    final root=await Directory.systemTemp.createTemp('orbit-m7-seven-day-');
+    addTearDown(()=>root.delete(recursive:true));
+    final vault=_MemoryVault();
+    var instant=DateTime.utc(2026,10,25,12);
+    const owner='11111111-1111-4111-8111-111111111111';
+    final cache=OrbitMomentOfflineCache(
+      vault:vault,owner:() async=>owner,directory:() async=>root,
+      now:()=>instant,
+    );
+    const id='22222222-2222-4222-8222-222222222222';
+    final preview=Uint8List.fromList([1,2,3,4,5]);
+    await cache.save(
+      id:id,mediaId:'33333333-3333-4333-8333-333333333333',
+      creatorId:owner,contextId:'self',audienceRevision:1,
+      publishedAt:instant.subtract(const Duration(minutes:1)),
+      issuedAt:instant,expiresAt:instant.add(const Duration(minutes:3)),
+      viewExpiresAt:instant.add(const Duration(days:6)),
+      preview:preview,
+    );
+    final files=await root.list(recursive:true).where((e)=>
+      e is File && e.path.endsWith('.cipher')).toList();
+    expect(files,hasLength(1));
+    expect(await cache.read(),hasLength(1));
+    instant=instant.add(const Duration(minutes:6));
+    expect(await cache.read(),isEmpty,
+      reason:'expired ACL lease never permits an offline decrypt');
+    expect(await (files.single as File).exists(),isTrue,
+      reason:'encrypted cache survives lease expiry up to retention TTL');
+    instant=instant.add(const Duration(days:6));
+    expect(await cache.read(),isEmpty);
+    expect(await (files.single as File).exists(),isFalse,
+      reason:'server visibility expiry permanently removes cached ciphertext');
+  });
+
   test('M7 read cache rejects overlong or expired server leases',() async {
     final root=await Directory.systemTemp.createTemp('orbit-m7-cache-bounds-');
     addTearDown(()=>root.delete(recursive:true));
