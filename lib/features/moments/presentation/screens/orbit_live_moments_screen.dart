@@ -207,7 +207,8 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       // A new authenticated feed is authoritative: evict any stale audience
       // entries before issuing new short server-bound encrypted preview leases.
       try {
-        await _offline.reconcile(moments.map((m)=>m.id).toSet());
+        await _offline.reconcile(moments
+          .map((m)=>'${m.id}|${m.contextId}|${m.audienceRevision}').toSet());
         for(final m in prefetch.take(3)){
           if(!mounted || epoch!=_loadEpoch)break;
           final preview=previews[m.id];
@@ -217,7 +218,8 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
             if(!mounted || epoch!=_loadEpoch)break;
             await _offline.save(
               id:m.id,mediaId:m.mediaId,creatorId:m.creatorId,
-              contextId:m.contextId,publishedAt:m.publishedAt,
+              contextId:m.contextId,audienceRevision:m.audienceRevision,
+              publishedAt:m.publishedAt,
               issuedAt:lease.issued,expiresAt:lease.expires,
               viewExpiresAt:lease.viewExpires,preview:preview);
           }catch(_){
@@ -338,6 +340,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
     }
   }
   Future<void> _react(MomentImageFeedItem item,bool liked) async {
+    if(_showingOfflinePreviews)return;
     OrbitLiveMoment? moment;
     for(final m in _items)if(m.id==item.id)moment=m;
     if(moment==null)return;
@@ -366,6 +369,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
   }
 
   Future<void> _setBookmark(MomentImageFeedItem item,bool saved) async {
+    if(_showingOfflinePreviews)return;
     OrbitLiveMoment? current;
     for(final entry in _items)if(entry.id==item.id){current=entry;break;}
     if(current==null)return;
