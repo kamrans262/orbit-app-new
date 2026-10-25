@@ -32,6 +32,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
   int? _ownerPublishVersion,_ownerAudienceRevision;
   String _ownerAudienceKind='only_me';
   Set<String> _ownerTargets=<String>{};
+  Set<String> _ownerTags=<String>{};
   String? _error;
   bool _loading=true, _liked=false, _sending=false, _paused=false;
   bool _allCaughtUp=false;
@@ -184,6 +185,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
           _ownerAudienceRevision=current.audienceRevision;
           _ownerAudienceKind=current.audienceKind;
           _ownerTargets=current.targetIds.toSet();
+          _ownerTags=current.taggedUserIds.toSet();
           _isOwner=viewer!=null && viewer==current.creatorId;
           _loading=false;
         });
@@ -415,6 +417,9 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
           ListTile(leading:const Icon(Icons.people_outline_rounded),
             title:Text('Change audience',style:AppTypography.body),
             onTap:()=>Navigator.of(sheet).pop('audience')),
+          ListTile(leading:const Icon(Icons.person_add_alt_1_outlined),
+            title:Text('Edit tagged people',style:AppTypography.body),
+            onTap:()=>Navigator.of(sheet).pop('tags')),
           ListTile(leading:const Icon(Icons.visibility_outlined),
             title:Text('View readers',style:AppTypography.body),
             onTap:()=>Navigator.of(sheet).pop('viewers')),
@@ -427,9 +432,74 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
     switch(action){
       case 'caption':await _ownerEditCaption();break;
       case 'audience':await _ownerChangeAudience();break;
+      case 'tags':await _ownerEditTags();break;
       case 'viewers':await _ownerViewers();break;
       case 'delete':await _ownerDelete();break;
     }
+  }
+
+  Future<void> _ownerEditTags() async {
+    if(!_isOwner||!mounted)return;
+    final item=_current;
+    final wasPaused=_paused;
+    _pause(true);
+    try{
+      final eligible=await widget.repository.eligibleTagPeople(item);
+      if(!mounted||_current.id!=item.id)return;
+      final selected=<String>{..._ownerTags};
+      bool saving=false;
+      await showModalBottomSheet<void>(
+        context:context,isScrollControlled:true,useSafeArea:true,
+        backgroundColor:AppColors.background,
+        shape:const RoundedRectangleBorder(
+          borderRadius:BorderRadius.vertical(top:Radius.circular(28))),
+        builder:(sheet)=>StatefulBuilder(builder:(sheet,setSheet)=>Padding(
+          padding:const EdgeInsets.all(20),
+          child:Column(mainAxisSize:MainAxisSize.min,
+            crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+            Text('Tagged people',style:AppTypography.smallHeading),
+            const SizedBox(height:8),
+            Text('Tags are visible only within authorized audiences.',
+              style:AppTypography.bodyMuted),
+            const SizedBox(height:12),
+            if(eligible.isEmpty)Text('No eligible friends to tag.',
+              style:AppTypography.bodyMuted),
+            if(eligible.isNotEmpty)ConstrainedBox(
+              constraints:const BoxConstraints(maxHeight:280),
+              child:ListView(shrinkWrap:true,children:[
+                for(final person in eligible)CheckboxListTile(
+                  title:Text(person.name,style:AppTypography.body),
+                  value:selected.contains(person.id),
+                  onChanged:saving?null:(value)=>setSheet((){
+                    if(value==true && selected.length<20)selected.add(person.id);
+                    else if(value!=true)selected.remove(person.id);
+                  })),
+              ])),
+            const SizedBox(height:16),
+            AppPrimaryButton(label:saving?'Saving…':'Save tags',
+              onPressed:() async {
+                if(saving)return;
+                setSheet(()=>saving=true);
+                try{
+                  final revision=await widget.repository.updateTags(
+                    item,selected,version:_ownerPublishVersion);
+                  if(!mounted||_current.id!=item.id)return;
+                  setState((){
+                    _ownerPublishVersion=revision;
+                    _ownerTags=selected;
+                  });
+                  if(sheet.mounted)Navigator.of(sheet).pop();
+                }catch(_){
+                  if(mounted)_notice('Tags could not be saved. Check permissions.');
+                }finally{
+                  if(sheet.mounted)setSheet(()=>saving=false);
+                }
+              }),
+          ]),
+        )),
+      );
+    }catch(_){if(mounted)_notice('Tagged people are unavailable.');}
+    finally{if(mounted)_pause(wasPaused);}
   }
 
   Future<void> _ownerChangeAudience() async {
