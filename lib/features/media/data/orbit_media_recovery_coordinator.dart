@@ -2,6 +2,7 @@ import '../../auth/data/orbit_identity_client.dart';
 import 'orbit_media_outbox.dart';
 import 'orbit_moment_media_stager.dart';
 import '../../moments/data/orbit_moment_repository.dart';
+import '../../moments/data/orbit_m7_rollout.dart';
 
 /// Retries only ciphertext that the user explicitly queued earlier.
 ///
@@ -19,7 +20,13 @@ class OrbitMediaRecoveryCoordinator {
   }) : _owner = currentOwner ??
            OrbitIdentityClient.instance.currentLocalSocialOwner,
        _hasQueued = hasQueuedCiphertext ??
-           ((owner) async => (await OrbitMediaOutbox().pending(owner)).isNotEmpty),
+           ((owner) async {
+         if((await OrbitMediaOutbox().pending(owner)).isNotEmpty)return true;
+         // An uploaded-but-unconfirmed Moment can still have an independent
+         // secure publication intent after its media transfer is finalized.
+         return OrbitM7Rollout.enabled &&
+           await OrbitMomentRepository().pendingPublishCount()>0;
+       }),
        _restore = restoreQueued ?? _resumeSafely,
        _clock = now ?? DateTime.now;
 
@@ -32,7 +39,9 @@ class OrbitMediaRecoveryCoordinator {
     // generic M6 retry would discard ciphertext after uploading it, even if
     // the M7 POST never ran. Recover receipt/publish FIRST; do not let the
     // generic retry consume a Moment or an orphan Moment ciphertext draft.
-    await OrbitMomentRepository().resumePendingPublishes();
+    if(OrbitM7Rollout.enabled){
+      await OrbitMomentRepository().resumePendingPublishes();
+    }
     await OrbitMomentMediaStager().retryPending(
       shouldRetry: canGenericRetry,
     );
