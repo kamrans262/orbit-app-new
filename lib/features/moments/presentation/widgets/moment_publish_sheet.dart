@@ -149,6 +149,13 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
 
   Future<Uint8List> _encodeImage() async {
     if(widget.mediaKind!='image')return widget.photoBytes;
+    // The M6 stager always re-encodes/strips EXIF before upload. For an
+    // unedited photo, avoid a second isolate render so confirmation can
+    // begin immediately and the user's original preview stays unchanged.
+    if(_filter==MomentFilter.natural && _beautyStrength==0 &&
+       _overlayText.text.trim().isEmpty && _strokes.isEmpty && !_dataSaver){
+      return widget.photoBytes;
+    }
     final edit=MomentPhotoEdit(filter:_filter,
       beautyStrength:_beautyStrength,maxLongSide:_dataSaver?1080:1440,
       text:_overlayText.text,
