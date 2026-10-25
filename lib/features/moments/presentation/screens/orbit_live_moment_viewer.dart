@@ -770,20 +770,20 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
                 iconSize:20,size:40),
               const Spacer(),
               if(_isOwner) ...[
-                AppCircularIconButton(
+                Tooltip(message:'Manage Moment',child:AppCircularIconButton(
                   semanticLabel:'Manage Moment',
                   onPressed:()=>unawaited(_ownerActions()),
-                  icon:Icons.more_horiz_rounded,iconSize:20,size:40),
+                  icon:Icons.more_horiz_rounded,iconSize:20,size:40)),
               ] else ...[
                 AppCircularIconButton(
                   semanticLabel:'Report Moment',
                   onPressed:()=>unawaited(_reportSheet()),
                   icon:Icons.flag_outlined,iconSize:20,size:40),
                 const SizedBox(width:8),
-                AppCircularIconButton(
+                Tooltip(message:'Report account',child:AppCircularIconButton(
                   semanticLabel:'Report account',
                   onPressed:()=>unawaited(_reportSheet(account:true)),
-                  icon:Icons.person_off_outlined,iconSize:20,size:40),
+                  icon:Icons.person_off_outlined,iconSize:20,size:40)),
               ],
             ]),
           const SizedBox(height:22),
