@@ -65,6 +65,18 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
+      # Reuse M4's exact NDK retry: hosted runners sometimes return corrupt
+      # Android NDK archives. This is infrastructure recovery, not app behavior.
+      - name: Install required Android NDK with retry
+        run: |
+          for attempt in 1 2 3; do
+            if "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" --install "ndk;28.2.13676358"; then
+              exit 0
+            fi
+            sudo rm -rf "${ANDROID_SDK_ROOT}/ndk/28.2.13676358"
+            if [ "${attempt}" -eq 3 ]; then exit 1; fi
+            sleep 6
+          done
       - name: Compile native recording, media playback and M7 integration
         run: flutter build apk --debug --no-pub
       - uses: actions/upload-artifact@v4
