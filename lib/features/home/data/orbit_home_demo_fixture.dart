@@ -2,12 +2,12 @@ import 'package:flutter/foundation.dart';
 
 import '../domain/models/home_models.dart';
 
-/// Explicit, debug-only UI preview. This is NOT backend seed data: none of
-/// these identities, events, promotions or images represent real Orbit users,
-/// private Moments, live presence or server permissions.
+/// Seed-style local UI fixtures, enabled by default ONLY for debug builds.
+/// Never writes fake user, event or Moment records to the Laravel database.
+/// The app's release/profile builds always hide these fixtures.
 abstract final class OrbitHomeDemoFixture {
   static const bool requested = bool.fromEnvironment(
-    'ORBIT_DEMO_HOME', defaultValue: false,
+    'ORBIT_DEMO_HOME', defaultValue: true,
   );
   static bool get enabled => kDebugMode && requested;
 
@@ -25,6 +25,20 @@ abstract final class OrbitHomeDemoFixture {
       title:'Dinner Together · Demo',
       schedule:'Sample event · 7:00 PM',
       location:'Sample venue · Not an actual booking',
+      participants:participants,
+    ),
+    UpcomingPlanData(
+      id:'demo-plan-coffee',
+      title:'Coffee Meetup · Demo',
+      schedule:'Sample event · 10:30 AM',
+      location:'Sample coffee shop · Not an actual booking',
+      participants:participants,
+    ),
+    UpcomingPlanData(
+      id:'demo-plan-hike',
+      title:'Weekend Hike · Demo',
+      schedule:'Sample event · Saturday 9:00 AM',
+      location:'Sample trail · Not an actual booking',
       participants:participants,
     ),
   ];

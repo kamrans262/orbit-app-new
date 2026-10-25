@@ -11,6 +11,7 @@ import '../../../moments/presentation/screens/orbit_live_moment_viewer.dart';
 import '../../../moments/presentation/screens/orbit_live_moments_screen.dart';
 import '../../../moments/presentation/screens/orbit_live_moment_notifications_screen.dart';
 import '../../domain/models/home_models.dart';
+import '../../data/orbit_home_demo_fixture.dart';
 import 'home_screen.dart';
 
 /// Authenticated Home stays visually identical to approved HomeScreen.
@@ -165,8 +166,28 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
     if(mounted)unawaited(_reload());
   }
 
+  void _demoNotice() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Demo preview only. No plan, profile or Moment was created.'),
+    ));
+  }
+
   @override
-  Widget build(BuildContext context) => HomeScreen(
+  Widget build(BuildContext context) {
+    final preview = OrbitHomeDemoFixture.enabled;
+    // Keep actual authorized profiles and Moments first. Distinct sample IDs
+    // cannot be mistaken for backend entities or used by real API actions.
+    final friends = preview
+      ? <FavoritePersonData>[..._realFriends,...OrbitHomeDemoFixture.friends]
+      : _realFriends;
+    final recent = preview
+      ? <MomentData>[
+          ..._recent,
+          ...OrbitHomeDemoFixture.recentMoments,
+        ].take(4).toList(growable:false)
+      : _recent;
+    return HomeScreen(
     greetingName:_greeting,
     useLiveDate:true,
     quickActions:const <QuickActionData>[
@@ -183,10 +204,12 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
         icon:Icons.photo_camera_outlined,
         iconColor:Color(0xFF16B88B),iconBackground:Color(0xFFE2F8F2)),
     ],
-    upcomingPlans:const <UpcomingPlanData>[],
-    promoBanner:null,
-    favoritePeople:_realFriends,
-    recentMoments:_recent,
+    upcomingPlans:preview
+      ? OrbitHomeDemoFixture.upcomingPlans
+      : const <UpcomingPlanData>[],
+    promoBanner:preview ? OrbitHomeDemoFixture.banner : null,
+    favoritePeople:friends,
+    recentMoments:recent,
     onNotificationPressed:()=>unawaited(_openNotices()),
     onQuickActionPressed:(action){
       if(action.id=='moment') {
@@ -201,18 +224,33 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
           content:Text('${action.title} is not yet enabled. No data was shared.')));
       }
     },
-    onPlanPressed:(_){},
-    onPromoPressed:(){},
+    onPlanPressed:(plan){
+      if(preview && OrbitHomeDemoFixture.isDemo(plan.id)) _demoNotice();
+    },
+    onPromoPressed:(){
+      if(preview) _demoNotice();
+    },
     onFavoritePersonPressed:(person){
+      if(preview && OrbitHomeDemoFixture.isDemo(person.id)){
+        _demoNotice();
+        return;
+      }
       final live=_friendDetails[person.id];
       if(live==null)return;
       Navigator.of(context).push<void>(MaterialPageRoute(
         builder:(_)=>OrbitPersonScreen(person:live)));
     },
     onFavoriteToggle:(_){},
-    onMomentPressed:(moment)=>unawaited(_view(moment)),
+    onMomentPressed:(moment){
+      if(preview && OrbitHomeDemoFixture.isDemo(moment.id)){
+        _demoNotice();
+        return;
+      }
+      unawaited(_view(moment));
+    },
     onTabSelected:(_){},
     onAddPressed:(){},
     enableDemoCircleNavigation:false,
-  );
+    );
+  }
 }
