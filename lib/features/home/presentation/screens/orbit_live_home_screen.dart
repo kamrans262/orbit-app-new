@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../../moments/data/orbit_moment_repository.dart';
 import '../../../moments/presentation/screens/orbit_live_moment_viewer.dart';
+import '../../../moments/presentation/screens/orbit_live_moment_notifications_screen.dart';
 import '../../domain/models/home_models.dart';
 import 'home_screen.dart';
 
@@ -69,9 +70,17 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen> {
         author:_authors[data.id]??'Orbit member')));
     if(mounted)unawaited(_reload());
   }
+  Future<void> _openNotices() async {
+    if(!mounted)return;
+    await Navigator.of(context).push<void>(MaterialPageRoute(
+      builder:(_)=>const OrbitLiveMomentNotificationsScreen()));
+    if(mounted)unawaited(_reload());
+  }
+
   @override
   Widget build(BuildContext context) => HomeScreen.demo(
     enableDemoCircleNavigation:false,
+    onNotificationPressed:()=>unawaited(_openNotices()),
     realRecentMoments:_recent,
     onRealMomentPressed:(moment)=>unawaited(_view(moment)),
     onTabSelected:(index){},
