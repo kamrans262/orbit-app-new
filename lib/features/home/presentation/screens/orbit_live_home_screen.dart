@@ -3,6 +3,7 @@ import '../../../auth/data/orbit_identity_client.dart';
 import 'package:flutter/material.dart';
 
 import '../../../moments/data/orbit_moment_repository.dart';
+import '../../../moments/data/orbit_moment_push_runtime.dart';
 import '../../../moments/presentation/screens/orbit_live_moment_viewer.dart';
 import '../../../moments/presentation/screens/orbit_live_moments_screen.dart';
 import '../../../moments/presentation/screens/orbit_live_moment_notifications_screen.dart';
@@ -22,6 +23,7 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
   List<MomentData> _recent=const [];
   String _greeting='';
   Timer? _revalidation;
+  StreamSubscription<void>? _pushEvents;
   int _reloadEpoch=0;
   final Map<String,OrbitLiveMoment> _byId={};
   final Map<String,String> _authors={};
@@ -29,6 +31,10 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
   void initState(){
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _pushEvents=OrbitMomentPushRuntime.instance.updates.listen((_){
+      if(mounted)unawaited(_reload());
+    });
+    unawaited(OrbitMomentPushRuntime.instance.configure());
     _revalidation=Timer.periodic(const Duration(seconds:25),(_){
       if(mounted && WidgetsBinding.instance.lifecycleState==AppLifecycleState.resumed
           && ModalRoute.of(context)?.isCurrent==true)unawaited(_reload());
@@ -53,6 +59,7 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
       ++_reloadEpoch;
       if(mounted)setState(_clearPreviews);
     }else if(state==AppLifecycleState.resumed && mounted){
+      unawaited(OrbitMomentPushRuntime.instance.configure());
       unawaited(_reload());
     }
   }
@@ -61,6 +68,8 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
   void dispose(){
     ++_reloadEpoch;
     _revalidation?.cancel();
+    unawaited(_pushEvents?.cancel());
+    unawaited(OrbitMomentPushRuntime.instance.stop());
     WidgetsBinding.instance.removeObserver(this);
     _clearPreviews();
     super.dispose();
