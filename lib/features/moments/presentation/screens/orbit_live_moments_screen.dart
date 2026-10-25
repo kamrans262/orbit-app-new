@@ -10,6 +10,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_primary_button.dart';
 
 import '../../data/orbit_moment_repository.dart';
+import '../../data/orbit_m7_rollout.dart';
 import '../../data/orbit_moment_offline_cache.dart';
 import '../../../auth/data/orbit_identity_client.dart';
 import '../../../media/data/orbit_moment_media_stager.dart';
@@ -138,6 +139,24 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
 
   Future<void> _load() async {
     if(!mounted)return;
+    if(!OrbitM7Rollout.enabled){
+      ++_loadEpoch;
+      setState((){
+        _evictDecodedMedia();
+        _items=const [];
+        _rail=const [];
+        _names.clear();
+        _likes.clear();
+        _bookmarked.clear();
+        _seen.clear();
+        _showingOfflinePreviews=false;
+        _pendingPublishCount=0;
+        _pendingWarning=null;
+        _error=null;
+        _busy=false;
+      });
+      return;
+    }
     final epoch=++_loadEpoch;
     setState((){_busy=true;_error=null;});
     try {
