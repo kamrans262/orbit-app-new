@@ -61,6 +61,7 @@ dependencies:
   firebase_database: ^12.6.0
   firebase_messaging: ^16.7.0
   shared_preferences: ^2.5.5
+  workmanager: ^0.10.10
 
 # The iOS runner uses Xcode 16. The 2.12.2/2.12.3 rewrite to Swift
 # 6.2's isolation APIs fails to compile there. 2.12.1 predates that
