@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_screen_header.dart';
+import '../../../../core/widgets/app_circular_icon_button.dart';
+import '../../../../core/widgets/app_primary_button.dart';
 import '../../data/orbit_moment_repository.dart';
 import 'orbit_live_moment_viewer.dart';
 
@@ -43,6 +45,71 @@ class _OrbitLiveMomentNotificationsScreenState
     }
   }
 
+  Future<void> _configureMute() async {
+    try {
+      final options=await _repository.audienceOptions();
+      final current=await _repository.mutedCircleNotifications();
+      if(!mounted)return;
+      final edited=<String>{...current};
+      bool busy=false;
+      await showModalBottomSheet<void>(context:context,
+        backgroundColor:AppColors.background,useSafeArea:true,
+        isScrollControlled:true,
+        shape:const RoundedRectangleBorder(
+          borderRadius:BorderRadius.vertical(top:Radius.circular(28))),
+        builder:(sheet)=>StatefulBuilder(builder:(sheet,update)=>Padding(
+          padding:const EdgeInsets.fromLTRB(20,20,20,24),
+          child:Column(mainAxisSize:MainAxisSize.min,
+            crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+            Text('Mute Circle Moments',style:AppTypography.smallHeading),
+            const SizedBox(height:8),
+            Text('Muting a Circle stops its Moment notifications; it does not change who may see Moments.',
+              style:AppTypography.bodyMuted),
+            const SizedBox(height:14),
+            if(options.circles.isEmpty)
+              Text('No active Circles',style:AppTypography.bodyMuted),
+            ConstrainedBox(constraints:const BoxConstraints(maxHeight:300),
+              child:ListView(shrinkWrap:true,children:[
+                for(final circle in options.circles)
+                  SwitchListTile(
+                    title:Text(circle.name,style:AppTypography.body),
+                    value:edited.contains(circle.id),
+                    activeColor:AppColors.primaryEnd,
+                    onChanged:busy?null:(value)=>update((){
+                      if(value)edited.add(circle.id);
+                      else edited.remove(circle.id);
+                    }),
+                  ),
+              ])),
+            const SizedBox(height:14),
+            AppPrimaryButton(label:busy?'Saving…':'Save preferences',
+              onPressed:() async {
+                if(busy)return;
+                update(()=>busy=true);
+                try{
+                  for(final circle in options.circles){
+                    final was=current.contains(circle.id);
+                    final now=edited.contains(circle.id);
+                    if(was!=now)await _repository.setCircleNotificationMute(circle.id,now);
+                  }
+                  if(sheet.mounted)Navigator.of(sheet).pop();
+                  if(mounted)unawaited(_load());
+                }catch(_){
+                  if(mounted)ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content:Text('Could not save Circle notification settings.')));
+                }finally{
+                  if(sheet.mounted)update(()=>busy=false);
+                }
+              }),
+          ]),
+        )),
+      );
+    }catch(_){
+      if(mounted)ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content:Text('Circle notification settings are unavailable.')));
+    }
+  }
+
   Future<void> _open(Map<String,dynamic> row) async {
     final id=row['moment_id'],context=row['context_id'],notice=row['id'];
     if(id is! String||context is! String||notice is! String)return;
@@ -69,7 +136,15 @@ class _OrbitLiveMomentNotificationsScreenState
       padding:const EdgeInsets.symmetric(horizontal:20),
       child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
         const SizedBox(height:20),
-        const AppScreenHeader(title:'Moment notifications',prominent:true),
+        Row(children:[
+          const Expanded(child:AppScreenHeader(
+            title:'Moment notifications',prominent:true)),
+          AppCircularIconButton(
+            semanticLabel:'Mute Circle notifications',
+            onPressed:()=>unawaited(_configureMute()),
+            icon:Icons.notifications_off_outlined,
+            iconSize:20,size:40),
+        ]),
         const SizedBox(height:18),
         Expanded(child:_loading
           ? const Center(child:CircularProgressIndicator(color:AppColors.primaryEnd))
