@@ -127,6 +127,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
   final TextEditingController _placeLabel=TextEditingController();
   bool _locationConsent=false;
   bool _muteVideo=false;
+  bool _dataSaver=false;
   final Set<String> _taggedPeople={};
 
   MomentFilter _filter=MomentFilter.natural;
@@ -142,7 +143,8 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
   Future<Uint8List> _encodeImage() async {
     if(widget.mediaKind!='image')return widget.photoBytes;
     final edit=MomentPhotoEdit(filter:_filter,
-      beautyStrength:_beautyStrength,text:_overlayText.text,
+      beautyStrength:_beautyStrength,maxLongSide:_dataSaver?1080:1440,
+      text:_overlayText.text,
       strokes:List<MomentDrawStroke>.unmodifiable(_strokes));
     // CPU-heavy image transformations stay off the UI isolate.
     return compute(_renderMomentEdits,(widget.photoBytes,edit));
@@ -290,6 +292,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
           mediaKind:widget.mediaKind,
           durationMs:widget.durationMs,
           muteVideo:_muteVideo,
+          dataSaver:_dataSaver,
           waveformLevels:widget.waveformLevels,
           placeLabel:_locationConsent?_placeLabel.text.trim():'',
           locationConsent:_locationConsent && _placeLabel.text.trim().isNotEmpty,
@@ -453,6 +456,20 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
               )),
           ),
         ),
+        if(widget.mediaKind=='image'||widget.mediaKind=='video')
+          SwitchListTile(
+            value:_dataSaver,
+            activeColor:AppColors.primaryEnd,
+            title:Text('Save mobile data',style:AppTypography.body),
+            subtitle:Text(
+              widget.mediaKind=='video'?'Lower video bitrate (2 Mbps)':
+                'Smaller photo (1080 px)',
+              style:AppTypography.bodyMuted),
+            onChanged:(value){
+              setState(()=>_dataSaver=value);
+              _queuePreview();
+            },
+          ),
         if(widget.mediaKind=='video')SwitchListTile(
           value:_muteVideo,
           activeColor:AppColors.primaryEnd,
