@@ -107,6 +107,13 @@ class OrbitMomentRepository {
     return items.map((x)=>Map<String,dynamic>.from(x as Map)).toList();
   }
 
+  /// Opening a shared reference always performs a fresh server authorization
+  /// check. The link itself contains no keys, grants, recipient lists or token.
+  Future<OrbitLiveMoment> authorizedMoment(String id) async {
+    final data=await _api('GET','/moments/${Uri.encodeComponent(id)}');
+    return OrbitLiveMoment.fromJson(data);
+  }
+
   Future<OrbitLiveMoment> notificationMoment(String id,String context) async {
     final data=await _api('GET',
       '/moments/${Uri.encodeComponent(id)}?context_id=${Uri.encodeQueryComponent(context)}');
