@@ -8,6 +8,7 @@ import 'screens/moment_camera_screen.dart';
 import '../domain/models/moment_publish_models.dart';
 import '../../media/data/orbit_moment_media_stager.dart';
 import '../data/orbit_moment_repository.dart';
+import '../data/orbit_m7_rollout.dart';
 
 /// Central launcher for the global Orbit bottom-bar Add action.
 ///
@@ -22,6 +23,10 @@ abstract final class OrbitMomentCameraLauncher {
   /// If M7 is unavailable, preserve M6 private save without demo publishing.
   static void openLive(BuildContext context) {
     unawaited(() async {
+      if(!OrbitM7Rollout.enabled){
+        if(context.mounted)await _open(context,circles:const []);
+        return;
+      }
       final repo=OrbitMomentRepository();
       try {
         final options=await repo.audienceOptions();
