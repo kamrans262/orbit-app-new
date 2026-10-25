@@ -38,6 +38,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
     const OrbitMomentAudienceOptions([],[],'Nobody');
   final Set<String> _likes={};
   final Set<String> _bookmarked={};
+  bool _savedOnly=false;
   final Set<String> _seen={};
   bool _busy=true;
   String? _error;
@@ -279,6 +280,38 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
     }
   }
 
+  Future<void> _chooseFeedFilter() async {
+    final choice=await showModalBottomSheet<bool>(
+      context:context,useSafeArea:true,
+      backgroundColor:AppColors.background,
+      shape:const RoundedRectangleBorder(
+        borderRadius:BorderRadius.vertical(top:Radius.circular(28))),
+      builder:(sheet)=>Padding(padding:const EdgeInsets.all(20),
+        child:Column(mainAxisSize:MainAxisSize.min,
+          crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+          Text('Moments',style:AppTypography.smallHeading),
+          const SizedBox(height:12),
+          ListTile(
+            leading:const Icon(Icons.photo_library_outlined,
+              color:AppColors.primaryEnd),
+            title:Text('All Moments',style:AppTypography.body),
+            trailing:!_savedOnly?const Icon(Icons.check,
+              color:AppColors.primaryEnd):null,
+            onTap:()=>Navigator.of(sheet).pop(false)),
+          ListTile(
+            leading:const Icon(Icons.bookmark_border,
+              color:AppColors.primaryEnd),
+            title:Text('Saved Moments',style:AppTypography.body),
+            subtitle:Text('Only Moments you can still access',
+              style:AppTypography.bodyMuted),
+            trailing:_savedOnly?const Icon(Icons.check,
+              color:AppColors.primaryEnd):null,
+            onTap:()=>Navigator.of(sheet).pop(true)),
+        ])),
+    );
+    if(choice!=null && mounted)setState(()=>_savedOnly=choice);
+  }
+
   MomentCameraScreen _camera() => MomentCameraScreen(
     privateSaver:(bytes,progress) async {
       final saved=await OrbitMomentMediaStager()
@@ -330,7 +363,8 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         isUnseen:groupUnseen[m.contextId+'|'+m.creatorId]??false),
     ];
     final feed=<MomentFeedItem>[
-      for(final m in _items)MomentImageFeedItem(
+      for(final m in _items.where((m)=>!_savedOnly || _bookmarked.contains(m.id)))
+        MomentImageFeedItem(
         id:m.id,
         author:MomentAuthorData(id:m.creatorId,
           name:_names[m.creatorId]??'Orbit member'),
@@ -347,12 +381,13 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       MomentsScreen(
       key:const Key('orbit_m7_live_moments'),
       stories:stories,feedItems:feed,privateMode:true,
+      privateFiltering:true,
       privateBookmarking:true,
       viewState:_busy?MomentsViewState.loading:
         _error!=null?MomentsViewState.error:
         feed.isEmpty?MomentsViewState.empty:MomentsViewState.populated,
       errorMessage:_error??'Moments unavailable.',
-      onSearchPressed:(){},onFilterPressed:()=>unawaited(_load()),
+      onSearchPressed:(){},onFilterPressed:()=>unawaited(_chooseFeedFilter()),
       onMessagesPressed:(){},
       onStoryPressed:(story)=>_openById(story.id,storyGroup:true),
       onLikeChanged:(item,liked)=>unawaited(_react(item,liked)),
