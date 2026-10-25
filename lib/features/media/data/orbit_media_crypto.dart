@@ -229,7 +229,7 @@ class OrbitMediaCrypto {
   }
 
   Future<({Uint8List key, Uint8List prefix, String owner, String transfer,
-      String purpose, String variant})> unwrapKey(String encoded, {
+      String purpose, String variant, int length})> unwrapKey(String encoded, {
     required List<int> privateKey, required List<int> publicKey,
   }) async {
     final map = Map<String, dynamic>.from(jsonDecode(encoded) as Map);
@@ -260,6 +260,7 @@ class OrbitMediaCrypto {
     return (key: Uint8List.fromList(bytes),
       prefix: base64Decode(map['prefix'] as String),
       owner: map['owner'] as String, transfer: map['transfer'] as String,
-      purpose: map['purpose'] as String, variant: map['variant'] as String);
+      purpose: map['purpose'] as String, variant: map['variant'] as String,
+      length:map['length'] as int);
   }
 }
