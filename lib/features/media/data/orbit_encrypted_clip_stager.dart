@@ -162,17 +162,18 @@ class OrbitEncryptedClipStager {
        Future<void> Function(OrbitSealedMedia original, OrbitSealedMedia poster,
          String mediaId)? onReadyForAudience,
        Future<void> Function(String originalTransfer)? onQueued,
-       bool muteAudio=false}) async {
+       bool muteAudio=false,bool lowBandwidth=false}) async {
     return OrbitMediaTransferGate.run(() async {
     final owner=await _identity.currentLocalSocialOwner();
     if(owner==null)throw OrbitIdentityException('Please sign in.',401);
     final device=await _identity.trustedMediaDevice();
-    final prepared=await (muteAudio
-      ? (_processor is OrbitNativeVideoProcessor
-          ? (_processor as OrbitNativeVideoProcessor).prepareWithoutAudio(
-              original,onProgress:onProgress)
-          : throw StateError('Selected video processor cannot mute audio.'))
-      : _processor.prepare(original,onProgress:onProgress));
+    final prepared=await (_processor is OrbitNativeVideoProcessor
+      ? (_processor as OrbitNativeVideoProcessor).prepareForNetwork(original,
+          stripAudio:muteAudio,lowBandwidth:lowBandwidth,
+          onProgress:onProgress)
+      : (muteAudio||lowBandwidth)
+        ? throw StateError('Selected video processor cannot enforce export options.')
+        : _processor.prepare(original,onProgress:onProgress));
     try {
     final root=Directory((await _temp()).path+'/orbit-m6-transcode');
     await root.create(recursive:true);
