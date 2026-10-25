@@ -371,6 +371,32 @@ class OrbitMomentRepository {
     return (await _intents.pending(owner)).length;
   }
 
+  /// User-facing draft status is derived only from account-scoped ciphertext
+  /// intents. No server receipt is inferred from a finished M6 upload.
+  Future<String?> pendingDraftNotice() async {
+    final owner=await _identity.currentLocalSocialOwner();
+    if(owner==null)return null;
+    final pending=await _intents.pending(owner);
+    if(pending.isEmpty)return null;
+    final now=DateTime.now().toUtc();
+    final encrypted=await OrbitMediaOutbox().pending(owner);
+    final parents=encrypted.where((e)=>e.variant=='original')
+      .map((e)=>e.transfer).toSet();
+    if(pending.any((e)=>now.difference(e.createdAt)>const Duration(days:7))){
+      return 'Draft needs review: capture a new Moment. Old drafts are never sent automatically.';
+    }
+    if(pending.any((e)=>!parents.contains(e.transfer))){
+      return 'Encrypted draft is incomplete. Recapture is required.';
+    }
+    if(pending.any((e)=>e.attemptCount>=8)){
+      return 'Publishing failed after several tries. Tap to retry securely.';
+    }
+    if(pending.any((e)=>e.retryAfter!=null && now.isBefore(e.retryAfter!))){
+      return 'Waiting for connection. Your encrypted Moment is safely queued.';
+    }
+    return 'Encrypted Moment waiting to publish.';
+  }
+
   /// User-initiated or foreground retry only. Never publish from a background
   /// worker, and do not treat encrypted upload success as Moment publication.
   Future<int> resumePendingPublishes({
@@ -390,7 +416,7 @@ class OrbitMomentRepository {
     for(final intent in intents){
       // A queued intent never extends the server's seven-day visibility TTL.
       // Old drafts require explicit review; never silently delete ciphertext.
-      if(now.difference(intent.createdAt)>const Duration(days:7) && !force){
+      if(now.difference(intent.createdAt)>const Duration(days:7)){
         continue;
       }
       if(!force && (intent.attemptCount>=8 ||
@@ -406,7 +432,9 @@ class OrbitMomentRepository {
         await _intents.remove(owner,intent.transfer);
         completed++;
       }else if(!transferIds.contains(intent.transfer)){
-        throw StateError('Missing encrypted media: recapture is required.');
+        // Do not let one corrupt or missing ciphertext entry block all other
+        // safely recoverable Moments in this account's queue.
+        continue;
       }else{
         eligible[intent.transfer]=intent;
       }
