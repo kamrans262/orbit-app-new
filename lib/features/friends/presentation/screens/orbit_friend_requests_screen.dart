@@ -100,7 +100,6 @@ class _OrbitFriendRequestsScreenState extends State<OrbitFriendRequestsScreen> {
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
           child: const AppScreenHeader(
             title: 'Friend Requests',
-            prominent: true,
 
             backButtonKey: OrbitFriendRequestsKeys.backButton,
             titleKey: OrbitFriendRequestsKeys.title,

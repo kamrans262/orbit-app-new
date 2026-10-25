@@ -56,6 +56,7 @@ Future<void> showMomentPublishingSheet(
   MomentPublisher? publisher,
   OrbitPrivatePhotoSaver? privateSaver,
   Future<void> Function()? onCommitted,
+  String? clientId,
 }) async {
   if(mediaKind=='image' && photoBytes.isEmpty)return;
   if(mediaKind!='image' && (mediaFile==null || !['video','audio'].contains(mediaKind)))return;
@@ -85,6 +86,7 @@ Future<void> showMomentPublishingSheet(
         publisher: publisher,
         privateSaver: privateSaver,
         onCommitted:onCommitted,
+        clientId:clientId,
       ),
     ),
   );
@@ -105,6 +107,7 @@ class MomentPublishSheet extends StatefulWidget {
     this.publisher,
     this.privateSaver,
     this.onCommitted,
+    this.clientId,
     super.key,
   });
 
@@ -121,6 +124,7 @@ class MomentPublishSheet extends StatefulWidget {
   final MomentPublisher? publisher;
   final OrbitPrivatePhotoSaver? privateSaver;
   final Future<void> Function()? onCommitted;
+  final String? clientId;
 
   @override
   State<MomentPublishSheet> createState() => _MomentPublishSheetState();
@@ -284,7 +288,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
     return '';
   }
 
-  final String _clientId = const Uuid().v4();
+  late final String _clientId=widget.clientId??const Uuid().v4();
 
   // A live repository must inject circles and a publisher together. A missing
   // publisher deliberately never claims a post was published.
@@ -378,9 +382,11 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
         if (receipt.momentId.trim().isEmpty) {
           throw StateError('The server did not confirm the Moment.');
         }
-        try {
-          await _audienceMemory.save(_audienceKind,_selectedIds);
-        }catch(_){ /* A storage failure cannot undo a confirmed publish. */ }
+        // A confirmed server receipt is the success boundary. Writing the
+        // optional previous-audience suggestion to OS secure storage must
+        // never stall or roll back that successful publish.
+        unawaited(_audienceMemory.save(_audienceKind,_selectedIds)
+          .catchError((Object _) {}));
       }
       // Publishing receipt or verified private media save is authoritative.
       // Clearing the local capture after success must not invalidate it.

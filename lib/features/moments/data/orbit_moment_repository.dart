@@ -314,6 +314,14 @@ class OrbitMomentRepository {
     }
     final owner=await _identity.currentLocalSocialOwner();
     if(owner==null)throw StateError('Sign in before publishing.');
+    // Recovered pre-publish captures reuse the original client UUID. If a
+    // previous attempt already committed on the server, never stage/upload
+    // new ciphertext or create a second Moment from the same draft.
+    final confirmed=await _existingReceipt(request.clientId);
+    if(confirmed!=null){
+      progress(1);
+      return MomentPublishReceipt(momentId:confirmed);
+    }
     String? stagedTransfer;
     Future<void> queued(String transfer) async {
       stagedTransfer=transfer;

@@ -15,11 +15,13 @@ import '../../media/data/orbit_media_outbox.dart';
 class OrbitRecoveredMomentCapture {
   const OrbitRecoveredMomentCapture({
     required this.kind,
+    required this.clientId,
     this.photo,
     this.clip,
     this.durationMs,
   });
   final String kind;
+  final String clientId;
   final Uint8List? photo;
   final File? clip;
   final int? durationMs;
@@ -74,7 +76,7 @@ class OrbitMomentCaptureVault {
     return Map<String,dynamic>.from(decoded);
   }
 
-  Future<void> savePhoto(Uint8List bytes) async {
+  Future<String> savePhoto(Uint8List bytes) async {
     if(bytes.isEmpty||bytes.length>OrbitMediaFormat.imageLimit){
       throw const FormatException('Capture exceeds photo limit.');
     }
@@ -85,9 +87,10 @@ class OrbitMomentCaptureVault {
     final sealed=await _crypto.sealBytes(bytes,destination:target,
       ownerId:owner,transferId:id,purpose:'moment',variant:'capture');
     await _commit(owner,sealed,'image',null);
+    return id;
   }
 
-  Future<void> saveClip(File source,{
+  Future<String> saveClip(File source,{
     required String kind,required int durationMs,
   }) async {
     if(!const {'video','audio'}.contains(kind) ||
@@ -103,6 +106,7 @@ class OrbitMomentCaptureVault {
       variant:'capture',maxInputBytes:kind=='video'
         ? OrbitMediaFormat.videoLimit:OrbitMediaFormat.audioLimit);
     await _commit(owner,sealed,kind,durationMs);
+    return id;
   }
 
   Future<void> _commit(String owner,OrbitSealedMedia media,
@@ -183,7 +187,8 @@ class OrbitMomentCaptureVault {
         ownerId:owner,transferId:id,purpose:'moment',
         variant:'capture',maxPlainBytes:OrbitMediaFormat.imageLimit);
       if(await _owner()!=owner)throw StateError('Account changed.');
-      return OrbitRecoveredMomentCapture(kind:'image',photo:photo);
+      return OrbitRecoveredMomentCapture(
+        kind:'image',clientId:id,photo:photo);
     }
     final temporary=await _temporary();
     final target=File('${temporary.path}/orbit-m7-recovered-$id.'+
@@ -194,7 +199,7 @@ class OrbitMomentCaptureVault {
       throw StateError('Account changed during capture recovery.');
     }
     return OrbitRecoveredMomentCapture(
-      kind:kind,clip:target,
+      kind:kind,clientId:id,clip:target,
       durationMs:(data['duration_ms'] as num?)?.toInt());
   }
 

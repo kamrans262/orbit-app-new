@@ -102,6 +102,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   _OrbitCaptureMode _mode=_OrbitCaptureMode.photo;
   final AudioRecorder _audioRecorder=AudioRecorder();
   final OrbitMomentCaptureVault _captureVault=OrbitMomentCaptureVault();
+  String? _captureClientId;
   File? _capturedClip;
   int? _capturedDurationMs;
   DateTime? _recordStart;
@@ -157,6 +158,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         _capturedBytes=recovered.photo;
         _capturedClip=recovered.clip;
         _capturedDurationMs=recovered.durationMs;
+        _captureClientId=recovered.clientId;
       });
     }catch(_){
       // Corrupt/cross-account drafts never become a public-media fallback.
@@ -165,7 +167,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
 
   Future<void> _savePhotoDraft(Uint8List bytes) async {
     if(!widget.enableCamera)return;
-    try{await _captureVault.savePhoto(bytes);}
+    try{_captureClientId=await _captureVault.savePhoto(bytes);}
     catch(_){
       if(mounted)ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content:Text(
@@ -175,7 +177,8 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
 
   Future<void> _saveClipDraft(File clip,String kind,int duration) async {
     if(!widget.enableCamera)return;
-    try{await _captureVault.saveClip(clip,kind:kind,durationMs:duration);}
+    try{_captureClientId=await _captureVault.saveClip(
+      clip,kind:kind,durationMs:duration);}
     catch(_){
       if(mounted)ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content:Text(
@@ -797,6 +800,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       _capturedBytes = null;
       _capturedClip=null;
       _capturedDurationMs=null;
+      _captureClientId=null;
     });
     final controller = _controller;
     if (controller != null && controller.value.isInitialized) {
@@ -891,7 +895,11 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         privacyAudience: widget.momentPrivacyAudience,
         publisher: widget.publishMoment,
         privateSaver: widget.privateSaver,
-        onCommitted:widget.enableCamera ? _captureVault.clear : null,
+        clientId:_captureClientId,
+        onCommitted:widget.enableCamera ? () async {
+          await _captureVault.clear();
+          _captureClientId=null;
+        } : null,
       );
     } finally {
       _publishSheetOpen = false;

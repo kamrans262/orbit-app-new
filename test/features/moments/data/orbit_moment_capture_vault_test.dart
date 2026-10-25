@@ -44,7 +44,16 @@ void main(){
     final second=capture();
     final recovered=await second.restore();
     expect(recovered?.kind,'image');
+    expect(recovered?.clientId,isNotEmpty);
     expect(recovered?.photo,photo);
+    // A new capture receives a new UUID; restoring the same ciphertext
+    // keeps the one publication idempotency key.
+    final initialId=recovered!.clientId;
+    expect((await capture().restore())!.clientId,initialId);
+    await capture().savePhoto(Uint8List.fromList([4,5,6,7]));
+    final next=(await capture().restore())!;
+    expect(next.clientId,isNot(initialId));
+    expect(next.photo,[4,5,6,7]);
     account='account-b';
     expect(await capture().restore(),isNull);
     account='account-a';
