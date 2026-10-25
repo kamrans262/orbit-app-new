@@ -21,6 +21,10 @@
         <key>CFBundleURLName</key><string>Orbit private links</string>
       </dict>
     </array>
+    <key>UIBackgroundModes</key>
+    <array><string>processing</string></array>
+    <key>BGTaskSchedulerPermittedIdentifiers</key>
+    <array><string>com.example.orbit_ui.m7.encrypted_retry</string></array>
     <key>LSRequiresIPhoneOS</key><true/>
     <key>UIApplicationSceneManifest</key>
     <dict>
