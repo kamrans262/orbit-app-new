@@ -18,6 +18,7 @@ class MomentImageCard extends StatelessWidget {
     required this.onSharePressed,
     this.onViewPressed,
     this.privateMode=false,
+    this.privateBookmarking=false,
     super.key,
   });
 
@@ -30,6 +31,7 @@ class MomentImageCard extends StatelessWidget {
   final VoidCallback onSharePressed;
   final VoidCallback? onViewPressed;
   final bool privateMode;
+  final bool privateBookmarking;
 
   @override
   Widget build(BuildContext context) {
@@ -89,6 +91,7 @@ class MomentImageCard extends StatelessWidget {
           ),
           _EngagementBar(
             privateMode:privateMode,
+            privateBookmarking:privateBookmarking,
             countsKnown:data.countsKnown,
             likeCount: data.likeCount,
             commentCount: data.commentCount,
@@ -261,9 +264,11 @@ class _EngagementBar extends StatelessWidget {
     required this.onCommentPressed,
     required this.onBookmarkPressed,
     this.privateMode=false,
+    this.privateBookmarking=false,
     this.countsKnown=true,
   });
   final bool privateMode;
+  final bool privateBookmarking;
   final bool countsKnown;
 
   final int likeCount;
@@ -302,7 +307,7 @@ class _EngagementBar extends StatelessWidget {
             onTap: onCommentPressed,
           ),
           const Spacer(),
-          if(!privateMode)Semantics(
+          if(!privateMode||privateBookmarking)Semantics(
             button: true,
             label: isBookmarked ? 'Remove bookmark' : 'Bookmark moment',
             child: InkResponse(
