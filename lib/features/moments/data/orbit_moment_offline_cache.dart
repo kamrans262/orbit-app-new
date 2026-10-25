@@ -181,76 +181,10 @@ class OrbitMomentOfflineCache {
             entry['retained_until'] as String? ?? '')?.toUtc() ?? end;
           if(!now.isBefore(until) ||
               !now.isBefore(published.add(retention)) ||
-              !RegExp(r'^[a-f0-9]{64}\.cipher
-          if(cipherBytes.length<29)continue;
-          final plain=await _cipher.decrypt(SecretBox(
-            cipherBytes.sublist(28),nonce:cipherBytes.sublist(0,12),
-            mac:Mac(cipherBytes.sublist(12,28))),
-            secretKey:SecretKey(key),
-            aad:utf8.encode('$account|$id|$context|${end.toIso8601String()}'));
-          available.add(OrbitOfflineMomentPreview(
-            id:id,mediaId:entry['media_id'] as String,
-            creatorId:entry['creator_id'] as String,contextId:context,
-            audienceRevision:(entry['revision'] as num).toInt(),
-            publishedAt:published,leaseExpiresAt:end,
-            bytes:Uint8List.fromList(plain)));
-          keep.add(entry);
-        }catch(_){
-          // Corrupt or replaced ciphertext is never returned.
-        }
-      }
-      // Expired or corrupt ciphertext must be physically discarded.
-      for(final entry in entries) {
-        if(keep.contains(entry))continue;
-        final name=entry['file'];
-        if(name is String && RegExp(r'^[a-f0-9]{64}\.cipher$').hasMatch(name)){
-          try{await File('${root.path}/$name').delete();}catch(_){}
-        }
-      }
-      await _vault.write(_index(account),jsonEncode(keep));
-      return available;
-    } finally {
-      key.fillRange(0,key.length,0);
-    }
-  }
-
-  /// A fresh authorized feed is authoritative; old contexts/revisions go.
-  Future<void> reconcile(Set<String> authorizedContexts) async {
-    final account=await _account();
-    final root=await _root(account);
-    final entries=await _entries(account);
-    final keep=<Map<String,dynamic>>[];
-    for(final entry in entries) {
-      final id=entry['id'],context=entry['context'],rev=entry['revision'];
-      if(id is String && context is String && rev is int &&
-          authorizedContexts.contains('$id|$context|$rev')) {
-        keep.add(entry);
-        continue;
-      }
-      final name=entry['file'];
-      if(name is String && RegExp(r'^[a-f0-9]{64}\.cipher$').hasMatch(name)){
-        try{await File('${root.path}/$name').delete();}catch(_){}
-      }
-    }
-    await _vault.write(_index(account),jsonEncode(keep));
-  }
-
-  /// Logout, account switch, or erasure removes OS-stored encryption keys.
-  Future<void> purge(String account) async {
-    await _vault.delete(_key(account));
-    await _vault.delete(_index(account));
-    await _vault.delete(_lastClock(account));
-    final base=await _directory();
-    final safe=account.replaceAll(RegExp(r'[^A-Za-z0-9_-]'),'_');
-    final root=Directory('${base.path}/orbit-m7-private-read/$safe');
-    if(await root.exists())await root.delete(recursive:true);
-  }
-}
-).hasMatch(name))continue;
+              !RegExp(r'^[a-f0-9]{64}\.cipher$').hasMatch(name))continue;
           final file=File('${root.path}/$name');
           if(!await file.exists()||await file.length()>maxPreviewBytes+28)continue;
-          // Keep ciphertext for bounded 7-day LRU retention, but NEVER
-          // decrypt it when a short authorization lease has expired.
+          // Retention of ciphertext never extends an expired read lease.
           if(!now.isBefore(end)){
             keep.add(entry);
             continue;
