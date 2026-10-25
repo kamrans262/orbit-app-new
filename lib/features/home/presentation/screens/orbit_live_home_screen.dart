@@ -5,6 +5,7 @@ import '../../../friends/presentation/screens/orbit_person_screen.dart';
 import 'package:flutter/material.dart';
 
 import '../../../moments/data/orbit_moment_repository.dart';
+import '../../../moments/data/orbit_m7_rollout.dart';
 import '../../../moments/data/orbit_moment_push_runtime.dart';
 import '../../../moments/presentation/screens/orbit_live_moment_viewer.dart';
 import '../../../moments/presentation/screens/orbit_live_moments_screen.dart';
@@ -38,7 +39,7 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
     _pushEvents=OrbitMomentPushRuntime.instance.updates.listen((_){
       if(mounted)unawaited(_reload());
     });
-    unawaited(OrbitMomentPushRuntime.instance.configure());
+    if(OrbitM7Rollout.enabled)unawaited(OrbitMomentPushRuntime.instance.configure());
     _revalidation=Timer.periodic(const Duration(seconds:25),(_){
       if(mounted && WidgetsBinding.instance.lifecycleState==AppLifecycleState.resumed
           && ModalRoute.of(context)?.isCurrent==true)unawaited(_reload());
@@ -107,7 +108,8 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
           _friendDetails.clear();
         });
       }
-      final rail=await _moments.feed(rail:true);
+      final rail=OrbitM7Rollout.enabled
+        ? await _moments.feed(rail:true):const <OrbitLiveMoment>[];
       final visible=<MomentData>[];
       final authorized=<String,OrbitLiveMoment>{};
       final authors=<String,String>{};
