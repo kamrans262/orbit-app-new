@@ -120,6 +120,7 @@ class OrbitMomentOfflineCache {
     final tmp=File('${file.path}.tmp');
     try {
       await tmp.writeAsBytes([...nonce,...box.mac.bytes,...box.cipherText],flush:true);
+      if(await file.exists())await file.delete();
       await tmp.rename(file.path);
       var index=await _entries(account);
       index.removeWhere((row)=>row['id']==id && row['context']==contextId);
@@ -132,7 +133,7 @@ class OrbitMomentOfflineCache {
         final root=await _root(account);
         for(final older in index.skip(maxEntries)){
           final name=older['file'];
-          if(name is String && RegExp(r'^[a-f0-9]{64}\\.cipher$').hasMatch(name)){
+          if(name is String && RegExp(r'^[a-f0-9]{64}\.cipher$').hasMatch(name)){
             try{await File('${root.path}/$name').delete();}catch(_){}
           }
         }
@@ -163,7 +164,7 @@ class OrbitMomentOfflineCache {
           final id=entry['id'] as String,context=entry['context'] as String;
           if(!now.isBefore(end) ||
               now.isAfter(published.add(const Duration(days:7))) ||
-              !RegExp(r'^[a-f0-9]{64}\\.cipher$').hasMatch(name))continue;
+              !RegExp(r'^[a-f0-9]{64}\.cipher$').hasMatch(name))continue;
           final file=File('${root.path}/$name');
           if(!await file.exists()||await file.length()>maxPreviewBytes+28)continue;
           final cipherBytes=await file.readAsBytes();
@@ -202,7 +203,7 @@ class OrbitMomentOfflineCache {
         keep.add(e);continue;
       }
       final name=e['file'];
-      if(name is String && RegExp(r'^[a-f0-9]{64}\\.cipher$').hasMatch(name)){
+      if(name is String && RegExp(r'^[a-f0-9]{64}\.cipher$').hasMatch(name)){
         try{await File('${root.path}/$name').delete();}catch(_){}
       }
     }
