@@ -16,23 +16,63 @@ class OrbitLiveHomeScreen extends StatefulWidget {
   @override
   State<OrbitLiveHomeScreen> createState()=>_OrbitLiveHomeScreenState();
 }
-class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen> {
+class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
+    with WidgetsBindingObserver {
   final OrbitMomentRepository _moments=OrbitMomentRepository();
   List<MomentData> _recent=const [];
   String _greeting='';
+  Timer? _revalidation;
+  int _reloadEpoch=0;
   final Map<String,OrbitLiveMoment> _byId={};
   final Map<String,String> _authors={};
   @override
   void initState(){
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _revalidation=Timer.periodic(const Duration(seconds:25),(_){
+      if(mounted && WidgetsBinding.instance.lifecycleState==AppLifecycleState.resumed
+          && ModalRoute.of(context)?.isCurrent==true)unawaited(_reload());
+    });
     unawaited(_reload());
   }
+
+  void _clearPreviews(){
+    for(final item in _recent){
+      final bytes=item.encryptedImageBytes;
+      if(bytes!=null)unawaited(MemoryImage(bytes).evict());
+    }
+    _recent=const [];
+    _byId.clear();
+    _authors.clear();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state){
+    if(state==AppLifecycleState.paused||state==AppLifecycleState.inactive
+       ||state==AppLifecycleState.hidden){
+      ++_reloadEpoch;
+      if(mounted)setState(_clearPreviews);
+    }else if(state==AppLifecycleState.resumed && mounted){
+      unawaited(_reload());
+    }
+  }
+
+  @override
+  void dispose(){
+    ++_reloadEpoch;
+    _revalidation?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _clearPreviews();
+    super.dispose();
+  }
   Future<void> _reload() async {
+    final epoch=++_reloadEpoch;
     try {
       try {
         final person=await OrbitIdentityClient.instance.currentUser();
         final data=person['data'];
-        if(data is Map && data['display_name'] is String && mounted){
+        if(data is Map && data['display_name'] is String && mounted
+           && epoch==_reloadEpoch){
           setState(()=>_greeting=data['display_name'] as String);
         }
       }catch(_){}
@@ -57,17 +97,22 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen> {
           // A revoked/expired Moment must not show placeholder details.
         }
       }
-      if(!mounted)return;
+      if(!mounted||epoch!=_reloadEpoch){
+        for(final row in visible){
+          final bytes=row.encryptedImageBytes;
+          if(bytes!=null)unawaited(MemoryImage(bytes).evict());
+        }
+        return;
+      }
       setState((){
+        _clearPreviews();
         _recent=visible;
         _byId..clear()..addAll(authorized);
         _authors..clear()..addAll(authors);
       });
     } catch (_) {
-      if(mounted)setState((){
-        _recent=const [];
-        _byId.clear();
-        _authors.clear();
+      if(mounted && epoch==_reloadEpoch)setState((){
+        _clearPreviews();
       });
     }
   }
