@@ -100,6 +100,19 @@ class OrbitMomentRepository {
     if(d is! Map)throw const FormatException('Unexpected private Moments response.');
     return Map<String,dynamic>.from(d);
   }
+  Future<Set<String>> mutedCircleNotifications() async {
+    final data=await _api('GET','/me/moments/notifications/muted-circles');
+    final ids=data['circle_ids'];
+    if(ids is! List)throw const FormatException('Muted Circle settings malformed.');
+    return ids.whereType<String>().toSet();
+  }
+
+  Future<void> setCircleNotificationMute(String circleId,bool muted) async {
+    await _api('PUT',
+      '/me/moments/notifications/mute-circle/${Uri.encodeComponent(circleId)}',
+      body:{'muted':muted});
+  }
+
   Future<List<Map<String,dynamic>>> notifications() async {
     final result=await _api('GET','/me/moments/notifications');
     final items=result['items'];
