@@ -45,6 +45,7 @@ jobs:
           flutter test test/features/moments/presentation/widgets/orbit_m7_stage4_revocation_test.dart
           flutter test test/features/moments/presentation/widgets/orbit_m7_circle_profile_privacy_test.dart
           flutter test test/features/moments/presentation/moments_screen_test.dart
+          flutter test test/features/home/presentation/orbit_home_demo_fixture_test.dart
 
   android-native-compile:
     if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/integration/m2-m5-flutter-consolidated-2026-10-24') || (github.event_name == 'workflow_dispatch' && inputs.target == 'android') }}
