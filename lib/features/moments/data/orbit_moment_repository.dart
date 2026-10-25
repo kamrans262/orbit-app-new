@@ -120,7 +120,7 @@ class OrbitMomentRepository {
       }
       final cursor=response['next_cursor'];
       if(cursor is! Map||cursor['before'] is! String ||
-         cursor['before_id'] is! String||raw.isEmpty)break;
+         cursor['before_id'] is! String)break;
       final nextBefore=cursor['before'] as String;
       final nextId=cursor['before_id'] as String;
       if(nextBefore==before&&nextId==beforeId)break;
