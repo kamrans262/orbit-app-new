@@ -185,7 +185,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('tapping a friend opens existing Profile layout with Quick Actions before Overview',
+  testWidgets('friend profile centres identity and shows Quick Actions without Overview',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(390, 844));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -209,11 +209,22 @@ void main() {
     expect(find.byKey(ProfileKeys.settingsButton), findsNothing);
     expect(find.byKey(ProfileKeys.stats), findsNothing);
     expect(find.byKey(ProfileKeys.quickActionsTab), findsOneWidget);
-    expect(find.byKey(ProfileKeys.overviewTab), findsOneWidget);
+    expect(find.byKey(ProfileKeys.overviewTab), findsNothing);
     expect(find.byKey(ProfileKeys.placesTab), findsOneWidget);
     expect(find.byKey(ProfileKeys.momentsTab), findsOneWidget);
     expect(tester.getTopLeft(find.byKey(ProfileKeys.quickActionsTab)).dx,
-        lessThan(tester.getTopLeft(find.byKey(ProfileKeys.overviewTab)).dx));
+        lessThan(tester.getTopLeft(find.byKey(ProfileKeys.placesTab)).dx));
+    expect(tester.getTopLeft(find.byKey(ProfileKeys.placesTab)).dx,
+        lessThan(tester.getTopLeft(find.byKey(ProfileKeys.momentsTab)).dx));
+    final center = tester.getSize(find.byType(ProfileScreen)).width / 2;
+    final header = find.byType(ProfileSummaryHeader);
+    final avatar = find.byKey(ProfileKeys.avatar);
+    final name = find.descendant(of: header, matching: find.text('Ayesha'));
+    final username =
+        find.descendant(of: header, matching: find.text('@ayesha'));
+    expect(tester.getCenter(avatar).dx, closeTo(center, 0.5));
+    expect(tester.getCenter(name).dx, closeTo(center, 0.5));
+    expect(tester.getCenter(username).dx, closeTo(center, 0.5));
 
     expect(find.byKey(const Key('friend_profile_quick_actions_card')),
         findsOneWidget);
@@ -224,12 +235,9 @@ void main() {
     expect(find.text('Navigate'), findsOneWidget);
     expect(find.text('Check-In'), findsOneWidget);
 
-    await tester.tap(find.byKey(ProfileKeys.overviewTab));
-    await tester.pumpAndSettle();
     expect(find.byKey(const Key('friend_profile_overview_card')),
-        findsOneWidget);
-    expect(find.text('You are friends.'), findsOneWidget);
-    expect(find.text('Your activity will appear here'), findsNothing);
+        findsNothing);
+    expect(find.text('Overview'), findsNothing);
     await tester.tap(find.byKey(ProfileKeys.placesTab));
     await tester.pumpAndSettle();
     expect(find.text('This person has not shared places with you.'),
