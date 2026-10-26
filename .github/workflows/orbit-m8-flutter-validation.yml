@@ -36,3 +36,4 @@ jobs:
           flutter test test/features/home/presentation/m8_home_sections_test.dart
           flutter test test/features/home/presentation/home_screen_test.dart
           flutter test test/features/home/presentation/home_requested_updates_test.dart
+          flutter test test/core/widgets/orbit_searchable_header_test.dart
