@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../core/widgets/app_screen_header.dart';
 import '../../domain/models/nearby_person.dart';
 import '../widgets/invite_option_tile.dart';
 import '../widgets/nearby_person_tile.dart';
@@ -15,6 +16,7 @@ abstract final class InvitePeopleKeys {
   static const nearbyList = Key('invite_people_nearby_list');
   static const doneButton = Key('invite_people_done_button');
   static const skipButton = Key('invite_people_skip_button');
+  static const searchField = Key('invite_people_search_field');
 
   static Key option(int index) => Key('invite_people_option_$index');
   static Key person(int index) => Key('invite_people_person_$index');
@@ -33,6 +35,16 @@ class InvitePeopleScreen extends StatelessWidget {
     this.onDone,
     this.onSkip,
     this.nearbyPeople = NearbyPerson.demoPeople,
+    this.isCircleInvite = false,
+    this.onBack,
+    this.searchController,
+    this.searchFocusNode,
+    this.onSearchChanged,
+    this.peopleHeading = 'Near By People',
+    this.loadingPeople = false,
+    this.peopleError,
+    this.onRetryPeople,
+    this.canAddPerson = true,
     super.key,
   });
 
@@ -52,6 +64,18 @@ class InvitePeopleScreen extends StatelessWidget {
   final VoidCallback? onDone;
   final VoidCallback? onSkip;
   final List<NearbyPerson> nearbyPeople;
+  /// Reuse this original screen for authenticated Circle invitations. The
+  /// onboarding header and demo data remain unchanged for existing callers.
+  final bool isCircleInvite;
+  final VoidCallback? onBack;
+  final TextEditingController? searchController;
+  final FocusNode? searchFocusNode;
+  final ValueChanged<String>? onSearchChanged;
+  final String peopleHeading;
+  final bool loadingPeople;
+  final String? peopleError;
+  final VoidCallback? onRetryPeople;
+  final bool canAddPerson;
 
   @override
   Widget build(BuildContext context) {
@@ -74,31 +98,73 @@ class InvitePeopleScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
-                  Semantics(
-                    button: true,
-                    label: 'Open login',
-                    child: GestureDetector(
-                      key: InvitePeopleKeys.loginShortcut,
-                      behavior: HitTestBehavior.opaque,
-                      onTap: onOpenLogin,
-                      child: const Text(
-                        'Invite People',
-                        key: InvitePeopleKeys.heading,
-                        textAlign: TextAlign.center,
-                        style: AppTypography.largeHeading,
+                  if (isCircleInvite) ...<Widget>[
+                    AppScreenHeader(
+                      title: 'Add People',
+                      prominent: true,
+                      onBack: onBack,
+                      titleKey: InvitePeopleKeys.heading,
+                    ),
+                    const SizedBox(height: 20),
+                    TextField(
+                      key: InvitePeopleKeys.searchField,
+                      controller: searchController,
+                      focusNode: searchFocusNode,
+                      onChanged: onSearchChanged,
+                      textInputAction: TextInputAction.search,
+                      style: const TextStyle(
+                        fontFamily: AppTypography.fontFamily, fontSize: 15,
+                        color: Color(0xFF0F1724),
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'Search by name or username',
+                        hintStyle: const TextStyle(
+                          fontFamily: AppTypography.fontFamily,
+                          color: Color(0xFF94A3B8), fontSize: 15,
+                        ),
+                        prefixIcon: const Icon(Icons.search_rounded,
+                            color: Color(0xFF94A3B8)),
+                        filled: true, fillColor: Colors.white,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 18, vertical: 16),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(40),
+                          borderSide: const BorderSide(color: Color(0xFFF0F0F0)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(40),
+                          borderSide: const BorderSide(color: Color(0xFFF0F0F0)),
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: _headingToBodyGap),
-                  Text(
-                    'Add People To Your Circle',
-                    key: InvitePeopleKeys.body,
-                    textAlign: TextAlign.center,
-                    style: AppTypography.body.copyWith(
-                      color: AppColors.textMuted,
+                    const SizedBox(height: _bodyToOptionsGap),
+                  ] else ...<Widget>[
+                    Semantics(
+                      button: true,
+                      label: 'Open login',
+                      child: GestureDetector(
+                        key: InvitePeopleKeys.loginShortcut,
+                        behavior: HitTestBehavior.opaque,
+                        onTap: onOpenLogin,
+                        child: const Text(
+                          'Invite People',
+                          key: InvitePeopleKeys.heading,
+                          textAlign: TextAlign.center,
+                          style: AppTypography.largeHeading,
+                        ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: _bodyToOptionsGap),
+                    const SizedBox(height: _headingToBodyGap),
+                    Text(
+                      'Add People To Your Circle',
+                      key: InvitePeopleKeys.body,
+                      textAlign: TextAlign.center,
+                      style: AppTypography.body.copyWith(
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                    const SizedBox(height: _bodyToOptionsGap),
+                  ],
                   InviteOptionTile(
                     containerKey: InvitePeopleKeys.option(0),
                     icon: Icons.people_alt_outlined,
@@ -126,12 +192,38 @@ class InvitePeopleScreen extends StatelessWidget {
                     label: 'Invite by Username',
                     onTap: onInviteByUsername,
                   ),
+                  if (isCircleInvite &&
+                      (loadingPeople || peopleError != null ||
+                          nearbyPeople.isEmpty)) ...<Widget>[
+                    const SizedBox(height: _optionsToNearbyGap),
+                    if (loadingPeople)
+                      const Center(child: CircularProgressIndicator(
+                          color: AppColors.primaryEnd))
+                    else if (peopleError != null)
+                      Column(children: <Widget>[
+                        Text(peopleError!, textAlign: TextAlign.center),
+                        TextButton(
+                          onPressed: onRetryPeople,
+                          child: const Text('Try again'),
+                        ),
+                      ])
+                    else
+                      const Text(
+                        'No eligible friends to invite. Existing members and '
+                        'pending invitations are excluded.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontFamily: AppTypography.fontFamily,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                  ],
                   if (nearbyPeople.isNotEmpty) ...[
                   const SizedBox(height: _optionsToNearbyGap),
-                  const Text(
-                    'Near By People',
+                  Text(
+                    peopleHeading,
                     key: InvitePeopleKeys.nearbyHeading,
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontFamily: AppTypography.fontFamily,
                       fontFamilyFallback: <String>[
                         'Noto Color Emoji',
@@ -158,6 +250,7 @@ class InvitePeopleScreen extends StatelessWidget {
                         imageKey: InvitePeopleKeys.image(index),
                         addButtonKey: InvitePeopleKeys.add(index),
                         person: person,
+                        enabled: canAddPerson,
                         onAdd: () => onAddPerson(person),
                       );
                     },
