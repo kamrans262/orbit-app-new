@@ -8,6 +8,9 @@ import 'package:orbit_ui/features/friends/presentation/screens/orbit_live_friend
 import 'package:orbit_ui/features/friends/presentation/screens/friends_screen.dart';
 import 'package:orbit_ui/features/friends/presentation/screens/orbit_discover_friends_screen.dart';
 import 'package:orbit_ui/core/widgets/app_circular_icon_button.dart';
+import 'package:orbit_ui/features/home/presentation/widgets/favorite_person_tile.dart';
+import 'package:orbit_ui/features/welcome/domain/models/nearby_person.dart';
+import 'package:orbit_ui/features/welcome/presentation/widgets/nearby_person_tile.dart';
 import 'package:orbit_ui/features/profile/presentation/screens/orbit_live_blocked_users_screen.dart';
 
 class _FakeSocial extends OrbitSocialRepository {
@@ -99,6 +102,25 @@ void main() {
     expect(find.byKey(FriendsKeys.searchButton), findsOneWidget);
     expect(find.bySemanticsLabel('Friend requests'), findsOneWidget);
     expect(find.byType(AppCircularIconButton), findsWidgets);
+    // The Find Friends icon now uses the former Friend Requests icon.
+    final findFriends = tester.widget<AppCircularIconButton>(
+        find.byKey(FriendsKeys.searchButton));
+    expect(findFriends.icon, Icons.person_add_alt_outlined);
+    // Requests has a distinct incoming-mail icon.
+    final requests = tester.widget<AppCircularIconButton>(
+        find.byWidgetPredicate((widget) =>
+            widget is AppCircularIconButton &&
+            widget.semanticLabel == 'Friend requests'));
+    expect(requests.icon, Icons.mark_email_unread_outlined);
+    // Live Friends now displays the exact same original person card as
+    // Circle Friend Details, including the read-only favorite heart.
+    expect(find.byType(FavoritePersonTile), findsOneWidget);
+    final favorite = tester.widget<IconButton>(
+        find.descendant(
+          of: find.byKey(FriendsKeys.row('person-01')),
+          matching: find.byType(IconButton),
+        ));
+    expect(favorite.onPressed, isNull);
     expect(find.byIcon(Icons.person_search_outlined), findsNothing);
     expect(repo.friendReads, 1);
     await tester.tap(find.byKey(FriendsKeys.searchButton));
@@ -107,6 +129,51 @@ void main() {
     expect(find.text('Find Friends'), findsOneWidget);
   });
 
+
+  testWidgets('Find Friends restores original nearby section without fake users',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(MaterialApp(
+      home: OrbitDiscoverFriendsScreen(repository: _FakeSocial()),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Near By People'), findsOneWidget);
+    expect(find.textContaining('Nearby people are not available yet'),
+        findsOneWidget);
+    expect(find.byType(NearbyPersonTile), findsNothing);
+    expect(find.text('Emma'), findsNothing);
+    expect(find.text('2.1 km'), findsNothing);
+    expect(find.text('You can search by name without sharing contacts.'),
+        findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Find Friends reuses Invite People tiles for verified nearby data',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(MaterialApp(
+      home: OrbitDiscoverFriendsScreen(
+        repository: _FakeSocial(),
+        nearbyPeople: const <NearbyPerson>[
+          NearbyPerson(id: 'verified-1', name: 'Verified Person',
+              distance: '1.4 km', imageAsset: ''),
+          // A demo row without stable identity must never be presented live.
+          NearbyPerson(name: 'Unverified Demo', distance: '2.1 km',
+              imageAsset: 'assets/Emma.png'),
+        ],
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Near By People'), findsOneWidget);
+    expect(find.byType(NearbyPersonTile), findsOneWidget);
+    expect(find.text('Verified Person'), findsOneWidget);
+    expect(find.text('1.4 km'), findsOneWidget);
+    expect(find.text('Unverified Demo'), findsNothing);
+    expect(find.byKey(const Key('find_friends_nearby_list')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('Invitation code entry uses approved popup and safe controller lifetime',
       (tester) async {
