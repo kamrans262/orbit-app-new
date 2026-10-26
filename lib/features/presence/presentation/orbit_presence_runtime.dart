@@ -22,11 +22,13 @@ class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
   final OrbitPresenceSocket _socket;
   final Map<String, OrbitPresenceSnapshot> _circles={};
   final Map<String,int> _circleVersions={};
+  final Set<String> _refreshing=<String>{};
   final Set<String> _watches={};
   final Map<String,Set<String>> _watchOwners={};
   StreamSubscription<Map<String, dynamic>>? _events;
   Timer? _heartbeat;
   Timer? _expiry;
+  Timer? _revalidation;
   bool _active=false;
   bool _started=false;
   int _epoch=0;
@@ -46,6 +48,15 @@ class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
     });
     _expiry=Timer.periodic(const Duration(seconds:5), (_) {
       if (_active && _watches.isNotEmpty && _circles.isNotEmpty) notifyListeners();
+    });
+    // UI freshness check, not a substitute for the M9 WebSocket gateway.
+    _revalidation=Timer.periodic(const Duration(seconds:20), (_) {
+      if (!_active || !_started) return;
+      for (final id in _watches.toList()) {
+        if (_refreshing.add(id)) {
+          unawaited(refresh(id).whenComplete(() => _refreshing.remove(id)));
+        }
+      }
     });
     await _beat();
     if (epoch==_epoch && _started && _active) {
@@ -147,8 +158,9 @@ class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void clear() {
-    if (_circles.isEmpty) return;
-    for (final id in _circles.keys) {
+    // Include pending reads, not only cached Circles. A previous in-flight
+    // response must never restore state after Ghost, background or sign-out.
+    for (final id in _watches) {
       _circleVersions[id]=(_circleVersions[id] ?? 0)+1;
     }
     _circles.clear();
@@ -165,6 +177,7 @@ class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
       for (final id in _watches.toList()) { unawaited(refresh(id)); }
     } else {
       _active=false;
+      ++_epoch;
       clear();
       unawaited(_repository.disconnect().catchError((Object _) {}));
       unawaited(_socket.stop());
@@ -178,11 +191,13 @@ class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
     _epoch++;
     _heartbeat?.cancel(); _heartbeat=null;
     _expiry?.cancel(); _expiry=null;
+    _revalidation?.cancel(); _revalidation=null;
     WidgetsBinding.instance.removeObserver(this);
     final events=_events; _events=null;
     await events?.cancel();
     _watches.clear();
     _watchOwners.clear();
+    _refreshing.clear();
     clear();
     _circleVersions.clear();
     await _socket.stop();
