@@ -63,7 +63,7 @@ void main(){
     await tester.binding.setSurfaceSize(const Size(320,568));
     addTearDown(()=>tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(MediaQuery(
-      data:const MediaQueryData(textScaler:TextScaler.linear(1.5)),
+      data:const MediaQueryData(textScaler:TextScaler.linear(2.0)),
       child:buildHome(onCircle:(){},showCircles:false),
     ));
     await tester.pumpAndSettle();

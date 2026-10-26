@@ -137,6 +137,9 @@ void main() {
           onPlanPressed: (plan) {},
           onPromoPressed: () {},
           onFavoritePersonPressed: (person) => selected = person,
+          // The fixture explicitly opts into demonstration-only navigation.
+          // Authenticated OrbitLiveHomeScreen never enables this.
+          enableDemoCircleNavigation: true,
           onFavoriteToggle: (person) {},
           onMomentPressed: (moment) {},
           onTabSelected: (index) {},
