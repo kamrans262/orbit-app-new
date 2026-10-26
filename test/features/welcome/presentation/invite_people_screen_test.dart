@@ -161,6 +161,70 @@ void main() {
     );
   }
 
+  testWidgets('live Circle mode reuses original Add People options and friend rows',
+      (tester) async {
+    await setPhoneSize(tester, const Size(390, 844));
+    NearbyPerson? added;
+    final controller = TextEditingController();
+    final focus = FocusNode();
+    addTearDown(() {
+      controller.dispose();
+      focus.dispose();
+    });
+    await tester.pumpWidget(MaterialApp(home: InvitePeopleScreen(
+      isCircleInvite: true,
+      searchController: controller,
+      searchFocusNode: focus,
+      onSearchChanged: (_) {},
+      peopleHeading: 'Friends',
+      nearbyPeople: const <NearbyPerson>[
+        NearbyPerson(id: 'verified-friend', name: 'Aisha',
+          distance: '@aisha', imageAsset: ''),
+      ],
+      onInviteByContacts: () {},
+      onInviteByQrCode: () {},
+      onInviteByLink: () {},
+      onInviteByUsername: () {},
+      onAddPerson: (person) => added = person,
+      onOpenLogin: () {},
+    )));
+    await tester.pumpAndSettle();
+    expect(find.text('Add People'), findsOneWidget);
+    expect(find.byKey(InvitePeopleKeys.searchField), findsOneWidget);
+    expect(find.byType(InviteOptionTile), findsNWidgets(4));
+    expect(find.text('Invite by Contacts'), findsOneWidget);
+    expect(find.text('Invite by QR Code'), findsOneWidget);
+    expect(find.text('Invite by Link'), findsOneWidget);
+    expect(find.text('Invite by Username'), findsOneWidget);
+    expect(find.text('Friends'), findsOneWidget);
+    expect(find.text('Aisha'), findsOneWidget);
+    expect(find.text('@aisha'), findsOneWidget);
+    expect(find.text('2.1 km'), findsNothing);
+    await tester.ensureVisible(find.byKey(InvitePeopleKeys.add(0)));
+    await tester.tap(find.byKey(InvitePeopleKeys.add(0)));
+    expect(added?.id, 'verified-friend');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('live Circle mode cannot accidentally show demo nearby people',
+      (tester) async {
+    await setPhoneSize(tester, const Size(390, 844));
+    await tester.pumpWidget(MaterialApp(home: InvitePeopleScreen(
+      isCircleInvite: true,
+      onInviteByContacts: () {},
+      onInviteByQrCode: () {},
+      onInviteByLink: () {},
+      onInviteByUsername: () {},
+      onAddPerson: (_) {},
+      onOpenLogin: () {},
+    )));
+    await tester.pumpAndSettle();
+    expect(find.text('Emma'), findsNothing);
+    expect(find.text('Mike'), findsNothing);
+    expect(find.text('2.1 km'), findsNothing);
+    expect(find.textContaining('No eligible friends'), findsOneWidget);
+  });
+
   test('shared background remains #F9F9F9', () {
     expect(AppColors.background, const Color(0xFFF9F9F9));
   });
