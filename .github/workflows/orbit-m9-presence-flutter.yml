@@ -36,7 +36,9 @@ jobs:
         run: |
           dart analyze lib/features/presence lib/features/auth/data/orbit_identity_client.dart lib/features/auth/presentation/widgets/orbit_session_welcome_gate.dart lib/features/circles/presentation/screens/orbit_live_circle_detail_screen.dart lib/features/home/presentation/screens/orbit_live_home_screen.dart test/features/presence
       - name: Test M9 privacy and REST contracts
-        run: flutter test test/features/presence
+        run: flutter test test/features/presence --exclude-tags=m9-enabled
+      - name: Check enabled M9 lifecycle freshness
+        run: flutter test --dart-define=ORBIT_M9_PRESENCE_ENABLED=true test/features/presence/orbit_m9_lifecycle_refresh_test.dart
       - name: Check M8 consolidated Home contracts
         run: |
           flutter test test/features/home/data/orbit_dashboard_repository_test.dart
