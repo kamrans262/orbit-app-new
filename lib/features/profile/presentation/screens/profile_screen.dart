@@ -25,6 +25,7 @@ abstract final class ProfileKeys {
   static const emptyState = Key('profile_empty_state');
   static const errorState = Key('profile_error_state');
   static const gradientBackground = Key('profile_gradient_background');
+  static const quickActionsTab = Key('friend_profile_quick_actions_tab');
   static const overviewTab = Key('profile_overview_tab');
   static const placesTab = Key('profile_places_tab');
   static const momentsTab = Key('profile_moments_tab');
@@ -48,6 +49,10 @@ class ProfileScreen extends StatefulWidget {
     this.momentDetailBuilder,
     this.liveMomentsBuilder,
     this.onMomentPressed,
+    this.friendView = false,
+    this.onFriendBack,
+    this.friendQuickActionsBuilder,
+    this.friendOverviewBuilder,
     super.key,
   });
 
@@ -135,6 +140,12 @@ class ProfileScreen extends StatefulWidget {
   momentDetailBuilder;
   final ValueChanged<ProfileMomentData>? onMomentPressed;
   final WidgetBuilder? liveMomentsBuilder;
+  /// Reuses the existing Profile header and gradient tab design for a person,
+  /// without treating them as the signed-in account or revealing private stats.
+  final bool friendView;
+  final VoidCallback? onFriendBack;
+  final WidgetBuilder? friendQuickActionsBuilder;
+  final WidgetBuilder? friendOverviewBuilder;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -151,7 +162,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
       child: Scaffold(
         backgroundColor: AppColors.background,
-        bottomNavigationBar: AppBottomNavigationBar(
+        bottomNavigationBar: widget.friendView ? null : AppBottomNavigationBar(
           key: ProfileKeys.bottomNavigation,
           selectedIndex: 3,
           onTabSelected: widget.onTabSelected,
@@ -168,7 +179,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               final safeTop = MediaQuery.paddingOf(context).top;
               // A compact header gives Overview content visible space, while
               // leaving enough height for avatar/name/bio/stats on 320x568.
-              final headerExtent = safeTop + 232.0;
+              final headerExtent = safeTop + (widget.friendView ? 196.0 : 232.0);
               final gradientHeight = headerExtent + 64;
 
               return Stack(
@@ -211,8 +222,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           height: headerExtent,
                           horizontalPadding: 20,
                           topPadding: 6,
-                          showSettingsButton: true,
-                          onSettingsPressed: () => _openSettings(context),
+                          showSettingsButton: !widget.friendView,
+                          showStats: !widget.friendView,
+                          showBackButton: widget.friendView,
+                          showInitialsForMissingAvatar: widget.friendView,
+                          onBackPressed: widget.onFriendBack,
+                          onSettingsPressed: widget.friendView
+                              ? null : () => _openSettings(context),
                           avatarKey: ProfileKeys.avatar,
                           statsKey: ProfileKeys.stats,
                           settingsButtonKey: ProfileKeys.settingsButton,
@@ -233,12 +249,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _profileTabControl() {
-    const tabLabels = <String>['Overview', 'Places', 'Moments'];
-    const tabKeys = <Key>[
-      ProfileKeys.overviewTab,
-      ProfileKeys.placesTab,
-      ProfileKeys.momentsTab,
-    ];
+    final tabLabels = widget.friendView
+        ? const <String>['Quick Actions', 'Overview', 'Places', 'Moments']
+        : const <String>['Overview', 'Places', 'Moments'];
+    final tabKeys = widget.friendView
+        ? const <Key>[
+            ProfileKeys.quickActionsTab,
+            ProfileKeys.overviewTab,
+            ProfileKeys.placesTab,
+            ProfileKeys.momentsTab,
+          ]
+        : const <Key>[
+            ProfileKeys.overviewTab,
+            ProfileKeys.placesTab,
+            ProfileKeys.momentsTab,
+          ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         _horizontalPadding,
@@ -283,7 +308,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontFamily: AppTypography.fontFamily,
-                          fontSize: 12,
+                          fontSize: widget.friendView ? 11 : 12,
                           fontWeight: FontWeight.w500,
                           color: _selectedProfileTab == index
                               ? Colors.white
@@ -301,6 +326,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   List<Widget> _contentSlivers() {
+    if (widget.friendView) return _friendContentSlivers();
     switch (widget.viewState) {
       case ProfileViewState.loading:
         return const <Widget>[
@@ -367,6 +393,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ];
     }
+  }
+
+  List<Widget> _friendContentSlivers() {
+    final builder = _selectedProfileTab == 0
+        ? widget.friendQuickActionsBuilder
+        : _selectedProfileTab == 1
+            ? widget.friendOverviewBuilder
+            : null;
+    return <Widget>[
+      SliverPadding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
+        sliver: SliverToBoxAdapter(
+          child: builder != null
+              ? builder(context)
+              : Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 32,
+                  ),
+                  child: Text(
+                    _selectedProfileTab == 2
+                        ? 'This person has not shared places with you.'
+                        : 'No authorized Moments are available here.',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontFamily: AppTypography.fontFamily,
+                      fontSize: 13,
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                ),
+        ),
+      ),
+    ];
   }
 
   List<Widget> _gallerySlivers() {
