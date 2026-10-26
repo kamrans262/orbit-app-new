@@ -16,6 +16,9 @@ class OrbitPresenceSocket {
   WebSocket? _socket;
   StreamSubscription<dynamic>? _subscription;
   Timer? _renewal;
+  Timer? _retry;
+  int _attempts = 0;
+  bool _wantConnection = false;
   int _epoch = 0;
   bool _authorized = false;
 
@@ -26,6 +29,7 @@ class OrbitPresenceSocket {
     final endpoint = OrbitPresenceRollout.secureGateway;
     if (endpoint == null) return; // Fail closed until WSS is provisioned.
     await stop();
+    _wantConnection = true;
     final epoch = ++_epoch;
     WebSocket? socket;
     try {
@@ -47,6 +51,12 @@ class OrbitPresenceSocket {
           final data=Map<String, dynamic>.from(decoded);
           if (data['type']=='authenticated') {
             _authorized=true;
+            _attempts=0;
+            return;
+          }
+          if (data['type']=='auth_error' || data['type']=='unauthorized') {
+            _disconnected(epoch);
+            unawaited(_socket?.close());
             return;
           }
           if (!_authorized) return;
@@ -57,21 +67,30 @@ class OrbitPresenceSocket {
         } catch (_) {
           // Invalid gateway messages are ignored; never trust them as status.
         }
-      },onDone: _disconnected, onError: (_) => _disconnected());
+      },onDone: () => _disconnected(epoch),
+        onError: (_) => _disconnected(epoch));
       // Reconnect with a new backend-signed session ticket before expiry.
       _renewal = Timer(const Duration(seconds: 45), () {
         if (epoch == _epoch) unawaited(connect());
       });
     } catch (_) {
       if (socket != null) { try { await socket.close(); } catch (_) {} }
-      _disconnected();
+      _disconnected(epoch);
     }
   }
 
-  void _disconnected() {
+  void _disconnected(int epoch) {
+    if (epoch != _epoch) return;
     _authorized = false;
-    // Do not display stale Presence once a transport disconnects.
+    // Reconnects never reuse the expired 60-second session ticket.
     _events.add({'type':'presence.transport_down','circle_id':'*'});
+    if (!_wantConnection || _retry != null) return;
+    _attempts=(_attempts+1).clamp(1,5);
+    final delay=Duration(seconds:2 << (_attempts-1));
+    _retry=Timer(delay, () {
+      _retry=null;
+      if (_wantConnection && epoch==_epoch) unawaited(connect());
+    });
   }
 
   void send(String kind, Map<String, Object?> data) {
@@ -81,7 +100,9 @@ class OrbitPresenceSocket {
 
   Future<void> stop() async {
     _epoch++;
+    _wantConnection=false;
     _renewal?.cancel(); _renewal=null;
+    _retry?.cancel(); _retry=null;
     await _subscription?.cancel(); _subscription=null;
     final socket=_socket; _socket=null; _authorized=false;
     if (socket!=null) { try { await socket.close(); } catch (_) {} }
