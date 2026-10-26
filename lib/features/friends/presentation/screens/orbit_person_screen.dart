@@ -245,47 +245,6 @@ class _OrbitPersonScreenState extends State<OrbitPersonScreen> {
     );
   }
 
-  Widget _overview(BuildContext context) => SettingsListCard(
-    key: const Key('friend_profile_overview_card'),
-    children: <Widget>[
-      const Text('Overview', style: TextStyle(
-        fontFamily: AppTypography.fontFamily,
-        fontSize: 16, fontWeight: FontWeight.w600, color: Color(0xFF0F1724),
-      )),
-      Text(
-        _person.username.isEmpty ? 'Username unavailable'
-            : '@${_person.username}',
-        textAlign: TextAlign.center,
-        style: const TextStyle(
-          fontFamily: AppTypography.fontFamily,
-          fontSize: 14, color: Color(0xFF64748B),
-        ),
-      ),
-      Text(
-        _person.relationship == 'friend'
-            ? 'You are friends.'
-            : _person.relationship == 'outgoing_pending'
-                ? 'Your friend request is pending.'
-                : _person.relationship == 'incoming_pending'
-                    ? 'This person sent you a friend request.'
-                    : 'You are not currently friends.',
-        textAlign: TextAlign.center,
-        style: const TextStyle(
-          fontFamily: AppTypography.fontFamily,
-          fontSize: 14, color: Color(0xFF64748B),
-        ),
-      ),
-      const Text(
-        'Other profile details are private unless this person chooses to share them.',
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          fontFamily: AppTypography.fontFamily,
-          fontSize: 12, color: Color(0xFF94A3B8),
-        ),
-      ),
-    ],
-  );
-
   @override
   Widget build(BuildContext context) => ProfileScreen(
     friendView: true,
@@ -300,7 +259,6 @@ class _OrbitPersonScreenState extends State<OrbitPersonScreen> {
     ),
     onFriendBack: () => Navigator.of(context).maybePop(),
     friendQuickActionsBuilder: _quickActions,
-    friendOverviewBuilder: _overview,
     onTabSelected: (_) {}, onAddPressed: () {}, onRetry: _refresh,
   );
 }
