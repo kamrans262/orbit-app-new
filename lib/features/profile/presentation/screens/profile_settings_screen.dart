@@ -54,9 +54,6 @@ class SettingsScreen extends StatelessWidget {
 
   static const Color _pageBackground = Color(0xFFF9F9F9);
   static const double _cardHorizontalInset = 14;
-  static const double _cardHorizontalPadding = 18;
-  static const double _cardVerticalPadding = 20;
-  static const double _itemGap = 10;
 
   static const LinearGradient _fadeToPageBackground = LinearGradient(
     begin: Alignment.topCenter,
