@@ -529,41 +529,18 @@ class _SettingsCard extends StatelessWidget {
       ),
     ];
 
-    return DecoratedBox(
+    return SettingsListCard(
       key: SettingsKeys.listCard,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(30),
-        boxShadow: const <BoxShadow>[
-          BoxShadow(
-            color: Color(0x22000000),
-            offset: Offset(0, 2),
-            blurRadius: 7,
+      children: <Widget>[
+        for (final entry in entries)
+          SettingsListItem(
+            key: SettingsKeys.item(entry.id),
+            icon: entry.icon,
+            iconWidget: entry.iconWidget,
+            label: entry.label,
+            onTap: entry.onTap,
           ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: SettingsScreen._cardHorizontalPadding,
-          vertical: SettingsScreen._cardVerticalPadding,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            for (var index = 0; index < entries.length; index++) ...<Widget>[
-              SettingsListItem(
-                key: SettingsKeys.item(entries[index].id),
-                icon: entries[index].icon,
-                iconWidget: entries[index].iconWidget,
-                label: entries[index].label,
-                onTap: entries[index].onTap,
-              ),
-              if (index != entries.length - 1)
-                const SizedBox(height: SettingsScreen._itemGap),
-            ],
-          ],
-        ),
-      ),
+      ],
     );
   }
 }
