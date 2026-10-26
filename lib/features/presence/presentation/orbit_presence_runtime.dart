@@ -21,6 +21,7 @@ class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
   final OrbitPresenceRepository _repository;
   final OrbitPresenceSocket _socket;
   final Map<String, OrbitPresenceSnapshot> _circles={};
+  final Map<String,int> _circleVersions={};
   final Set<String> _watches={};
   StreamSubscription<Map<String, dynamic>>? _events;
   Timer? _heartbeat;
@@ -73,6 +74,7 @@ class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
 
   void unwatch(String circle) {
     _watches.remove(circle);
+    _circleVersions[circle]=(_circleVersions[circle] ?? 0)+1;
     _circles.remove(circle);
     notifyListeners();
   }
@@ -81,13 +83,17 @@ class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> refresh(String circle) async {
     if (!_active || !_started || !_watches.contains(circle)) return;
     final epoch=_epoch;
+    final revision=(_circleVersions[circle] ?? 0)+1;
+    _circleVersions[circle]=revision;
     try {
       final snapshot=await _repository.circle(circle);
-      if (!_started || !_active || epoch!=_epoch || !_watches.contains(circle)) return;
+      if (!_started || !_active || epoch!=_epoch ||
+          _circleVersions[circle]!=revision || !_watches.contains(circle)) return;
       _circles[circle]=snapshot;
       notifyListeners();
     } catch (_) {
       // Permission revoked, offline or malformed: never retain old dots.
+      if (_circleVersions[circle]!=revision || epoch!=_epoch) return;
       _circles.remove(circle);
       notifyListeners();
     }
@@ -107,6 +113,7 @@ class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
     final circle=event['circle_id'];
     if (circle is! String || !_watches.contains(circle)) return;
     // Invalidate first: even an old queued event cannot resurrect a revoked dot.
+    _circleVersions[circle]=(_circleVersions[circle] ?? 0)+1;
     _circles.remove(circle);
     notifyListeners();
     if (type=='presence.changed' || type=='presence.clear') {
@@ -118,6 +125,9 @@ class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
 
   void clear() {
     if (_circles.isEmpty) return;
+    for (final id in _circles.keys) {
+      _circleVersions[id]=(_circleVersions[id] ?? 0)+1;
+    }
     _circles.clear();
     notifyListeners();
   }
@@ -150,6 +160,7 @@ class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
     await events?.cancel();
     _watches.clear();
     clear();
+    _circleVersions.clear();
     await _socket.stop();
     // Best effort only; backend lease expires in <=90s after network failure.
     try { await _repository.disconnect(); } catch (_) {}
