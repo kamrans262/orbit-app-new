@@ -523,6 +523,17 @@ class _HomeScreenState extends State<HomeScreen> {
     ),
   );
 
+  /// The original Orbit avatar layout is an 80px circle followed by two
+  /// text rows. A 112px list clips that Column on real devices, and a fixed
+  /// 122px rail can clip accessibility-scaled text. Preserve every original
+  /// visual dimension while letting the rail grow only when text grows.
+  double _avatarRailHeight(BuildContext context) {
+    final scale = MediaQuery.textScalerOf(context);
+    final extraName = (scale.scale(12) - 12).clamp(0.0, double.infinity);
+    final extraStatus = (scale.scale(11) - 11).clamp(0.0, double.infinity);
+    return 122 + 1.6 * (extraName + extraStatus);
+  }
+
   Widget _buildCircleSummaries() {
     if(widget.circleSummaries.isEmpty) {
       return const Padding(
@@ -531,7 +542,7 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
     return SizedBox(
-      height:112,
+      height: _avatarRailHeight(context),
       child:ListView.separated(
         key:HomeKeys.circlesList,
         scrollDirection:Axis.horizontal,
@@ -748,7 +759,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return <Widget>[
       SliverToBoxAdapter(
         child: SizedBox(
-          height: 122,
+          height: _avatarRailHeight(context),
           child: ListView.separated(
             key: const Key('home_circle_horizontal_list'),
             scrollDirection: Axis.horizontal,
