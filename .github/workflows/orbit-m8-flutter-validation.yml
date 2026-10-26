@@ -8,6 +8,7 @@ on:
       - 'lib/features/home/**'
       - 'test/features/home/**'
       - 'lib/features/auth/data/orbit_identity_client.dart'
+      - 'lib/core/widgets/app_bottom_navigation_bar.dart'
 permissions:
   contents: read
 concurrency:
@@ -28,7 +29,7 @@ jobs:
         run: flutter pub get
       - name: Analyze only M8 Home and changed auth integration
         run: |
-          dart analyze lib/features/home lib/features/auth/data/orbit_identity_client.dart
+          dart analyze lib/features/home lib/features/auth/data/orbit_identity_client.dart lib/core/widgets/app_bottom_navigation_bar.dart
       - name: M8 contract and Home widget tests
         run: |
           flutter test test/features/home/data/orbit_dashboard_repository_test.dart
