@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_ui/core/widgets/app_circular_icon_button.dart';
+import 'package:orbit_ui/app/theme/app_colors.dart';
 import 'package:orbit_ui/features/circles/domain/models/friend_details_models.dart';
 import 'package:orbit_ui/features/circles/presentation/screens/friend_details_screen.dart';
 import 'package:orbit_ui/features/circles/presentation/widgets/circle_group_segmented_control.dart';
@@ -59,7 +60,8 @@ void main() {
     expect(back.size, 30);
     expect(addMember.size, back.size);
     expect(addMember.iconSize, back.iconSize);
-    expect(addMember.iconColor, back.iconColor);
+    expect(back.iconColor, Colors.black);
+    expect(addMember.iconGradient, AppColors.primaryGradient);
     expect(find.byType(CustomScrollView), findsOneWidget);
   });
 

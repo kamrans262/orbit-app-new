@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_ui/core/widgets/app_circular_icon_button.dart';
+import 'package:orbit_ui/app/theme/app_colors.dart';
 import 'package:orbit_ui/features/circles/domain/models/circle_settings.dart';
 import 'package:orbit_ui/features/circles/presentation/screens/circle_setting_screen.dart';
 import 'package:orbit_ui/core/popups/orbit_popup_modal.dart';
@@ -54,7 +55,8 @@ void main() {
     expect(back.size, 30);
     expect(manage.size, back.size);
     expect(manage.iconSize, back.iconSize);
-    expect(manage.iconColor, back.iconColor);
+    expect(back.iconColor, Colors.black);
+    expect(manage.iconGradient, AppColors.primaryGradient);
     await tester.tap(find.byWidgetPredicate((widget) =>
         widget is AppCircularIconButton &&
         widget.semanticLabel == 'Manage Circle'));
