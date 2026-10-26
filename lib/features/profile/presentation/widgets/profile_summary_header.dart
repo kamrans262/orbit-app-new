@@ -83,59 +83,59 @@ class ProfileSummaryHeader extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: <Widget>[
-                _ProfileAvatar(
-                  key: avatarKey,
-                  profile: profile,
-                  initialsFallback: showInitialsForMissingAvatar,
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  profile.name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontFamilyFallback: const <String>[
-                      'Noto Color Emoji',
-                      'Apple Color Emoji',
-                      'Segoe UI Emoji',
-                    ],
-                    fontSize: 18,
-                    height: 1.25,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.white,
+                  _ProfileAvatar(
+                    key: avatarKey,
+                    profile: profile,
+                    initialsFallback: showInitialsForMissingAvatar,
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  profile.bio,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontFamilyFallback: const <String>[
-                      'Noto Color Emoji',
-                      'Apple Color Emoji',
-                      'Segoe UI Emoji',
-                    ],
-                    fontSize: 14,
-                    height: 1.4,
-                    fontWeight: FontWeight.w400,
-                    color: Colors.white,
+                  const SizedBox(height: 10),
+                  Text(
+                    profile.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontFamily: AppTypography.fontFamily,
+                      fontFamilyFallback: const <String>[
+                        'Noto Color Emoji',
+                        'Apple Color Emoji',
+                        'Segoe UI Emoji',
+                      ],
+                      fontSize: 18,
+                      height: 1.25,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white,
+                    ),
                   ),
-                ),
-                if (showStats) ...<Widget>[
-                  const SizedBox(height: 30),
-                  _ProfileStats(
-                    key: statsKey,
-                    circleCount: profile.circleCount,
-                    friendCount: profile.friendCount,
-                    momentCount: profile.momentCount,
+                  const SizedBox(height: 4),
+                  Text(
+                    profile.bio,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontFamily: AppTypography.fontFamily,
+                      fontFamilyFallback: const <String>[
+                        'Noto Color Emoji',
+                        'Apple Color Emoji',
+                        'Segoe UI Emoji',
+                      ],
+                      fontSize: 14,
+                      height: 1.4,
+                      fontWeight: FontWeight.w400,
+                      color: Colors.white,
+                    ),
                   ),
+                  if (showStats) ...<Widget>[
+                    const SizedBox(height: 30),
+                    _ProfileStats(
+                      key: statsKey,
+                      circleCount: profile.circleCount,
+                      friendCount: profile.friendCount,
+                      momentCount: profile.momentCount,
+                    ),
+                  ],
                 ],
-              ],
               ),
             ),
           ),
