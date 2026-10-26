@@ -61,6 +61,8 @@ class HomeCircleAvatarTile extends StatelessWidget {
                         size: 74,
                       ),
                     ),
+                    if (data.isOnline != null ||
+                        data.status.toLowerCase().contains('active now'))
                     Positioned(
                       right: 8,
                       bottom: 8,

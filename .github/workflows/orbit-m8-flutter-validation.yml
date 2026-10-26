@@ -1,0 +1,38 @@
+name: Orbit M8 targeted Flutter Home verification
+on:
+  workflow_dispatch:
+  push:
+    branches: [integration/m2-m5-flutter-consolidated-2026-10-24]
+    paths:
+      - '.github/workflows/orbit-m8-flutter-validation.yml'
+      - 'lib/features/home/**'
+      - 'test/features/home/**'
+      - 'lib/features/auth/data/orbit_identity_client.dart'
+      - 'lib/core/widgets/app_bottom_navigation_bar.dart'
+permissions:
+  contents: read
+concurrency:
+  group: orbit-m8-flutter-validation
+  cancel-in-progress: true
+jobs:
+  home:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - name: Locked dependency resolution
+        run: flutter pub get
+      - name: Analyze only M8 Home and changed auth integration
+        run: |
+          dart analyze lib/features/home lib/features/auth/data/orbit_identity_client.dart lib/core/widgets/app_bottom_navigation_bar.dart
+      - name: M8 contract and Home widget tests
+        run: |
+          flutter test test/features/home/data/orbit_dashboard_repository_test.dart
+          flutter test test/features/home/presentation/m8_home_sections_test.dart
+          flutter test test/features/home/presentation/home_screen_test.dart
+          flutter test test/features/home/presentation/home_requested_updates_test.dart

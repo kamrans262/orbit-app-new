@@ -1,3 +1,9 @@
+plugins {
+    // Make KGP's typed compiler-options DSL available to this root script
+    // without applying Kotlin compilation to the root project.
+    id("org.jetbrains.kotlin.android") apply false
+}
+
 allprojects {
     repositories {
         google()
@@ -24,6 +30,14 @@ subprojects {
     if (name == "workmanager_android") {
         pluginManager.withPlugin("com.android.library") {
             pluginManager.apply("org.jetbrains.kotlin.android")
+            // KGP otherwise inherits the host JDK target (21 on some Windows
+            // installations), while AGP compiles this library's Java to 17.
+            // Fix both targets at 17 without touching other Flutter plugins.
+            extensions.configure<org.jetbrains.kotlin.gradle.dsl.KotlinAndroidProjectExtension> {
+                compilerOptions {
+                    jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+                }
+            }
             // AGP configures JavaCompile after the library plugin is applied.
             // Override the final Java target once project evaluation completes,
             // otherwise AGP restores Java 1.8 against KGP's JVM 17 target.

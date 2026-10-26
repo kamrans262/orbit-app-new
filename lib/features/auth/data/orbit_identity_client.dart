@@ -56,6 +56,7 @@ class OrbitIdentityClient {
   static const _friendsCacheKey = 'orbit.social.friends_snapshot.v1';
   static const _launchedKey = 'orbit.app.has_launched.v1';
   static const _circlesCacheKey = 'orbit.circles.read_only_snapshot.v1';
+  static const _dashboardSafeKey = 'orbit.dashboard.safe_shell.v1';
 
   final http.Client _http;
   final FlutterSecureStorage _storage;
@@ -251,13 +252,15 @@ class OrbitIdentityClient {
           try { await OrbitMomentAudienceMemory().purge(lastUser); }catch(_){}
         }
         await OrbitPresenceRuntime.instance.stop();
-        await OrbitM5FirebaseChangeSource.instance.stop();
+        await OrbitPresenceRuntime.instance.stop();
+    await OrbitM5FirebaseChangeSource.instance.stop();
         _startupProfile = null;
         _startupNotifications = null;
         _startupPrivacy = null;
         await _storage.delete(key: _profileCacheKey);
         await _storage.delete(key: _friendsCacheKey);
     await _storage.delete(key: _circlesCacheKey);
+    await _storage.delete(key: _dashboardSafeKey);
       }
       await _storage.write(key: _userIdKey, value: nextUser);
     }
@@ -363,7 +366,6 @@ class OrbitIdentityClient {
 
   Future<void> clearSession() async {
     final oldMediaOwner=await _storage.read(key:_userIdKey);
-    await OrbitPresenceRuntime.instance.stop();
     await OrbitM5FirebaseChangeSource.instance.stop();
     if(oldMediaOwner != null && oldMediaOwner.isNotEmpty) {
       try { await OrbitMediaOutbox().purge(oldMediaOwner); }
@@ -385,6 +387,7 @@ class OrbitIdentityClient {
     await _storage.delete(key: _profileCacheKey);
     await _storage.delete(key: _friendsCacheKey);
     await _storage.delete(key: _circlesCacheKey);
+    await _storage.delete(key: _dashboardSafeKey);
   }
 
   Future<void> signOut() async {
@@ -605,6 +608,34 @@ class OrbitIdentityClient {
   }
 
   Future<void> clearFriendsSnapshot() => _storage.delete(key: _friendsCacheKey);
+
+  /// OS-protected, account-bound SAFE SHELL; never a resource authorization.
+  /// Only store the signed-in viewer's own name, never others or ciphertext.
+  Future<void> storeDashboardSafeShell(String owner, String name) async {
+    if (await currentLocalSocialOwner() != owner) return;
+    await _storage.write(key: _dashboardSafeKey, value: jsonEncode({
+      'owner':owner,'name':name,
+      'saved_at':DateTime.now().toUtc().toIso8601String(),
+    }));
+  }
+
+  Future<String?> readDashboardSafeName() async {
+    final owner=await currentLocalSocialOwner();
+    if (owner==null) return null;
+    final raw=await _storage.read(key:_dashboardSafeKey);
+    if(raw==null) return null;
+    try {
+      final v=jsonDecode(raw);
+      if(v is! Map || v['owner']!=owner || v['name'] is! String) return null;
+      final saved=DateTime.tryParse(v['saved_at'] as String? ?? '');
+      if(saved==null || saved.isAfter(DateTime.now()) ||
+          DateTime.now().difference(saved)>const Duration(hours:24)) return null;
+      return v['name'] as String;
+    } catch (_) { return null; }
+  }
+
+  Future<void> clearDashboardSafeShell() =>
+      _storage.delete(key:_dashboardSafeKey);
 
   /// M5 cached only sanitized Circle names and IDs, never membership lists,
   /// privacy grants, access tokens, location or invitation credentials.

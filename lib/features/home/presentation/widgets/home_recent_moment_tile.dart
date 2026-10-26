@@ -33,6 +33,13 @@ class HomeRecentMomentTile extends StatelessWidget {
             fit: StackFit.expand,
             children: <Widget>[
               HomeMediaImage(path: data.imagePath, bytes:data.encryptedImageBytes, fit: BoxFit.cover),
+              if (data.mediaKind == 'video' || data.mediaKind == 'audio')
+                Positioned(
+                  top: 5,right: 5,
+                  child:Icon(data.mediaKind == 'video'
+                    ? Icons.videocam_rounded : Icons.mic_rounded,
+                    size:18,color:Colors.white),
+                ),
               const DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
@@ -66,6 +73,7 @@ class HomeRecentMomentTile extends StatelessWidget {
                               size: 23,
                             ),
                           ),
+                          if (data.isSenderOnline != null)
                           Positioned(
                             right: 0,
                             bottom: 0,

@@ -12,6 +12,7 @@ import '../../../moments/presentation/orbit_moment_camera_launcher.dart';
 import '../../../profile/presentation/navigation/profile_navigation.dart';
 import '../../domain/models/home_models.dart';
 import '../widgets/home_circle_avatar_tile.dart';
+import '../widgets/home_circle_summary_tile.dart';
 import '../widgets/home_recent_moment_tile.dart';
 import '../widgets/promo_banner_card.dart';
 import '../widgets/quick_action_card.dart';
@@ -31,6 +32,7 @@ abstract final class HomeKeys {
   static const notificationButton = Key('home_notification_button');
   static const quickActionsList = Key('home_quick_actions_list');
   static const recentMomentsList = Key('home_recent_moments_list');
+  static const circlesList = Key('home_m8_circles_list');
   static const bottomNavigation = Key('home_bottom_navigation');
 }
 
@@ -52,6 +54,14 @@ class HomeScreen extends StatefulWidget {
     required this.onTabSelected,
     required this.onAddPressed,
     this.nearbyFriendsCount,
+    this.circleSummaries = const <HomeCircleSummaryData>[],
+    this.onCirclePressed,
+    this.onSeeAllCirclesPressed,
+    this.showCircleSection = false,
+    this.peopleSectionTitle = 'Your Circle',
+    this.planUnavailable = false,
+    this.dashboardNotice,
+    this.onDashboardRetry,
     this.onSeeAllPlansPressed,
     this.onSeeAllFriendsPressed,
     this.onSeeAllMomentsPressed,
@@ -59,6 +69,7 @@ class HomeScreen extends StatefulWidget {
     this.isLoading = false,
     this.useLiveDate = false,
     this.enableDemoCircleNavigation = false,
+    this.enableDemoOrbitNavigation = false,
     super.key,
   });
 
@@ -191,11 +202,19 @@ class HomeScreen extends StatefulWidget {
       onTabSelected: onTabSelected ?? (index) {},
       onAddPressed: onAddPressed ?? () {},
       enableDemoCircleNavigation:enableDemoCircleNavigation,
+      enableDemoOrbitNavigation:enableDemoCircleNavigation,
     );
   }
 
   /// Only provided when the app has a genuine nearby-presence count.
   final int? nearbyFriendsCount;
+  final List<HomeCircleSummaryData> circleSummaries;
+  final ValueChanged<HomeCircleSummaryData>? onCirclePressed;
+  final VoidCallback? onSeeAllCirclesPressed;
+  final bool showCircleSection,planUnavailable;
+  final String peopleSectionTitle;
+  final String? dashboardNotice;
+  final VoidCallback? onDashboardRetry;
   final VoidCallback? onSeeAllPlansPressed;
   final VoidCallback? onSeeAllFriendsPressed;
   final VoidCallback? onSeeAllMomentsPressed;
@@ -220,6 +239,7 @@ class HomeScreen extends StatefulWidget {
   /// Preserves approved design-preview fixture behavior but never opens
   /// fabricated Circle rosters in authenticated production navigation.
   final bool enableDemoCircleNavigation;
+  final bool enableDemoOrbitNavigation;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -291,6 +311,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _openOrbit() {
+    if (!widget.enableDemoOrbitNavigation) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content:Text('Explore is not available yet. No location was shared.'),
+      ));
+      return;
+    }
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (routeContext) => OrbitScreen.demo(
@@ -317,6 +343,12 @@ class _HomeScreenState extends State<HomeScreen> {
               return;
             }
             if (momentsIndex == 1) {
+              if (!widget.enableDemoOrbitNavigation) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                  content:Text('Explore is not available yet. No location was shared.'),
+                ));
+                return;
+              }
               Navigator.of(routeContext).pushReplacement(
                 MaterialPageRoute<void>(
                   builder: (orbitContext) => OrbitScreen.demo(
@@ -372,6 +404,8 @@ class _HomeScreenState extends State<HomeScreen> {
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       slivers: <Widget>[
         const SliverToBoxAdapter(child: SizedBox(height: 20)),
+        if (widget.dashboardNotice != null)
+          SliverToBoxAdapter(child:_buildDashboardNotice()),
         SliverPadding(
           padding: const EdgeInsets.symmetric(
             horizontal: HomeScreen._horizontalPadding,
@@ -401,7 +435,7 @@ class _HomeScreenState extends State<HomeScreen> {
             horizontal: HomeScreen._horizontalPadding,
           ),
           sliver: SliverToBoxAdapter(
-            child: _HomeSectionHeading('Next Up', onSeeAll: _showAllPlans),
+            child: _HomeSectionHeading('Next Up', onSeeAll: widget.planUnavailable ? null : _showAllPlans),
           ),
         ),
         const SliverToBoxAdapter(
@@ -427,12 +461,23 @@ class _HomeScreenState extends State<HomeScreen> {
           const SliverToBoxAdapter(
             child: SizedBox(height: HomeScreen._sectionGap),
           ),
+        if (widget.showCircleSection) ...<Widget>[
+          SliverPadding(
+            padding: const EdgeInsets.symmetric(horizontal: HomeScreen._horizontalPadding),
+            sliver: SliverToBoxAdapter(
+              child: _HomeSectionHeading('My Circles',onSeeAll:widget.onSeeAllCirclesPressed),
+            ),
+          ),
+          const SliverToBoxAdapter(child:SizedBox(height:HomeScreen._sectionGap)),
+          SliverToBoxAdapter(child:_buildCircleSummaries()),
+          const SliverToBoxAdapter(child:SizedBox(height:HomeScreen._sectionGap)),
+        ],
         SliverPadding(
           padding: const EdgeInsets.symmetric(
             horizontal: HomeScreen._horizontalPadding,
           ),
           sliver: SliverToBoxAdapter(
-            child: _HomeSectionHeading('Your Circle', onSeeAll: _openFriends),
+            child: _HomeSectionHeading(widget.peopleSectionTitle, onSeeAll: _openFriends),
           ),
         ),
         const SliverToBoxAdapter(
@@ -462,10 +507,52 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildDashboardNotice() => Padding(
+    padding: const EdgeInsets.fromLTRB(15,0,15,10),
+    child: Semantics(
+      liveRegion:true,
+      child:Row(children:<Widget>[
+        const Icon(Icons.info_outline,size:16,color:AppColors.textMuted),
+        const SizedBox(width:8),
+        Expanded(child:Text(widget.dashboardNotice ?? '',
+          style: const TextStyle(fontFamily:AppTypography.fontFamily,
+              fontSize:12,color:AppColors.textMuted))),
+        if(widget.onDashboardRetry!=null) TextButton(
+          onPressed:widget.onDashboardRetry,child:const Text('Retry')),
+      ]),
+    ),
+  );
+
+  Widget _buildCircleSummaries() {
+    if(widget.circleSummaries.isEmpty) {
+      return const Padding(
+        padding:EdgeInsets.symmetric(horizontal:HomeScreen._horizontalPadding),
+        child:_HomeEmptyState('No active Circles available.'),
+      );
+    }
+    return SizedBox(
+      height:112,
+      child:ListView.separated(
+        key:HomeKeys.circlesList,
+        scrollDirection:Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal:HomeScreen._horizontalPadding),
+        itemCount:widget.circleSummaries.length,
+        separatorBuilder:(_,__)=>const SizedBox(width:10),
+        itemBuilder:(context,index){
+          final circle=widget.circleSummaries[index];
+          return HomeCircleSummaryTile(data:circle,
+            onTap:()=>widget.onCirclePressed?.call(circle));
+        },
+      ),
+    );
+  }
+
   Widget _buildGreeting() {
     final trimmedName = widget.greetingName.trim();
     final displayName = trimmedName.isEmpty ? 'there' : trimmedName;
     final today=DateTime.now();
+    final daypart = !widget.useLiveDate || today.hour<12 ? 'Morning'
+        : today.hour<17 ? 'Afternoon' : 'Evening';
     final weekdays=const ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
     final months=const ['January','February','March','April','May','June',
       'July','August','September','October','November','December'];
@@ -526,7 +613,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         const SizedBox(height: 14),
         AppEmojiSafeText(
-          'Good Morning, $displayName \u{1F44B}',
+          'Good $daypart, $displayName \u{1F44B}',
           key: HomeKeys.greeting,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
@@ -608,13 +695,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<Widget> _buildUpcomingPlansSlivers() {
     if (widget.upcomingPlans.isEmpty) {
-      return const <Widget>[
+      return <Widget>[
         SliverPadding(
-          padding: EdgeInsets.symmetric(
+          padding: const EdgeInsets.symmetric(
             horizontal: HomeScreen._horizontalPadding,
           ),
           sliver: SliverToBoxAdapter(
-            child: _HomeEmptyState('No upcoming plans yet.'),
+            child: _HomeEmptyState(widget.planUnavailable
+                ? 'Plans are not available yet.' : 'No upcoming plans yet.'),
           ),
         ),
       ];
