@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../../../more_menu/presentation/widgets/more_menu_tile.dart';
 import '../../domain/models/home_models.dart';
-import 'home_circle_avatar_tile.dart';
+import 'home_media_image.dart';
 
-/// Render M5 Circle metadata using the original approved Home circular
-/// avatar tile — not a newly designed rectangular card.
-/// This is presentation-only: an M5 Circle never becomes an M4 friendship.
+/// Real M5 Circle preview using the approved Orbit Menu row, rather
+/// than the My Circles grid or Home's circular friend avatars.
+/// The M5 API has no per-Circle image or persistent favorite field yet.
 class HomeCircleSummaryTile extends StatelessWidget {
   const HomeCircleSummaryTile({
     required this.data,
@@ -21,20 +22,31 @@ class HomeCircleSummaryTile extends StatelessWidget {
     final memberLabel = data.memberCount == 1
         ? '1 member'
         : '${data.memberCount} members';
-
-    return Semantics(
-      label: '${data.name}, ${memberLabel}, open Circle',
-      button: true,
-      child: HomeCircleAvatarTile(
-        data: FavoritePersonData(
-          id: data.id,
-          name: data.name,
-          status: memberLabel,
-          imagePath: '',
-          // Presence is unknown, so never display an online/offline dot.
-          isOnline: null,
+    return MoreMenuTile(
+      icon: Icons.groups_outlined,
+      iconColor: const Color(0xFF7C3AED),
+      iconBackgroundColor: const Color(0xFFF2EAFE),
+      title: data.name,
+      subtitle: memberLabel,
+      onTap: onTap,
+      // Original Orbit artwork is only a placeholder, never an invented
+      // member photo or an unauthorized encrypted user image.
+      leadingWidget: ClipOval(
+        child: HomeMediaImage(
+          path: 'assets/your_circle.png',
+          fit: BoxFit.cover,
+          fallback: HomeAvatar(imagePath: '', name: data.name, size: 42),
         ),
-        onTap: onTap,
+      ),
+      // Original Orbit heart. Decorative and unselected until favorites
+      // are actually supported by the server — no fake persistent toggle.
+      trailingWidget: Semantics(
+        label: 'Circle favorites unavailable',
+        child: Icon(
+          Icons.favorite_border_rounded,
+          size: 20,
+          color: Color(0xFFFF4757),
+        ),
       ),
     );
   }

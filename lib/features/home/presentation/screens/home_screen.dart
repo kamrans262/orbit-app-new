@@ -534,26 +534,33 @@ class _HomeScreenState extends State<HomeScreen> {
     return 122 + 1.6 * (extraName + extraStatus);
   }
 
+  /// Use the existing Orbit Menu rows for up to two authorized M5 Circles.
+  /// The Friends circular-avatar section remains completely unchanged.
   Widget _buildCircleSummaries() {
-    if(widget.circleSummaries.isEmpty) {
+    if (widget.circleSummaries.isEmpty) {
       return const Padding(
-        padding:EdgeInsets.symmetric(horizontal:HomeScreen._horizontalPadding),
-        child:_HomeEmptyState('No active Circles available.'),
+        padding: EdgeInsets.symmetric(horizontal: HomeScreen._horizontalPadding),
+        child: _HomeEmptyState('No active Circles available.'),
       );
     }
-    return SizedBox(
-      height: _avatarRailHeight(context),
-      child:ListView.separated(
-        key:HomeKeys.circlesList,
-        scrollDirection:Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal:HomeScreen._horizontalPadding),
-        itemCount:widget.circleSummaries.length,
-        separatorBuilder:(_,__)=>const SizedBox(width:10),
-        itemBuilder:(context,index){
-          final circle=widget.circleSummaries[index];
-          return HomeCircleSummaryTile(data:circle,
-            onTap:()=>widget.onCirclePressed?.call(circle));
-        },
+
+    final preview = widget.circleSummaries.take(2).toList(growable: false);
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: HomeScreen._horizontalPadding,
+      ),
+      child: Column(
+        key: HomeKeys.circlesList,
+        children: <Widget>[
+          for (var index = 0; index < preview.length; index++) ...<Widget>[
+            if (index > 0) const SizedBox(height: 10),
+            HomeCircleSummaryTile(
+              key: ValueKey<String>('home_circle_card_${preview[index].id}'),
+              data: preview[index],
+              onTap: () => widget.onCirclePressed?.call(preview[index]),
+            ),
+          ],
+        ],
       ),
     );
   }
