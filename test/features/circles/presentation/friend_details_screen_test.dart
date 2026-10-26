@@ -79,11 +79,19 @@ void main() {
       onPresencePressed: () => presenceOpened++,
       liveInviteMode: true,
       favoriteChangesEnabled: false,
+      // Even if an older caller passes a Moments builder, the live Circle
+      // detail must display only the original Circle and Group tabs.
+      momentsTabBuilder: (_) => const Text('Authorized Circle Moments'),
     )));
     await tester.pumpAndSettle();
     expect(find.text('Friend Details'), findsOneWidget);
     expect(find.byKey(CircleGroupSegmentedControlKeys.circle), findsOneWidget);
     expect(find.byKey(CircleGroupSegmentedControlKeys.group), findsOneWidget);
+    expect(find.byKey(const Key('circle_detail_members_tab')), findsNothing);
+    expect(find.byKey(const Key('circle_detail_moments_tab')), findsNothing);
+    expect(find.text('Members'), findsNothing);
+    expect(find.text('Moments'), findsNothing);
+    expect(find.text('Authorized Circle Moments'), findsNothing);
     await tester.tap(find.byWidgetPredicate((widget) =>
         widget is AppCircularIconButton &&
         widget.semanticLabel == 'Circle settings'));
