@@ -534,25 +534,63 @@ class _HomeScreenState extends State<HomeScreen> {
     return 122 + 1.6 * (extraName + extraStatus);
   }
 
+  /// Use the original My Circles card grid, showing at most two authorized
+  /// M5 groups on Home. The existing Friends avatar rail remains unchanged.
+  /// Keep the original 137px card height at 1x and grow only for text scaling.
+  double _homeCircleCardHeight(BuildContext context) {
+    final text = MediaQuery.textScalerOf(context);
+    final nameIncrease = (text.scale(14) - 14).clamp(0.0, double.infinity);
+    final countIncrease = (text.scale(12) - 12).clamp(0.0, double.infinity);
+    return 137 + (nameIncrease * 2 * 1.2) + (countIncrease * 1.2);
+  }
+
   Widget _buildCircleSummaries() {
-    if(widget.circleSummaries.isEmpty) {
+    if (widget.circleSummaries.isEmpty) {
       return const Padding(
-        padding:EdgeInsets.symmetric(horizontal:HomeScreen._horizontalPadding),
-        child:_HomeEmptyState('No active Circles available.'),
+        padding: EdgeInsets.symmetric(horizontal: HomeScreen._horizontalPadding),
+        child: _HomeEmptyState('No active Circles available.'),
       );
     }
-    return SizedBox(
-      height: _avatarRailHeight(context),
-      child:ListView.separated(
-        key:HomeKeys.circlesList,
-        scrollDirection:Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal:HomeScreen._horizontalPadding),
-        itemCount:widget.circleSummaries.length,
-        separatorBuilder:(_,__)=>const SizedBox(width:10),
-        itemBuilder:(context,index){
-          final circle=widget.circleSummaries[index];
-          return HomeCircleSummaryTile(data:circle,
-            onTap:()=>widget.onCirclePressed?.call(circle));
+
+    // Home is a two-card preview; full membership and other Circles remain
+    // available via See All, without manufacturing favorites or avatars.
+    final preview = widget.circleSummaries.take(2).toList(growable: false);
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: HomeScreen._horizontalPadding,
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final cards = preview.map((circle) => HomeCircleSummaryTile(
+            key: ValueKey<String>('home_circle_card_${circle.id}'),
+            data: circle,
+            onTap: () => widget.onCirclePressed?.call(circle),
+          )).toList(growable: false);
+          final cardHeight = _homeCircleCardHeight(context);
+          // Original My Circles grid switches to one column below 285px.
+          if (constraints.maxWidth < 285) {
+            return Column(
+              key: HomeKeys.circlesList,
+              children: <Widget>[
+                for (var index = 0; index < cards.length; index++) ...<Widget>[
+                  if (index > 0) const SizedBox(height: 10),
+                  SizedBox(height: cardHeight, width: double.infinity,
+                    child: cards[index]),
+                ],
+              ],
+            );
+          }
+          final width = (constraints.maxWidth - 10) / 2;
+          return Row(
+            key: HomeKeys.circlesList,
+            children: <Widget>[
+              for (var index = 0; index < cards.length; index++) ...<Widget>[
+                if (index > 0) const SizedBox(width: 10),
+                SizedBox(width: width, height: cardHeight,
+                  child: cards[index]),
+              ],
+            ],
+          );
         },
       ),
     );

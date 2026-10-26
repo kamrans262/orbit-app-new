@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../../../circles/domain/models/friend_details_models.dart';
+import '../../../circles/presentation/widgets/circle_group_card.dart';
 import '../../domain/models/home_models.dart';
-import 'home_circle_avatar_tile.dart';
 
-/// Render M5 Circle metadata using the original approved Home circular
-/// avatar tile — not a newly designed rectangular card.
-/// This is presentation-only: an M5 Circle never becomes an M4 friendship.
+/// M8 adapter to the ORIGINAL My Circles grid card, not a redesign.
+/// M5's dashboard summary has no authorized member photos or favorites API.
+/// Reuse the same card without inventing either of those protected properties.
 class HomeCircleSummaryTile extends StatelessWidget {
   const HomeCircleSummaryTile({
     required this.data,
@@ -18,23 +19,20 @@ class HomeCircleSummaryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final memberLabel = data.memberCount == 1
-        ? '1 member'
-        : '${data.memberCount} members';
-
     return Semantics(
-      label: '${data.name}, ${memberLabel}, open Circle',
+      label: '${data.name}, ${data.memberCount == 1 ? '1 member' : '${data.memberCount} members'}, open Circle',
       button: true,
-      child: HomeCircleAvatarTile(
-        data: FavoritePersonData(
+      child: CircleGroupCard(
+        data: CircleGroupData(
           id: data.id,
           name: data.name,
-          status: memberLabel,
-          imagePath: '',
-          // Presence is unknown, so never display an online/offline dot.
-          isOnline: null,
+          memberCount: data.memberCount,
+          memberAvatars: const <String?>[],
         ),
         onTap: onTap,
+        onFavoritePressed: null,
+        // Identical to live My Circles: no favorite control without backend.
+        showFavoriteButton: false,
       ),
     );
   }
