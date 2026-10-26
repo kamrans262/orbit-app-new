@@ -678,9 +678,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<Widget> _buildUpcomingPlansSlivers() {
     if (widget.upcomingPlans.isEmpty) {
-      return const <Widget>[
+      return <Widget>[
         SliverPadding(
-          padding: EdgeInsets.symmetric(
+          padding: const EdgeInsets.symmetric(
             horizontal: HomeScreen._horizontalPadding,
           ),
           sliver: SliverToBoxAdapter(
