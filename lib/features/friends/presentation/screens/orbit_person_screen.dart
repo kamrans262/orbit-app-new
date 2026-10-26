@@ -3,9 +3,10 @@ import 'package:flutter/material.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../profile/domain/models/profile_models.dart';
+import '../../../profile/presentation/screens/profile_screen.dart';
+import '../../../profile/presentation/widgets/settings_list_item.dart';
 import '../../../../core/widgets/app_action_row.dart';
-import '../../../../core/widgets/app_screen_header.dart';
-import '../../../home/presentation/widgets/home_media_image.dart';
 import '../../data/orbit_social_repository.dart';
 import 'orbit_friend_requests_screen.dart';
 import '../widgets/orbit_social_confirmation.dart';
@@ -90,12 +91,11 @@ class _OrbitPersonScreenState extends State<OrbitPersonScreen> {
     ));
   }
 
-  Widget _futureAction(String name, IconData icon) => AppActionRow(
-    leadingIcon: icon,
-    iconBackgroundColor: const Color(0xFFF2EAFE),
-    leadingIconColor: const Color(0xFF7C3AED),
-    title: name,
-    trailing: const Icon(Icons.lock_outline, size: 18, color: Color(0xFF64748B)),
+  Widget _futureAction(String name, IconData icon) => SettingsListItem(
+    icon: icon,
+    label: name,
+    trailing: const Icon(Icons.lock_outline_rounded,
+        size: 18, color: Color(0xFF64748B)),
     onTap: () => _futureFeature(name),
   );
 
@@ -152,99 +152,152 @@ class _OrbitPersonScreenState extends State<OrbitPersonScreen> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
+  Widget _quickActions(BuildContext context) {
     final friend = _person.relationship == 'friend';
     final outgoing = _person.relationship == 'outgoing_pending';
     final incoming = _person.relationship == 'incoming_pending';
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: ListView(padding: const EdgeInsets.all(20), children: [
-          AppScreenHeader(title: 'Person Detail'),
-          const SizedBox(height: 24),
-          Center(child: HomeAvatar(imagePath: '', name: _person.name, size: 82)),
-          const SizedBox(height: 12),
-          Text(_person.name, textAlign: TextAlign.center,
-            style: const TextStyle(fontFamily: AppTypography.fontFamily,
-              fontWeight: FontWeight.w600, fontSize: 22)),
-          if (_person.username.isNotEmpty)
-            Text('@${_person.username}', textAlign: TextAlign.center,
-              style: const TextStyle(color: Color(0xFF64748B))),
-          const SizedBox(height: 22),
-          if (_loading) const Center(child: CircularProgressIndicator()),
-          if (_error != null) ...[
-            Text(_error!, textAlign: TextAlign.center,
-              style: const TextStyle(color: Color(0xFFB91C1C))),
-            TextButton(onPressed: _refresh, child: const Text('Retry')),
-          ],
-          if (!_loading && _error == null) ...[
-            const Text('Quick Actions', style: TextStyle(
-              fontFamily: AppTypography.fontFamily, fontSize: 16,
-              fontWeight: FontWeight.w600)),
-            const SizedBox(height: 12),
-            _futureAction('Message', Icons.chat_bubble_outline_rounded),
-            const SizedBox(height: 10),
-            _futureAction('Ping', Icons.notifications_active_outlined),
-            const SizedBox(height: 10),
-            _futureAction('Navigate', Icons.near_me_outlined),
-            const SizedBox(height: 10),
-            _futureAction('Check-In', Icons.location_on_outlined),
-            const SizedBox(height: 10),
-            AppActionRow(
-              leadingIcon: Icons.more_horiz,
-              iconBackgroundColor: const Color(0xFFF2EAFE),
-              leadingIconColor: const Color(0xFF7C3AED),
-              title: 'More',
-              onTap: _more,
-            ),
-            const SizedBox(height: 18),
-            AppActionRow(
-              leadingIcon: friend ? Icons.check_circle_outline : Icons.person_add_alt_outlined,
-              iconBackgroundColor: const Color(0xFFF2EAFE),
-              leadingIconColor: const Color(0xFF7C3AED),
-              title: friend ? 'Friends' : outgoing ? 'Manage sent request'
-                : incoming ? 'Review received request' : 'Send friend request',
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: _busy || friend ? null
-                : outgoing ? () => _openRequests('outgoing')
-                : incoming ? () => _openRequests('incoming')
-                : () => _mutate(() => _repo.sendRequest(_person.id),
-                    success: 'Friend request sent.'),
-            ),
-            if (friend) ...[
-              const SizedBox(height: 12),
-              AppActionRow(
-                leadingIcon: Icons.person_remove_outlined,
-                iconBackgroundColor: const Color(0xFFFEE2E2),
-                leadingIconColor: const Color(0xFFB91C1C),
-                title: 'Remove friend',
-                onTap: _busy ? null : () async {
-                  if (await _confirm('Remove friend?', 'This will end your friendship.', 'Remove')) {
-                    await _mutate(() => _repo.removeFriend(_person.id), success: 'Friend removed.');
+
+    if (_loading) {
+      return const Center(child: Padding(
+        padding: EdgeInsets.all(24), child: CircularProgressIndicator()));
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        if (_error != null) ...<Widget>[
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(_error!, textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontFamily: AppTypography.fontFamily,
+                color: Color(0xFFB91C1C),
+              )),
+          ),
+          TextButton(onPressed: _refresh, child: const Text('Retry')),
+        ],
+        if (_error == null)
+          SettingsListCard(
+            key: const Key('friend_profile_quick_actions_card'),
+            children: <Widget>[
+              _futureAction('Message', Icons.chat_bubble_outline_rounded),
+              _futureAction('Ping', Icons.notifications_active_outlined),
+              _futureAction('Navigate', Icons.near_me_outlined),
+              _futureAction('Check-In', Icons.location_on_outlined),
+              SettingsListItem(
+                icon: Icons.more_horiz_rounded, label: 'More', onTap: _more),
+              SettingsListItem(
+                icon: friend ? Icons.check_circle_outline_rounded
+                    : Icons.person_add_alt_outlined,
+                label: friend ? 'Friends'
+                    : outgoing ? 'Manage sent request'
+                    : incoming ? 'Review received request'
+                    : 'Send friend request',
+                trailing: friend
+                    ? const Icon(Icons.check_circle_outline_rounded,
+                        color: Color(0xFF7C3AED), size: 22)
+                    : null,
+                onTap: _busy || friend ? () {}
+                    : outgoing ? () => _openRequests('outgoing')
+                    : incoming ? () => _openRequests('incoming')
+                    : () => _mutate(() => _repo.sendRequest(_person.id),
+                        success: 'Friend request sent.'),
+              ),
+              if (friend)
+                SettingsListItem(
+                  icon: Icons.person_remove_outlined,
+                  label: 'Remove friend',
+                  onTap: _busy ? () {} : () async {
+                    if (await _confirm('Remove friend?',
+                        'This will end your friendship.', 'Remove')) {
+                      await _mutate(() => _repo.removeFriend(_person.id),
+                          success: 'Friend removed.');
+                    }
+                  },
+                ),
+              SettingsListItem(
+                icon: Icons.block, label: 'Block user',
+                onTap: _busy ? () {} : () async {
+                  if (await _confirm('Block ${_person.name}?',
+                      'This removes the friendship and stops protected '
+                      'interactions. Unblocking will not restore the friendship.',
+                      'Block')) {
+                    await _mutate(() => _repo.block(_person.id),
+                        success: 'Blocked user.');
                   }
                 },
               ),
             ],
-            const SizedBox(height: 12),
-            AppActionRow(
-              leadingIcon: Icons.block,
-              iconBackgroundColor: const Color(0xFFFEE2E2),
-              leadingIconColor: const Color(0xFFB91C1C),
-              title: 'Block user',
-              onTap: _busy ? null : () async {
-                if (await _confirm('Block ${_person.name}?',
-                    'This removes the friendship and stops protected interactions. Unblocking will not restore the friendship.', 'Block')) {
-                  await _mutate(() => _repo.block(_person.id), success: 'Blocked user.');
-                }
-              },
-            ),
-            const SizedBox(height: 16),
-            const Text('Messaging, Ping, location and Circle membership require their own permissions and modules. Friendship alone does not enable sharing.',
-              textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
-          ],
-        ]),
-      ),
+          ),
+        const SizedBox(height: 16),
+        const Text(
+          'Messaging, Ping, location and Circle membership require their '
+          'own permissions and modules. Friendship alone does not enable sharing.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontFamily: AppTypography.fontFamily,
+            fontSize: 12, color: Color(0xFF64748B),
+          ),
+        ),
+      ],
     );
   }
+
+  Widget _overview(BuildContext context) => SettingsListCard(
+    key: const Key('friend_profile_overview_card'),
+    children: <Widget>[
+      const Text('Overview', style: TextStyle(
+        fontFamily: AppTypography.fontFamily,
+        fontSize: 16, fontWeight: FontWeight.w600, color: Color(0xFF0F1724),
+      )),
+      Text(
+        _person.username.isEmpty ? 'Username unavailable'
+            : '@${_person.username}',
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          fontFamily: AppTypography.fontFamily,
+          fontSize: 14, color: Color(0xFF64748B),
+        ),
+      ),
+      Text(
+        _person.relationship == 'friend'
+            ? 'You are friends.'
+            : _person.relationship == 'outgoing_pending'
+                ? 'Your friend request is pending.'
+                : _person.relationship == 'incoming_pending'
+                    ? 'This person sent you a friend request.'
+                    : 'You are not currently friends.',
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          fontFamily: AppTypography.fontFamily,
+          fontSize: 14, color: Color(0xFF64748B),
+        ),
+      ),
+      const Text(
+        'Other profile details are private unless this person chooses to share them.',
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontFamily: AppTypography.fontFamily,
+          fontSize: 12, color: Color(0xFF94A3B8),
+        ),
+      ),
+    ],
+  );
+
+  @override
+  Widget build(BuildContext context) => ProfileScreen(
+    friendView: true,
+    profile: ProfileData(
+      id: _person.id,
+      name: _person.name,
+      bio: _person.username.isEmpty ? '' : '@${_person.username}',
+      // The M4 person preview exposes no Circle/Friends/Moments counts.
+      // These zeroes are never displayed in the friend-specific header.
+      circleCount: 0, friendCount: 0, momentCount: 0,
+      moments: const <ProfileMomentData>[],
+    ),
+    onFriendBack: () => Navigator.of(context).maybePop(),
+    friendQuickActionsBuilder: _quickActions,
+    friendOverviewBuilder: _overview,
+    onTabSelected: (_) {}, onAddPressed: () {}, onRetry: _refresh,
+  );
 }
