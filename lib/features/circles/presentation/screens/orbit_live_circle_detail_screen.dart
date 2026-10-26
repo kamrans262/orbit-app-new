@@ -233,8 +233,7 @@ class _OrbitLiveCircleDetailScreenState extends State<OrbitLiveCircleDetailScree
   }
 
   @override
-  Widget build(BuildContext context) => Stack(children: [
-    FriendDetailsScreen(
+  Widget build(BuildContext context) => FriendDetailsScreen(
       circleName: _circle?.name ?? 'Circle',
       members: _members.map((p) => FriendMemberData(
         id:p.id,name:p.name,
@@ -250,11 +249,20 @@ class _OrbitLiveCircleDetailScreenState extends State<OrbitLiveCircleDetailScree
       groups:const <CircleGroupData>[],
       onBack: () => Navigator.of(context).maybePop(),
       onAddMember: _openInvite,
+      onSettingsPressed: _circle == null ? null : _openSettings,
+      onPresencePressed: _circle == null || !OrbitPresenceRollout.enabled
+          ? null : _openPresenceSettings,
       liveInviteMode: true,
-      headerTitle:'Circle Details',
+      headerTitle:'Friend Details',
       lifecycleNotice:_temporaryNotice(),
-      showGroupSegment:false,
-      showFavoriteActions:false,
+      // Reuse the original two-tab Circle / Group design. M5 does not
+      // provide a groups endpoint: leave the Group tab empty rather than
+      // inventing groups or routing to demo group chat.
+      showGroupSegment:true,
+      // The social API has no persistent Circle favorites endpoint; render
+      // the original hearts read-only rather than fabricating saved state.
+      showFavoriteActions:true,
+      favoriteChangesEnabled:false,
       momentsTabBuilder:OrbitM7Rollout.enabled && _circle!=null
         ? (_)=>OrbitLiveProfileMoments(
           key:ValueKey<String>('circle_moments_${_circle!.id}'),
@@ -266,29 +274,5 @@ class _OrbitLiveCircleDetailScreenState extends State<OrbitLiveCircleDetailScree
         : FriendDetailsViewState.loaded,
       errorMessage:_error ?? 'Unable to load Circle members.',
       onRetry:_refresh,
-    ),
-    if(!_loading && _circle!=null)
-      Positioned(right:20,bottom:25, child: Column(
-        mainAxisSize:MainAxisSize.min,
-        crossAxisAlignment:CrossAxisAlignment.end,
-        children:[
-          if (OrbitPresenceRollout.enabled) ...[
-            FloatingActionButton.extended(
-              heroTag:'m9-circle-presence',
-              backgroundColor:AppColors.background,
-              foregroundColor:AppColors.primaryEnd,
-              onPressed:_openPresenceSettings,
-              label:const Text('Presence'),
-              icon:const Icon(Icons.visibility_outlined)),
-            const SizedBox(height:12),
-          ],
-          FloatingActionButton.extended(
-            heroTag:'m5-circle-settings',
-            backgroundColor:AppColors.background,
-            foregroundColor:AppColors.primaryEnd,
-            onPressed:_openSettings,
-            label:const Text('Circle settings'),
-            icon:const Icon(Icons.settings_outlined)),
-        ])),
-  ]);
+    );
 }
