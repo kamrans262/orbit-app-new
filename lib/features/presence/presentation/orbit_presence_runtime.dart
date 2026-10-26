@@ -23,6 +23,7 @@ class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
   final Map<String, OrbitPresenceSnapshot> _circles={};
   final Map<String,int> _circleVersions={};
   final Set<String> _watches={};
+  final Map<String,Set<String>> _watchOwners={};
   StreamSubscription<Map<String, dynamic>>? _events;
   Timer? _heartbeat;
   Timer? _expiry;
@@ -43,7 +44,9 @@ class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
     _heartbeat=Timer.periodic(const Duration(seconds:40), (_) {
       if (_started && _active) unawaited(_beat());
     });
-    _expiry=Timer.periodic(const Duration(seconds:3), (_) => notifyListeners());
+    _expiry=Timer.periodic(const Duration(seconds:5), (_) {
+      if (_active && _watches.isNotEmpty && _circles.isNotEmpty) notifyListeners();
+    });
     await _beat();
     if (epoch==_epoch && _started && _active) {
       unawaited(_socket.connect());
@@ -66,13 +69,19 @@ class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  Future<void> watch(String circle) async {
+  Future<void> watch(String circle, {String source='circle-detail'}) async {
     if (!_started || !_active) return;
+    final sources=_watchOwners.putIfAbsent(circle,()=><String>{});
+    if (!sources.add(source)) return; // no repeated polling on Home refresh
     _watches.add(circle);
     await refresh(circle);
   }
 
-  void unwatch(String circle) {
+  void unwatch(String circle, {String source='circle-detail'}) {
+    final sources=_watchOwners[circle];
+    if (sources==null || !sources.remove(source)) return;
+    if (sources.isNotEmpty) return; // other authenticated screen still needs it
+    _watchOwners.remove(circle);
     _watches.remove(circle);
     _circleVersions[circle]=(_circleVersions[circle] ?? 0)+1;
     _circles.remove(circle);
@@ -102,6 +111,20 @@ class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
   OrbitPresenceMember? member(String circle, String memberId, {DateTime? now}) {
     if (!_started || !_active) return null;
     return _circles[circle]?.member(memberId,now ?? DateTime.now());
+  }
+
+  /// Only among server-authorized per-Circle snapshots currently watched.
+  OrbitPresenceMember? memberInCircles(Iterable<String> circles, String person,
+      {DateTime? now}) {
+    if (!_started || !_active) return null;
+    final stamp=now ?? DateTime.now();
+    OrbitPresenceMember? idle;
+    for (final circle in circles) {
+      final value=member(circle,person,now:stamp);
+      if (value?.state=='active_now') return value;
+      idle ??= value;
+    }
+    return idle;
   }
 
   void _onEvent(Map<String,dynamic> event) {
@@ -159,6 +182,7 @@ class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
     final events=_events; _events=null;
     await events?.cancel();
     _watches.clear();
+    _watchOwners.clear();
     clear();
     _circleVersions.clear();
     await _socket.stop();
