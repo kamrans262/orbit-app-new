@@ -146,6 +146,7 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
         }
       }
       OrbitDashboardSnapshot? snapshot;
+      var partialUnavailable=false;
       if(OrbitM8Rollout.enabled) {
         try {
           snapshot=await _dashboard.summary();
@@ -153,7 +154,7 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
           if(_denied(e))rethrow;
           // 404 means M8 not rolled out; use each live M4/M5/M7 source,
           // not an old aggregate or untrusted local snapshot.
-          if(e.statusCode!=404) _notice='Dashboard data is temporarily unavailable.';
+          if(e.statusCode!=404)partialUnavailable=true;
         }
       }
       if(!mounted||serial!=_epoch||_owner!=owner)return;
@@ -199,6 +200,7 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
         });
       }catch(e){
         if(_denied(e))rethrow;
+        if(e is! OrbitIdentityException || e.statusCode!=404)partialUnavailable=true;
         if(mounted&&serial==_epoch)setState((){
           _circleCards=const [];
           _showCircles=false;
@@ -220,6 +222,7 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
         });
       }catch(e){
         if(_denied(e))rethrow;
+        partialUnavailable=true;
         if(mounted&&serial==_epoch)setState((){
           _people=const [];
           _peopleById.clear();
@@ -264,6 +267,7 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
         }
       }catch(e){
         if(_denied(e))rethrow;
+        partialUnavailable=true;
       }
       if(!mounted||serial!=_epoch||_owner!=owner){
         for(final data in visible){
@@ -280,7 +284,8 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
         _recent=visible;
         _byId..clear()..addAll(authorized);
         _authors..clear()..addAll(authors);
-        _notice=null;
+        _notice=partialUnavailable
+          ? 'Some Home sections could not be verified. Retry.' : null;
       });
     }catch(e){
       if(mounted && serial==_epoch) {
