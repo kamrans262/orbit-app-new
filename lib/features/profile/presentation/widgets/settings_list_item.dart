@@ -85,3 +85,42 @@ class SettingsListItem extends StatelessWidget {
     );
   }
 }
+
+
+/// Identical white rounded/shadowed surface used by Profile → Settings.
+/// Other profile sections (including a friend's Quick Actions) can use the
+/// existing SettingsListItem geometry without inventing another card style.
+class SettingsListCard extends StatelessWidget {
+  const SettingsListCard({required this.children, super.key});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: const <BoxShadow>[
+          BoxShadow(
+            color: Color(0x22000000),
+            offset: Offset(0, 2),
+            blurRadius: 7,
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            for (var index = 0; index < children.length; index++) ...<Widget>[
+              children[index],
+              if (index != children.length - 1) const SizedBox(height: 10),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
