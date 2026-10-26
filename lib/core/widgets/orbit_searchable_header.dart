@@ -254,6 +254,7 @@ class OrbitSearchField extends StatelessWidget {
     required this.focusNode,
     required this.placeholder,
     required this.onChanged,
+    this.autofocus = true,
     super.key,
   });
 
@@ -261,6 +262,7 @@ class OrbitSearchField extends StatelessWidget {
   final FocusNode focusNode;
   final String placeholder;
   final ValueChanged<String> onChanged;
+  final bool autofocus;
 
   @override
   Widget build(BuildContext context) {
@@ -269,7 +271,7 @@ class OrbitSearchField extends StatelessWidget {
       child: TextField(
         controller: controller,
         focusNode: focusNode,
-        autofocus: true,
+        autofocus: autofocus,
         onChanged: onChanged,
         textInputAction: TextInputAction.search,
         cursorColor: const Color(0xFF7C3AED),
