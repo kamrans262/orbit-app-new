@@ -14,8 +14,6 @@ import '../../domain/models/friend_details_models.dart';
 import 'friend_details_screen.dart';
 import 'orbit_live_circle_settings_screen.dart';
 import 'orbit_live_invite_member_screen.dart';
-import '../../../profile/presentation/screens/orbit_live_profile_moments.dart';
-import '../../../moments/data/orbit_m7_rollout.dart';
 import '../../../presence/data/orbit_presence_rollout.dart';
 import '../../../presence/presentation/orbit_presence_runtime.dart';
 import '../../../presence/presentation/orbit_circle_presence_settings_screen.dart';
@@ -263,11 +261,6 @@ class _OrbitLiveCircleDetailScreenState extends State<OrbitLiveCircleDetailScree
       // the original hearts read-only rather than fabricating saved state.
       showFavoriteActions:true,
       favoriteChangesEnabled:false,
-      momentsTabBuilder:OrbitM7Rollout.enabled && _circle!=null
-        ? (_)=>OrbitLiveProfileMoments(
-          key:ValueKey<String>('circle_moments_${_circle!.id}'),
-          circleId:_circle!.id,
-        ) : null,
       showAddMemberButton: _circle?.can('invite') == true,
       viewState:_loading ? FriendDetailsViewState.loading
         : _error!=null ? FriendDetailsViewState.error
