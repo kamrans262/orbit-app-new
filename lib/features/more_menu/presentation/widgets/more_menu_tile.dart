@@ -10,6 +10,9 @@ class MoreMenuTile extends StatelessWidget {
     required this.title,
     required this.onTap,
     this.titleColor = const Color(0xFF0F1724),
+    this.leadingWidget,
+    this.trailingWidget,
+    this.subtitle,
     this.containerKey,
     this.iconCircleKey,
     this.titleKey,
@@ -30,6 +33,11 @@ class MoreMenuTile extends StatelessWidget {
   final Color iconBackgroundColor;
   final String title;
   final Color titleColor;
+  /// Optional replacements retain the approved Orbit Menu row geometry.
+  /// Existing menu callers receive the original icon and chevron unchanged.
+  final Widget? leadingWidget;
+  final Widget? trailingWidget;
+  final String? subtitle;
   final VoidCallback onTap;
   final Key? containerKey;
   final Key? iconCircleKey;
@@ -64,7 +72,13 @@ class MoreMenuTile extends StatelessWidget {
                 ),
                 child: Row(
                   children: <Widget>[
-                    DecoratedBox(
+                    if (leadingWidget != null)
+                      SizedBox.square(
+                        key: iconCircleKey,
+                        dimension: iconDiameter,
+                        child: leadingWidget,
+                      )
+                    else DecoratedBox(
                       key: iconCircleKey,
                       decoration: BoxDecoration(
                         color: iconBackgroundColor,
@@ -79,27 +93,60 @@ class MoreMenuTile extends StatelessWidget {
                     ),
                     const SizedBox(width: iconToTitleGap),
                     Expanded(
-                      child: Text(
-                        title,
-                        key: titleKey,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontFamily: AppTypography.fontFamily,
-                          fontSize: 15,
-                          height: 1.25,
-                          fontWeight: FontWeight.w500,
-                          color: titleColor,
-                        ),
-                      ),
+                      child: subtitle == null
+                          ? Text(
+                              title,
+                              key: titleKey,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontFamily: AppTypography.fontFamily,
+                                fontSize: 15,
+                                height: 1.25,
+                                fontWeight: FontWeight.w500,
+                                color: titleColor,
+                              ),
+                            )
+                          : Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                Text(
+                                  title,
+                                  key: titleKey,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontFamily: AppTypography.fontFamily,
+                                    fontSize: 15,
+                                    height: 1.25,
+                                    fontWeight: FontWeight.w500,
+                                    color: titleColor,
+                                  ),
+                                ),
+                                Text(
+                                  subtitle!,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontFamily: AppTypography.fontFamily,
+                                    fontSize: 12,
+                                    color: Color(0xFF94A3B8),
+                                  ),
+                                ),
+                              ],
+                            ),
                     ),
                     const SizedBox(width: 10),
-                    Icon(
-                      Icons.chevron_right_rounded,
-                      key: chevronKey,
-                      size: 24,
-                      color: const Color(0xFF94A3B8),
-                    ),
+                    if (trailingWidget != null)
+                      trailingWidget!
+                    else
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        key: chevronKey,
+                        size: 24,
+                        color: const Color(0xFF94A3B8),
+                      ),
                     const SizedBox(width: 1),
                   ],
                 ),
