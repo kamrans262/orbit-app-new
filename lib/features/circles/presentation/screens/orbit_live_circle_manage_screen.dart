@@ -8,6 +8,9 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_screen_header.dart';
 import '../../../../core/widgets/app_action_row.dart';
 import '../../../../core/widgets/app_circular_icon_button.dart';
+import '../../../home/domain/models/home_models.dart';
+import '../../../home/presentation/widgets/favorite_person_tile.dart';
+import '../../../../core/popups/orbit_popup_modal.dart';
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../../auth/data/orbit_identity_client.dart';
 import '../../data/orbit_circle_repository.dart';
@@ -66,11 +69,20 @@ class _OrbitLiveCircleManageScreenState extends State<OrbitLiveCircleManageScree
     }
   }
 
-  void _errorNotice(Object error){
-    if(!mounted)return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(
-      error is OrbitIdentityException ? error.message : 'Circle action failed. Please retry.',
-    )));
+  void _errorNotice(Object error) {
+    if (!mounted) return;
+    showOrbitPopupModal<void>(
+      context: context,
+      builder: (dialog) => OrbitPopupModal(
+        title: 'Circle',
+        description: error is OrbitIdentityException
+            ? error.message : 'Circle action failed. Please retry.',
+        primaryAction: OrbitPopupPrimaryButton(
+          label: 'OK',
+          onPressed: () => Navigator.of(dialog).pop(),
+        ),
+      ),
+    );
   }
 
   Future<bool> _confirm(String title,String text,String action) =>
@@ -253,20 +265,22 @@ class _OrbitLiveCircleManageScreenState extends State<OrbitLiveCircleManageScree
     if (action.startsWith('role:')) return _changeRole(member, action.substring(5));
   }
 
-  Widget _item(IconData icon,String title,VoidCallback? callback,
-      {String? subtitle,Color? color})=>Card(
-      elevation:0,color:Colors.white,
-      child:ListTile(
-        leading:Icon(icon,color:color??const Color(0xFF7C3AED)),
-        title:Text(title,style:TextStyle(
-          fontFamily:AppTypography.fontFamily,fontWeight:FontWeight.w500,
-          color:color??const Color(0xFF0F1724))),
-        subtitle:subtitle==null ? null :Text(subtitle,style:const TextStyle(
-          fontFamily:AppTypography.fontFamily,fontSize:12)),
-        onTap:callback,
-        trailing:callback==null ? null :const Icon(Icons.chevron_right_rounded),
-      ),
-    );
+  /// Preserve Orbit's pre-M5 rounded action rows instead of new Card/ListTile
+  /// styling. Permissions continue to determine enabled management actions.
+  Widget _item(IconData icon, String title, VoidCallback? callback,
+      {String? subtitle, Color? color}) => Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: AppActionRow(
+      leadingIcon: icon,
+      iconBackgroundColor: const Color(0xFFF2EAFE),
+      leadingIconColor: color ?? AppColors.primaryEnd,
+      title: subtitle == null ? title : '$title\n$subtitle',
+      onTap: callback,
+      trailing: callback == null ? null
+          : const Icon(Icons.chevron_right_rounded,
+              color: Color(0xFF94A3B8)),
+    ),
+  );
 
   @override
   Widget build(BuildContext context)=>Scaffold(
@@ -313,14 +327,18 @@ class _OrbitLiveCircleManageScreenState extends State<OrbitLiveCircleManageScree
         const Text('Members',style:TextStyle(
           fontFamily:AppTypography.fontFamily,fontSize:18,fontWeight:FontWeight.w600)),
         const SizedBox(height:8),
-        for(final member in _members)
-          Card(elevation:0,color:Colors.white,child:ListTile(
-            leading:const CircleAvatar(backgroundColor:Color(0xFFE9E4F6),
-              child:Icon(Icons.person_outline,color:Color(0xFF7C3AED))),
-            title:Text(member.name,style:const TextStyle(
-              fontFamily:AppTypography.fontFamily,fontWeight:FontWeight.w500)),
-            subtitle:Text('${member.username.isEmpty ? '' : '@${member.username} • '}${member.role}'),
-            trailing:member.role!='owner' &&
+        for(final member in _members) ...<Widget>[
+          FavoritePersonTile(
+            data: FavoritePersonData(
+              id: member.id,
+              name: member.name,
+              status: '${member.username.isEmpty ? '' : '@${member.username} • '}${member.role}',
+              imagePath: '',
+            ),
+            onTap: () => _manageMember(member),
+            onFavoritePressed: () {},
+            showFavoriteAction: false,
+            trailingAction: member.role!='owner' &&
               (_circle.can('remove_members') ||
                _circle.can('change_roles') ||
                (_circle.can('transfer_owner') && member.role != 'restricted'))
@@ -332,7 +350,9 @@ class _OrbitLiveCircleManageScreenState extends State<OrbitLiveCircleManageScree
                   iconColor: Colors.black,
                   onPressed: () => _manageMember(member),
                 ) : null,
-          )),
+          ),
+          const SizedBox(height: 10),
+        ],
         const SizedBox(height:20),
         const Text('Joining a Circle never enables location, presence, Moments, '
           'Ping, messaging or SOS sharing.',
