@@ -4,6 +4,7 @@ import 'package:orbit_ui/core/widgets/app_circular_icon_button.dart';
 import 'package:orbit_ui/app/theme/app_colors.dart';
 import 'package:orbit_ui/features/circles/domain/models/circle_settings.dart';
 import 'package:orbit_ui/features/circles/presentation/screens/circle_setting_screen.dart';
+import 'package:orbit_ui/features/circles/presentation/widgets/circle_setting_toggle.dart';
 import 'package:orbit_ui/core/popups/orbit_popup_modal.dart';
 
 void main() {
@@ -35,6 +36,33 @@ void main() {
     expect(find.text('Ping'), findsOneWidget);
     expect(find.text('SOS Alerts'), findsOneWidget);
     expect(find.text('Delete Circle'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('original sharing rows stay visible but cannot be enabled in M5',
+      (tester) async {
+    const privateSettings = CircleSettings(
+      id: 'private', name: 'Private Circle', memberCount: 2,
+      colorValue: 0xFF7C3AED,
+      liveLocationEnabled: false, momentSharingEnabled: false,
+      pingEnabled: false, sosAlertsEnabled: false,
+    );
+    await tester.pumpWidget(const MaterialApp(
+      home: CircleSettingScreen(
+        settings: privateSettings,
+        sharingControlsEnabled: false,
+        sharingControlsReadOnly: true,
+      ),
+    ));
+    for (final label in const <String>[
+      'Live Location', 'Moment Sharing', 'Ping', 'SOS Alerts',
+    ]) {
+      expect(find.text(label), findsOneWidget);
+    }
+    final liveToggle = tester.widget<CircleSettingToggle>(
+      find.byKey(CircleSettingKeys.toggle('live_location')));
+    expect(liveToggle.enabled, isFalse);
+    expect(liveToggle.value, isFalse);
     expect(tester.takeException(), isNull);
   });
 
