@@ -11,6 +11,7 @@ class FavoritePersonTile extends StatelessWidget {
     required this.onFavoritePressed,
     this.showFavoriteAction = true,
     this.favoriteEnabled = true,
+    this.trailingAction,
     super.key,
   });
 
@@ -19,6 +20,7 @@ class FavoritePersonTile extends StatelessWidget {
   final VoidCallback onFavoritePressed;
   final bool showFavoriteAction;
   final bool favoriteEnabled;
+  final Widget? trailingAction;
 
   @override
   Widget build(BuildContext context) {
@@ -84,6 +86,7 @@ class FavoritePersonTile extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
+                if (trailingAction != null) trailingAction!,
                 if (showFavoriteAction) Semantics(
                   button: true,
                   enabled: favoriteEnabled,
