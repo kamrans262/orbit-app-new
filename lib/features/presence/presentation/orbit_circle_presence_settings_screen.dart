@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import '../../../../app/theme/app_colors.dart';
-import '../../../../app/theme/app_typography.dart';
-import '../../../../core/widgets/app_action_row.dart';
-import '../../../../core/widgets/app_primary_button.dart';
-import '../../../../core/widgets/app_screen_header.dart';
-import '../../../circles/presentation/widgets/circle_setting_toggle.dart';
-import '../../../circles/presentation/widgets/orbit_circle_confirmation.dart';
-import '../../../auth/data/orbit_identity_client.dart';
+import '../../../app/theme/app_colors.dart';
+import '../../../app/theme/app_typography.dart';
+import '../../../core/widgets/app_action_row.dart';
+import '../../../core/widgets/app_primary_button.dart';
+import '../../../core/widgets/app_screen_header.dart';
+import '../../circles/presentation/widgets/circle_setting_toggle.dart';
+import '../../circles/presentation/widgets/orbit_circle_confirmation.dart';
+import '../../auth/data/orbit_identity_client.dart';
 import '../data/orbit_presence_models.dart';
 import '../data/orbit_presence_repository.dart';
 
