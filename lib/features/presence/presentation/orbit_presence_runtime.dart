@@ -12,14 +12,17 @@ import '../data/orbit_presence_socket.dart';
 /// Single in-memory Presence coordinator. It never persists a status or
 /// tries to infer online from M8 Home, device last_seen, or friends snapshots.
 class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
-  OrbitPresenceRuntime({OrbitPresenceRepository? repository, OrbitPresenceSocket? socket})
+  OrbitPresenceRuntime({OrbitPresenceRepository? repository, OrbitPresenceSocket? socket,
+    DateTime Function()? clock})
       : _repository=repository ?? OrbitPresenceRepository(),
-        _socket=socket ?? OrbitPresenceSocket(repository:repository);
+        _socket=socket ?? OrbitPresenceSocket(repository:repository),
+        _now=clock ?? DateTime.now;
 
   static final instance=OrbitPresenceRuntime();
 
   final OrbitPresenceRepository _repository;
   final OrbitPresenceSocket _socket;
+  final DateTime Function() _now;
   final Map<String, OrbitPresenceSnapshot> _circles={};
   final Map<String,int> _circleVersions={};
   final Set<String> _refreshing=<String>{};
@@ -43,7 +46,7 @@ class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
     if (!OrbitPresenceRollout.enabled || _started) return;
     _started=true;
     _active=true;
-    _lastInteraction=DateTime.now();
+    _lastInteraction=_now();
     _lastPublishedState='active';
     final epoch=++_epoch;
     WidgetsBinding.instance.addObserver(this);
@@ -55,14 +58,8 @@ class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
       if (_active && _watches.isNotEmpty && _circles.isNotEmpty) notifyListeners();
     });
     // UI freshness check, not a substitute for the M9 WebSocket gateway.
-    _revalidation=Timer.periodic(const Duration(seconds:20), (_) {
-      if (!_active || !_started) return;
-      for (final id in _watches.toList()) {
-        if (_refreshing.add(id)) {
-          unawaited(refresh(id).whenComplete(() => _refreshing.remove(id)));
-        }
-      }
-    });
+    _revalidation=Timer.periodic(const Duration(seconds:20),
+      (_) => unawaited(refreshWatched()));
     await _beat();
     if (epoch==_epoch && _started && _active) {
       unawaited(_socket.connect());
@@ -73,14 +70,29 @@ class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
   /// and network activity alone must never masquerade as user activity.
   void recordActivity() {
     if (!_started || !_active) return;
-    _lastInteraction=DateTime.now();
+    _lastInteraction=_now();
     if (_lastPublishedState=='idle') unawaited(_beat());
   }
+
+  /// Refreshes current server-scoped snapshots before the 30s UI expiry.
+  /// Also useful after a transport reconnection; never uses cached history.
+  Future<void> refreshWatched() async {
+    if (!_active || !_started) return;
+    final pending=<Future<void>>[];
+    for (final id in _watches.toList()) {
+      if (_refreshing.add(id)) {
+        pending.add(refresh(id).whenComplete(() => _refreshing.remove(id)));
+      }
+    }
+    await Future.wait(pending);
+  }
+
+  Future<void> heartbeatNow() => _beat();
 
   Future<void> _beat() async {
     if (!_started || !_active || _beating) return;
     _beating=true;
-    final state=DateTime.now().difference(_lastInteraction)
+    final state=_now().difference(_lastInteraction)
         >= const Duration(seconds:60) ? 'idle':'active';
     try {
       await _repository.heartbeat(state);
@@ -191,7 +203,7 @@ class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
     if (!_started) return;
     if (state==AppLifecycleState.resumed) {
       _active=true;
-      _lastInteraction=DateTime.now();
+      _lastInteraction=_now();
       unawaited(_beat());
       unawaited(_socket.connect());
       for (final id in _watches.toList()) { unawaited(refresh(id)); }
