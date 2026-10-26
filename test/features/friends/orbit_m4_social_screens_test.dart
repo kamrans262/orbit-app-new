@@ -12,6 +12,9 @@ import 'package:orbit_ui/features/home/presentation/widgets/favorite_person_tile
 import 'package:orbit_ui/features/welcome/domain/models/nearby_person.dart';
 import 'package:orbit_ui/features/welcome/presentation/widgets/nearby_person_tile.dart';
 import 'package:orbit_ui/features/profile/presentation/screens/orbit_live_blocked_users_screen.dart';
+import 'package:orbit_ui/features/profile/presentation/screens/profile_screen.dart';
+import 'package:orbit_ui/features/profile/presentation/widgets/profile_summary_header.dart';
+import 'package:orbit_ui/features/profile/presentation/widgets/settings_list_item.dart';
 
 class _FakeSocial extends OrbitSocialRepository {
   bool blocked = true;
@@ -43,6 +46,13 @@ class _FakeSocial extends OrbitSocialRepository {
   }
 }
 
+
+class _FriendProfileSocial extends _FakeSocial {
+  @override
+  Future<OrbitPerson> preview(String id) async =>
+      const OrbitPerson(id: 'person-01', name: 'Ayesha',
+          username: 'ayesha', relationship: 'friend');
+}
 
 class _RequestSocial extends OrbitSocialRepository {
   String? lastDirection;
@@ -172,6 +182,62 @@ void main() {
     expect(find.text('1.4 km'), findsOneWidget);
     expect(find.text('Unverified Demo'), findsNothing);
     expect(find.byKey(const Key('find_friends_nearby_list')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('tapping a friend opens existing Profile layout with Quick Actions before Overview',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(MaterialApp(
+      home: OrbitLiveFriendsScreen(
+        repository: _FriendProfileSocial(),
+        snapshotStore: _MemoryFriendSnapshot(),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ayesha'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(OrbitPersonScreen), findsOneWidget);
+    final profile = tester.widget<ProfileScreen>(find.byType(ProfileScreen));
+    expect(profile.friendView, isTrue);
+    expect(find.byType(ProfileSummaryHeader), findsOneWidget);
+    expect(find.byKey(ProfileKeys.gradientBackground), findsOneWidget);
+    expect(find.byKey(ProfileKeys.bottomNavigation), findsNothing);
+    expect(find.byKey(ProfileKeys.settingsButton), findsNothing);
+    expect(find.byKey(ProfileKeys.stats), findsNothing);
+    expect(find.byKey(ProfileKeys.quickActionsTab), findsOneWidget);
+    expect(find.byKey(ProfileKeys.overviewTab), findsOneWidget);
+    expect(find.byKey(ProfileKeys.placesTab), findsOneWidget);
+    expect(find.byKey(ProfileKeys.momentsTab), findsOneWidget);
+    expect(tester.getTopLeft(find.byKey(ProfileKeys.quickActionsTab)).dx,
+        lessThan(tester.getTopLeft(find.byKey(ProfileKeys.overviewTab)).dx));
+
+    expect(find.byKey(const Key('friend_profile_quick_actions_card')),
+        findsOneWidget);
+    expect(find.byType(SettingsListCard), findsOneWidget);
+    expect(find.byType(SettingsListItem), findsWidgets);
+    expect(find.text('Message'), findsOneWidget);
+    expect(find.text('Ping'), findsOneWidget);
+    expect(find.text('Navigate'), findsOneWidget);
+    expect(find.text('Check-In'), findsOneWidget);
+
+    await tester.tap(find.byKey(ProfileKeys.overviewTab));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('friend_profile_overview_card')),
+        findsOneWidget);
+    expect(find.text('You are friends.'), findsOneWidget);
+    expect(find.text('Your activity will appear here'), findsNothing);
+    await tester.tap(find.byKey(ProfileKeys.placesTab));
+    await tester.pumpAndSettle();
+    expect(find.text('This person has not shared places with you.'),
+        findsOneWidget);
+    await tester.tap(find.byKey(ProfileKeys.momentsTab));
+    await tester.pumpAndSettle();
+    expect(find.text('No authorized Moments are available here.'),
+        findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
