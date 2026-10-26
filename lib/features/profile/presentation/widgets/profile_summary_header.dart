@@ -75,8 +75,14 @@ class ProfileSummaryHeader extends StatelessWidget {
               horizontalPadding,
               0,
             ),
-            child: Column(
-              children: <Widget>[
+            // In friend mode no statistics row stretches the Stack child.
+            // Fill the available width so the avatar, name and username
+            // share the exact horizontal centre of the profile header.
+            child: SizedBox(
+              width: double.infinity,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: <Widget>[
                 _ProfileAvatar(
                   key: avatarKey,
                   profile: profile,
@@ -130,6 +136,7 @@ class ProfileSummaryHeader extends StatelessWidget {
                   ),
                 ],
               ],
+              ),
             ),
           ),
           if (showBackButton)
