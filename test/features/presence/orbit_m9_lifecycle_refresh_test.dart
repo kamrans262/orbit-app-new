@@ -4,81 +4,81 @@ import 'package:orbit_ui/features/presence/data/orbit_presence_rollout.dart';
 import 'package:orbit_ui/features/presence/presentation/orbit_presence_runtime.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   const circle='01234567-89ab-cdef-0123-456789abcdef';
   const alice='fedcba98-7654-3210-fedc-ba9876543210';
 
-  testWidgets('foreground Presence refreshes authorized Circle state before stale TTL',
-      (tester) async {
+  test('refresh of watched Circle replaces stale Presence with current server result',
+      () async {
     expect(OrbitPresenceRollout.enabled,isTrue);
     var circleReads=0;
-    final repository=OrbitPresenceRepository(request:(method,path,{body}) async {
+    final repo=OrbitPresenceRepository(request:(method,path,{body}) async {
       if (path.endsWith('/presence')) {
         circleReads++;
         return {'data':{'circle_id':circle,'members':[
-          if (circleReads==1) {'user_id':alice,'state':'active_now',
-            'expires_at':DateTime.now().toUtc().add(const Duration(seconds:90)).toIso8601String()},
+          if (circleReads==1)
+            {'user_id':alice,'state':'active_now',
+             'expires_at':DateTime.now().toUtc()
+                 .add(const Duration(seconds:90)).toIso8601String()},
         ]}};
       }
       return {'data':{'state':'active'}};
     });
-    final runtime=OrbitPresenceRuntime(repository:repository);
-    final started=runtime.start();
-    await tester.pump();
-    await started;
-    final watching=runtime.watch(circle);
-    await tester.pump();
-    await watching;
-    expect(runtime.member(circle,alice)?.state,'active_now');
-    await tester.pump(const Duration(seconds:21));
-    await tester.pump();
-    expect(circleReads,greaterThanOrEqualTo(2));
-    expect(runtime.member(circle,alice),isNull);
-    final stopped=runtime.stop();
-    await tester.pump();
-    await stopped;
+    final runtime=OrbitPresenceRuntime(repository:repo);
+    try {
+      await runtime.start();
+      await runtime.watch(circle);
+      expect(runtime.member(circle,alice)?.state,'active_now');
+      await runtime.refreshWatched();
+      expect(circleReads,2);
+      expect(runtime.member(circle,alice),isNull);
+    } finally {
+      await runtime.stop();
+    }
   });
 
-  testWidgets('foreground idle is based on touch inactivity, not network uptime',
-      (tester) async {
+  test('idle follows 60 seconds of inactivity and active resumes on interaction',
+      () async {
+    var current=DateTime.utc(2026,10,26,12);
     final states=<String>[];
     final repo=OrbitPresenceRepository(request:(method,path,{body}) async {
       if (path.endsWith('/heartbeat')) states.add(body?['state'] as String);
       return {'data':{'state':'active'}};
     });
-    final runtime=OrbitPresenceRuntime(repository:repo);
-    final start=runtime.start();
-    await tester.pump();
-    await start;
-    expect(states.first,'active');
-    await tester.pump(const Duration(seconds:80));
-    await tester.pump();
-    expect(states,contains('idle'));
-    runtime.recordActivity();
-    await tester.pump();
-    expect(states.last,'active');
-    final end=runtime.stop();
-    await tester.pump();
-    await end;
+    final runtime=OrbitPresenceRuntime(repository:repo,clock:()=>current);
+    try {
+      await runtime.start();
+      expect(states.last,'active');
+      current=current.add(const Duration(seconds:61));
+      await runtime.heartbeatNow();
+      expect(states.last,'idle');
+      runtime.recordActivity();
+      await runtime.heartbeatNow();
+      expect(states.last,'active');
+    } finally {
+      await runtime.stop();
+    }
   });
 
-  testWidgets('unwatch prevents further snapshot reads', (tester) async {
+  test('unwatch stops further revalidation and rejects removed Circle', () async {
     var reads=0;
     final repo=OrbitPresenceRepository(request:(method,path,{body}) async {
-      if (path.endsWith('/presence')) {reads++;return {'data':{'circle_id':circle,'members':[]}};}
+      if (path.endsWith('/presence')) {
+        reads++;
+        return {'data':{'circle_id':circle,'members':[]}};
+      }
       return {'data':{'state':'active'}};
     });
     final runtime=OrbitPresenceRuntime(repository:repo);
-    final started=runtime.start();
-    await tester.pump();
-    await started;
-    final watching=runtime.watch(circle);
-    await tester.pump();
-    await watching;
-    runtime.unwatch(circle);
-    final before=reads;
-    await tester.pump(const Duration(seconds:25));
-    await tester.pump();
-    expect(reads,before);
-    await runtime.stop();
+    try {
+      await runtime.start();
+      await runtime.watch(circle);
+      runtime.unwatch(circle);
+      await runtime.refreshWatched();
+      expect(reads,1);
+      expect(runtime.member(circle,alice),isNull);
+    } finally {
+      await runtime.stop();
+    }
   });
 }
