@@ -59,6 +59,10 @@ jobs:
         run: flutter test test/features/friends/
       - name: M5 Circle repository and widgets
         run: flutter test test/features/circles/
+      - name: M3/M6 encrypted Profile avatar widget and mapping regressions
+        run: |
+          dart analyze lib/features/profile/data/orbit_profile_settings_repository.dart lib/features/profile/presentation/screens/orbit_my_profile_screen.dart lib/features/profile/presentation/screens/edit_profile_screen.dart lib/features/profile/domain/models
+          flutter test test/features/profile/presentation/edit_profile_screen_test.dart test/features/profile/orbit_profile_settings_repository_test.dart
       - name: M3 profile/offline regression
         run: flutter test test/features/auth/orbit_m3_offline_profile_test.dart
       - name: Analyze consolidated M2-M4 session and startup flows
