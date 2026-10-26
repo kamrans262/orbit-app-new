@@ -31,6 +31,9 @@ class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
   Timer? _revalidation;
   bool _active=false;
   bool _started=false;
+  DateTime _lastInteraction=DateTime.now();
+  String _lastPublishedState='active';
+  bool _beating=false;
   int _epoch=0;
 
   bool get started => _started;
@@ -40,10 +43,12 @@ class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
     if (!OrbitPresenceRollout.enabled || _started) return;
     _started=true;
     _active=true;
+    _lastInteraction=DateTime.now();
+    _lastPublishedState='active';
     final epoch=++_epoch;
     WidgetsBinding.instance.addObserver(this);
     _events=_socket.events.listen(_onEvent);
-    _heartbeat=Timer.periodic(const Duration(seconds:40), (_) {
+    _heartbeat=Timer.periodic(const Duration(seconds:25), (_) {
       if (_started && _active) unawaited(_beat());
     });
     _expiry=Timer.periodic(const Duration(seconds:5), (_) {
@@ -64,10 +69,22 @@ class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _beat() async {
+  /// Only on a user interaction inside authenticated Orbit Home. Background
+  /// and network activity alone must never masquerade as user activity.
+  void recordActivity() {
     if (!_started || !_active) return;
+    _lastInteraction=DateTime.now();
+    if (_lastPublishedState=='idle') unawaited(_beat());
+  }
+
+  Future<void> _beat() async {
+    if (!_started || !_active || _beating) return;
+    _beating=true;
+    final state=DateTime.now().difference(_lastInteraction)
+        >= const Duration(seconds:60) ? 'idle':'active';
     try {
-      await _repository.heartbeat('active');
+      await _repository.heartbeat(state);
+      if (_started && _active) _lastPublishedState=state;
     } on OrbitIdentityException catch (error) {
       if (error.statusCode == 401 || error.statusCode == 403 ||
           error.statusCode == 404 || error.statusCode == 409) {
@@ -77,6 +94,8 @@ class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
       }
     } catch (_) {
       clear();
+    } finally {
+      _beating=false;
     }
   }
 
@@ -172,6 +191,7 @@ class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
     if (!_started) return;
     if (state==AppLifecycleState.resumed) {
       _active=true;
+      _lastInteraction=DateTime.now();
       unawaited(_beat());
       unawaited(_socket.connect());
       for (final id in _watches.toList()) { unawaited(refresh(id)); }
@@ -189,6 +209,7 @@ class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
     _started=false;
     _active=false;
     _epoch++;
+    _lastPublishedState='active';
     _heartbeat?.cancel(); _heartbeat=null;
     _expiry?.cancel(); _expiry=null;
     _revalidation?.cancel(); _revalidation=null;
@@ -237,5 +258,12 @@ class _OrbitPresenceLifecycleState extends State<OrbitPresenceLifecycle> {
     super.dispose();
   }
   @override
-  Widget build(BuildContext context)=>widget.child;
+  Widget build(BuildContext context)=>OrbitPresenceRollout.enabled
+      ? Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: (_) => OrbitPresenceRuntime.instance.recordActivity(),
+          onPointerMove: (_) => OrbitPresenceRuntime.instance.recordActivity(),
+          child: widget.child,
+        )
+      : widget.child;
 }
