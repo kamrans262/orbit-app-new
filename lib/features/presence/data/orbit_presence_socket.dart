@@ -55,6 +55,7 @@ class OrbitPresenceSocket {
           if (data['type']=='authenticated') {
             _authorized=true;
             _attempts=0;
+            _events.add({'type':'presence.transport_up','circle_id':'*'});
             return;
           }
           if (data['type']=='auth_error' || data['type']=='unauthorized') {

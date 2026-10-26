@@ -24,6 +24,25 @@ void main() {
   const circle='01234567-89ab-cdef-0123-456789abcdef';
   const alice='fedcba98-7654-3210-fedc-ba9876543210';
 
+  test('no socket means REST reads cannot impersonate realtime Presence',
+      () async {
+    var reads=0;
+    final repo=OrbitPresenceRepository(request:(method,path,{body}) async {
+      if (path.endsWith('/presence')) reads++;
+      return {'data':{'circle_id':circle,'members':[]}};
+    });
+    final runtime=OrbitPresenceRuntime(repository:repo);
+    try {
+      await runtime.start();
+      await runtime.watch(circle);
+      await runtime.refreshWatched();
+      expect(reads,0);
+      expect(runtime.member(circle,alice),isNull);
+    } finally {
+      await runtime.stop();
+    }
+  });
+
   test('refresh of watched Circle replaces stale Presence with current server result',
       () async {
     expect(OrbitPresenceRollout.enabled,isTrue);
@@ -40,7 +59,7 @@ void main() {
       }
       return {'data':{'state':'active'}};
     });
-    final runtime=OrbitPresenceRuntime(repository:repo);
+    final runtime=OrbitPresenceRuntime(repository:repo,socket:_MockPresenceSocket());
     try {
       await runtime.start();
       await runtime.watch(circle);
@@ -61,7 +80,7 @@ void main() {
       if (path.endsWith('/heartbeat')) states.add(body?['state'] as String);
       return {'data':{'state':'active'}};
     });
-    final runtime=OrbitPresenceRuntime(repository:repo,clock:()=>current);
+    final runtime=OrbitPresenceRuntime(repository:repo,socket:_MockPresenceSocket(),clock:()=>current);
     try {
       await runtime.start();
       expect(states.last,'active');
@@ -86,7 +105,7 @@ void main() {
       }};
       return {'data':{'state':'active'}};
     });
-    final runtime=OrbitPresenceRuntime(repository:repo);
+    final runtime=OrbitPresenceRuntime(repository:repo,socket:_MockPresenceSocket());
     try {
       await runtime.start();
       await runtime.watch(circle);
@@ -139,7 +158,7 @@ void main() {
       }
       return {'data':{'state':'active'}};
     });
-    final runtime=OrbitPresenceRuntime(repository:repo,clock:()=>clock);
+    final runtime=OrbitPresenceRuntime(repository:repo,socket:_MockPresenceSocket(),clock:()=>clock);
     try {
       await runtime.start();
       clock=clock.add(const Duration(seconds:61));
@@ -163,7 +182,7 @@ void main() {
       }
       return {'data':{'state':'active'}};
     });
-    final runtime=OrbitPresenceRuntime(repository:repo);
+    final runtime=OrbitPresenceRuntime(repository:repo,socket:_MockPresenceSocket());
     try {
       await runtime.start();
       await runtime.watch(circle);
