@@ -36,7 +36,10 @@ class OrbitPresenceSocket {
       // A ticket never goes into URL/query parameters, analytics or storage.
       final credentials = await _repository.ticket();
       final ticket = credentials['ticket'];
-      if (ticket is! String || ticket.length < 40 || epoch != _epoch) return;
+      if (epoch != _epoch) return;
+      if (ticket is! String || ticket.length < 40) {
+        throw const FormatException('Invalid Presence gateway ticket.');
+      }
       socket = await WebSocket.connect(endpoint.toString())
           .timeout(const Duration(seconds: 8));
       if (epoch != _epoch) { await socket.close(); return; }
@@ -85,7 +88,7 @@ class OrbitPresenceSocket {
     // Reconnects never reuse the expired 60-second session ticket.
     _events.add({'type':'presence.transport_down','circle_id':'*'});
     if (!_wantConnection || _retry != null) return;
-    _attempts=(_attempts+1).clamp(1,5);
+    _attempts=(_attempts+1).clamp(1,5).toInt();
     final delay=Duration(seconds:2 << (_attempts-1));
     _retry=Timer(delay, () {
       _retry=null;
