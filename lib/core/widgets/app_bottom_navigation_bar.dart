@@ -34,6 +34,10 @@ class AppBottomNavigationBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Preserve the approved 70px nav at normal scale. Expand its vertical
+    // constraint only for accessibility text scaling to avoid clipped labels.
+    final scaledLabel=MediaQuery.textScalerOf(context).scale(12);
+    final extraHeight=(scaledLabel-12).clamp(0.0,24.0)*1.5;
     return DecoratedBox(
       decoration: const BoxDecoration(
         color: Color(0xFFF8FAFF),
@@ -43,7 +47,7 @@ class AppBottomNavigationBar extends StatelessWidget {
         top: false,
         minimum: const EdgeInsets.only(bottom: 0),
         child: SizedBox(
-          height: referenceHeight,
+          height: referenceHeight + extraHeight,
           child: Stack(
             clipBehavior: Clip.none,
             children: <Widget>[
