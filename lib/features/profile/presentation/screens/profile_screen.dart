@@ -52,7 +52,6 @@ class ProfileScreen extends StatefulWidget {
     this.friendView = false,
     this.onFriendBack,
     this.friendQuickActionsBuilder,
-    this.friendOverviewBuilder,
     super.key,
   });
 
@@ -145,7 +144,6 @@ class ProfileScreen extends StatefulWidget {
   final bool friendView;
   final VoidCallback? onFriendBack;
   final WidgetBuilder? friendQuickActionsBuilder;
-  final WidgetBuilder? friendOverviewBuilder;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -250,12 +248,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _profileTabControl() {
     final tabLabels = widget.friendView
-        ? const <String>['Quick Actions', 'Overview', 'Places', 'Moments']
+        ? const <String>['Quick Actions', 'Places', 'Moments']
         : const <String>['Overview', 'Places', 'Moments'];
     final tabKeys = widget.friendView
         ? const <Key>[
             ProfileKeys.quickActionsTab,
-            ProfileKeys.overviewTab,
             ProfileKeys.placesTab,
             ProfileKeys.momentsTab,
           ]
@@ -398,9 +395,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   List<Widget> _friendContentSlivers() {
     final builder = _selectedProfileTab == 0
         ? widget.friendQuickActionsBuilder
-        : _selectedProfileTab == 1
-            ? widget.friendOverviewBuilder
-            : null;
+        : null;
     return <Widget>[
       SliverPadding(
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
@@ -412,7 +407,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     horizontal: 14, vertical: 32,
                   ),
                   child: Text(
-                    _selectedProfileTab == 2
+                    _selectedProfileTab == 1
                         ? 'This person has not shared places with you.'
                         : 'No authorized Moments are available here.',
                     textAlign: TextAlign.center,
