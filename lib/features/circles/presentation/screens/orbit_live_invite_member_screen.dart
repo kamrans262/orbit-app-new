@@ -136,7 +136,7 @@ class _OrbitLiveInviteMemberScreenState extends State<OrbitLiveInviteMemberScree
           ),
         );
       } else {
-        _notice('Invitation sent. Awaiting acceptance.');
+        await _notice('Invitation sent. Awaiting acceptance.');
       }
       if(mounted) Navigator.of(context).pop();
     } catch(e) {
@@ -160,9 +160,9 @@ class _OrbitLiveInviteMemberScreenState extends State<OrbitLiveInviteMemberScree
 
   /// The existing Orbit popup is used instead of native SnackBars or
   /// a different modal design.
-  void _notice(String message) {
+  Future<void> _notice(String message) async {
     if (!mounted) return;
-    showOrbitPopupModal<void>(
+    await showOrbitPopupModal<void>(
       context: context,
       builder: (dialog) => OrbitPopupModal(
         title: 'Circle invitation',
