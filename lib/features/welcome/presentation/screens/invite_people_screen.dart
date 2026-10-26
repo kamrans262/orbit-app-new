@@ -45,6 +45,7 @@ class InvitePeopleScreen extends StatelessWidget {
     this.peopleError,
     this.onRetryPeople,
     this.canAddPerson = true,
+    this.emptyPeopleMessage,
     super.key,
   });
 
@@ -76,10 +77,16 @@ class InvitePeopleScreen extends StatelessWidget {
   final String? peopleError;
   final VoidCallback? onRetryPeople;
   final bool canAddPerson;
+  final String? emptyPeopleMessage;
 
   @override
   Widget build(BuildContext context) {
     final topPadding = MediaQuery.sizeOf(context).height < 720 ? 12.0 : 52.0;
+    // Production must never show the onboarding's demo nearby people.
+    final visiblePeople = isCircleInvite
+        ? nearbyPeople.where((person) => person.id?.isNotEmpty == true)
+            .toList(growable: false)
+        : nearbyPeople;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -194,7 +201,7 @@ class InvitePeopleScreen extends StatelessWidget {
                   ),
                   if (isCircleInvite &&
                       (loadingPeople || peopleError != null ||
-                          nearbyPeople.isEmpty)) ...<Widget>[
+                          visiblePeople.isEmpty)) ...<Widget>[
                     const SizedBox(height: _optionsToNearbyGap),
                     if (loadingPeople)
                       const Center(child: CircularProgressIndicator(
@@ -208,17 +215,18 @@ class InvitePeopleScreen extends StatelessWidget {
                         ),
                       ])
                     else
-                      const Text(
+                      Text(
+                        emptyPeopleMessage ??
                         'No eligible friends to invite. Existing members and '
                         'pending invitations are excluded.',
                         textAlign: TextAlign.center,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontFamily: AppTypography.fontFamily,
                           color: AppColors.textMuted,
                         ),
                       ),
                   ],
-                  if (nearbyPeople.isNotEmpty) ...[
+                  if (visiblePeople.isNotEmpty) ...[
                   const SizedBox(height: _optionsToNearbyGap),
                   Text(
                     peopleHeading,
@@ -242,9 +250,9 @@ class InvitePeopleScreen extends StatelessWidget {
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     padding: EdgeInsets.zero,
-                    itemCount: nearbyPeople.length,
+                    itemCount: visiblePeople.length,
                     itemBuilder: (context, index) {
-                      final person = nearbyPeople[index];
+                      final person = visiblePeople[index];
                       return NearbyPersonTile(
                         tileKey: InvitePeopleKeys.person(index),
                         imageKey: InvitePeopleKeys.image(index),
