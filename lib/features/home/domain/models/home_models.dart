@@ -122,3 +122,13 @@ class MomentData {
   final bool? isSenderOnline;
   final Uint8List? encryptedImageBytes;
 }
+
+/// Real M5 Circle metadata; not an M4 friend/avatar surrogate.
+@immutable
+class HomeCircleSummaryData {
+  const HomeCircleSummaryData({required this.id,required this.name,
+    required this.memberCount,required this.role,this.colorValue});
+  final String id,name,role;
+  final int memberCount;
+  final String? colorValue;
+}
