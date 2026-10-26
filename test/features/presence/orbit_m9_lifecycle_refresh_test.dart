@@ -22,14 +22,20 @@ void main() {
       return {'data':{'state':'active'}};
     });
     final runtime=OrbitPresenceRuntime(repository:repository);
-    await runtime.start();
-    await runtime.watch(circle);
+    final started=runtime.start();
+    await tester.pump();
+    await started;
+    final watching=runtime.watch(circle);
+    await tester.pump();
+    await watching;
     expect(runtime.member(circle,alice)?.state,'active_now');
     await tester.pump(const Duration(seconds:21));
     await tester.pump();
     expect(circleReads,greaterThanOrEqualTo(2));
     expect(runtime.member(circle,alice),isNull);
-    await runtime.stop();
+    final stopped=runtime.stop();
+    await tester.pump();
+    await stopped;
   });
 
   testWidgets('unwatch prevents further snapshot reads', (tester) async {
@@ -39,8 +45,12 @@ void main() {
       return {'data':{'state':'active'}};
     });
     final runtime=OrbitPresenceRuntime(repository:repo);
-    await runtime.start();
-    await runtime.watch(circle);
+    final started=runtime.start();
+    await tester.pump();
+    await started;
+    final watching=runtime.watch(circle);
+    await tester.pump();
+    await watching;
     runtime.unwatch(circle);
     final before=reads;
     await tester.pump(const Duration(seconds:25));
