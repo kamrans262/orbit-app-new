@@ -112,6 +112,7 @@ class MomentData {
     this.senderAvatarPath,
     this.isSenderOnline,
     this.encryptedImageBytes,
+    this.mediaKind = 'image',
   });
 
   final String id;
@@ -121,6 +122,7 @@ class MomentData {
   final String? senderAvatarPath;
   final bool? isSenderOnline;
   final Uint8List? encryptedImageBytes;
+  final String mediaKind;
 }
 
 /// Real M5 Circle metadata; not an M4 friend/avatar surrogate.
