@@ -4,7 +4,17 @@ import 'package:orbit_ui/features/home/domain/models/home_models.dart';
 import 'package:orbit_ui/features/home/presentation/screens/home_screen.dart';
 import 'package:orbit_ui/features/home/presentation/widgets/home_circle_avatar_tile.dart';
 
-Widget buildHome({required VoidCallback onCircle, bool showCircles=true}) => MaterialApp(
+Widget buildHome({
+  required VoidCallback onCircle,
+  bool showCircles=true,
+  double textScale=1.0,
+}) => MaterialApp(
+  builder:(context, child)=>MediaQuery(
+    data:MediaQuery.of(context).copyWith(
+      textScaler:TextScaler.linear(textScale),
+    ),
+    child:child!,
+  ),
   home:HomeScreen(
     greetingName:'Authorized Member',useLiveDate:true,
     circleSummaries:const <HomeCircleSummaryData>[
@@ -61,6 +71,33 @@ void main(){
     expect(tester.takeException(),isNull);
   });
 
+  for (final scale in <double>[1.0, 1.5, 2.0, 3.0]) {
+    testWidgets(
+      'M8 circular My Circles rail has no RenderFlex overflow at ${scale}x text',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(320,568));
+        addTearDown(()=>tester.binding.setSurfaceSize(null));
+        await tester.pumpWidget(buildHome(onCircle:(){},textScale:scale));
+        await tester.pumpAndSettle();
+        await tester.scrollUntilVisible(
+          find.byKey(HomeKeys.circlesList),160,
+          scrollable:find.byType(Scrollable).first,
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Family'),findsOneWidget);
+        expect(find.text('3 members'),findsOneWidget);
+        final height=tester.getSize(find.byKey(HomeKeys.circlesList)).height;
+        if (scale==1.0) {
+          expect(height,122.0); // Matches original Home people avatar rail.
+        } else {
+          expect(height,greaterThan(122.0));
+        }
+        expect(tester.takeException(),isNull);
+      },
+    );
+  }
+
   testWidgets('Disabled Plans do not claim an empty deployed plan service', (tester) async {
     await tester.pumpWidget(buildHome(onCircle:(){}));
     await tester.pumpAndSettle();
@@ -71,9 +108,8 @@ void main(){
   testWidgets('M8 safe error banner and disabled Circle mode work on compact screen', (tester) async {
     await tester.binding.setSurfaceSize(const Size(320,568));
     addTearDown(()=>tester.binding.setSurfaceSize(null));
-    await tester.pumpWidget(MediaQuery(
-      data:const MediaQueryData(textScaler:TextScaler.linear(2.0)),
-      child:buildHome(onCircle:(){},showCircles:false),
+    await tester.pumpWidget(buildHome(
+      onCircle:(){},showCircles:false,textScale:2.0,
     ));
     await tester.pumpAndSettle();
     expect(find.text('Some Home sections could not be verified. Retry.'),
