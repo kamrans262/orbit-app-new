@@ -13,6 +13,7 @@ class SettingsListItem extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.iconWidget,
+    this.trailing,
     super.key,
   });
 
@@ -21,6 +22,7 @@ class SettingsListItem extends StatelessWidget {
 
   final IconData icon;
   final Widget? iconWidget;
+  final Widget? trailing;
   final String label;
   final VoidCallback onTap;
 
@@ -72,7 +74,7 @@ class SettingsListItem extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                const Icon(
+                trailing ?? const Icon(
                   Icons.chevron_right_rounded,
                   size: 22,
                   color: Color(0xFF94A3B8),
