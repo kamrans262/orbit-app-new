@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_ui/core/widgets/orbit_searchable_header.dart';
 import 'package:orbit_ui/core/widgets/app_circular_icon_button.dart';
+import 'package:orbit_ui/app/theme/app_colors.dart';
 
 void main() {
   testWidgets('search header opens, updates, clears and closes', (
@@ -65,7 +66,8 @@ void main() {
               icon: Icons.person_add_alt_outlined,
               size: 30,
               iconSize: 24,
-              iconColor: Colors.black,
+              iconColor: AppColors.primaryEnd,
+              iconGradient: AppColors.primaryGradient,
               onPressed: () => requests++,
             ),
           ],
@@ -79,7 +81,10 @@ void main() {
     for (final button in buttons) {
       expect(button.size, 30);
       expect(button.iconSize, 24);
-      expect(button.iconColor, Colors.black);
+    }
+    expect(buttons.first.iconColor, Colors.black); // Back remains black.
+    for (final action in buttons.skip(1)) {
+      expect(action.iconGradient, AppColors.primaryGradient);
     }
     expect(tester.takeException(), isNull);
 
@@ -94,8 +99,9 @@ void main() {
     for (final button in searchButtons) {
       expect(button.size, 30);
       expect(button.iconSize, 24);
-      expect(button.iconColor, Colors.black);
     }
+    expect(searchButtons.first.iconColor, Colors.black);
+    expect(searchButtons.last.iconGradient, AppColors.primaryGradient);
     await tester.tap(find.bySemanticsLabel('Close search'));
     await tester.pumpAndSettle();
     expect(find.byType(TextField), findsNothing);

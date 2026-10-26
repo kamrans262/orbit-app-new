@@ -404,14 +404,16 @@ class _HomeScreenState extends State<HomeScreen> {
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       slivers: <Widget>[
         const SliverToBoxAdapter(child: SizedBox(height: 20)),
-        if (widget.dashboardNotice != null)
-          SliverToBoxAdapter(child:_buildDashboardNotice()),
         SliverPadding(
           padding: const EdgeInsets.symmetric(
             horizontal: HomeScreen._horizontalPadding,
           ),
           sliver: SliverToBoxAdapter(child: _buildGreeting()),
         ),
+        // Keep the approved header first, even when an authorized M8/M7
+        // section cannot be verified. Do not conceal the retry action.
+        if (widget.dashboardNotice != null)
+          SliverToBoxAdapter(child: _buildDashboardNotice()),
         const SliverToBoxAdapter(
           child: SizedBox(height: HomeScreen._sectionGap),
         ),
@@ -612,9 +614,7 @@ class _HomeScreenState extends State<HomeScreen> {
               onPressed: _openFindFriends,
               icon: Icons.person_search_outlined,
               iconSize: 20,
-              iconGradient: const LinearGradient(
-                colors: <Color>[AppColors.primaryStart, AppColors.primaryEnd],
-              ),
+              iconGradient: AppColors.primaryGradient,
             ),
             const SizedBox(width: 10),
             AppCircularIconButton(
@@ -623,9 +623,7 @@ class _HomeScreenState extends State<HomeScreen> {
               onPressed: _handleNotificationPressed,
               icon: Icons.notifications_none_rounded,
               iconSize: 20,
-              iconGradient: const LinearGradient(
-                colors: <Color>[AppColors.primaryStart, AppColors.primaryEnd],
-              ),
+              iconGradient: AppColors.primaryGradient,
             ),
           ],
         ),

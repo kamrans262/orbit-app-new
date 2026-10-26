@@ -257,7 +257,8 @@ class _OrbitDiscoverFriendsScreenState extends State<OrbitDiscoverFriendsScreen>
                 semanticLabel: 'Friend discovery settings',
                 icon: Icons.manage_accounts_outlined,
                 iconSize: 24,
-                iconColor: Colors.black,
+                iconColor: AppColors.primaryEnd,
+                iconGradient: AppColors.primaryGradient,
                 size: 40,
                 onPressed: () => Navigator.of(context).push<void>(
                   AppFadeSlidePageRoute<void>(builder: (_) =>
