@@ -36,7 +36,7 @@ void main() {
       final fields = tester
           .widgetList<TextField>(find.byType(TextField))
           .toList();
-      expect(fields, hasLength(2));
+      expect(fields, hasLength(3)); // Name, username and optional bio.
       expect(fields[0].controller?.text, 'Emma Shan');
       expect(fields[1].controller?.text, 'Emma');
 
