@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_screen_header.dart';
+import '../../../../core/widgets/app_text_field.dart';
+import '../../../../core/widgets/orbit_searchable_header.dart';
 import '../../domain/models/nearby_person.dart';
 import '../widgets/invite_option_tile.dart';
 import '../widgets/nearby_person_tile.dart';
@@ -113,36 +115,22 @@ class InvitePeopleScreen extends StatelessWidget {
                       titleKey: InvitePeopleKeys.heading,
                     ),
                     const SizedBox(height: 20),
-                    TextField(
+                    KeyedSubtree(
                       key: InvitePeopleKeys.searchField,
-                      controller: searchController,
-                      focusNode: searchFocusNode,
-                      onChanged: onSearchChanged,
-                      textInputAction: TextInputAction.search,
-                      style: const TextStyle(
-                        fontFamily: AppTypography.fontFamily, fontSize: 15,
-                        color: Color(0xFF0F1724),
-                      ),
-                      decoration: InputDecoration(
-                        hintText: 'Search by name or username',
-                        hintStyle: const TextStyle(
-                          fontFamily: AppTypography.fontFamily,
-                          color: Color(0xFF94A3B8), fontSize: 15,
-                        ),
-                        prefixIcon: const Icon(Icons.search_rounded,
-                            color: Color(0xFF94A3B8)),
-                        filled: true, fillColor: Colors.white,
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 18, vertical: 16),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(40),
-                          borderSide: const BorderSide(color: Color(0xFFF0F0F0)),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(40),
-                          borderSide: const BorderSide(color: Color(0xFFF0F0F0)),
-                        ),
-                      ),
+                      child: searchController != null && searchFocusNode != null
+                          ? OrbitSearchField(
+                              controller: searchController!,
+                              focusNode: searchFocusNode!,
+                              placeholder: 'Search by name or username',
+                              autofocus: false,
+                              onChanged: onSearchChanged ?? (_) {},
+                            )
+                          : AppTextField(
+                              hintText: 'Search by name or username',
+                              prefixIcon: const Icon(Icons.search_rounded,
+                                  color: Color(0xFF94A3B8)),
+                              onChanged: onSearchChanged,
+                            ),
                     ),
                     const SizedBox(height: _bodyToOptionsGap),
                   ] else ...<Widget>[
