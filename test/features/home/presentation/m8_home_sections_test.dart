@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_ui/features/home/domain/models/home_models.dart';
 import 'package:orbit_ui/features/home/presentation/screens/home_screen.dart';
+import 'package:orbit_ui/features/home/presentation/widgets/home_circle_avatar_tile.dart';
 
 Widget buildHome({required VoidCallback onCircle, bool showCircles=true}) => MaterialApp(
   home:HomeScreen(
@@ -47,6 +48,14 @@ void main(){
     expect(find.text('Friends'),findsOneWidget);
     expect(find.text('Family'),findsOneWidget);
     expect(find.text('3 members'),findsOneWidget);
+    // M8 must reuse the originally approved Home circular-avatar widget,
+    // not a new rectangular or gradient Circle-card design.
+    expect(
+      find.ancestor(of:find.text('Family'),
+        matching:find.byType(HomeCircleAvatarTile)),
+      findsOneWidget,
+    );
+    expect(find.byIcon(Icons.groups_outlined),findsNothing);
     await tester.tap(find.text('Family'));
     expect(presses,1);
     expect(tester.takeException(),isNull);
