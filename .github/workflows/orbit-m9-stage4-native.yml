@@ -1,0 +1,59 @@
+name: Orbit M9 Stage 4 Android and iOS compile
+on:
+  push:
+    branches: [feature/m9-presence-flutter]
+    paths:
+      - '.github/workflows/orbit-m9-stage4-native.yml'
+      - 'lib/features/presence/**'
+      - 'lib/features/home/presentation/screens/orbit_live_home_screen.dart'
+      - 'lib/features/auth/data/orbit_identity_client.dart'
+      - 'lib/features/auth/presentation/widgets/orbit_session_welcome_gate.dart'
+      - 'lib/features/circles/presentation/screens/orbit_live_circle_detail_screen.dart'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: orbit-m9-stage4-platform
+  cancel-in-progress: true
+jobs:
+  android-m9-compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Install the existing pinned Android NDK
+        run: |
+          for attempt in 1 2 3; do
+            if "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" --install "ndk;28.2.13676358"; then
+              exit 0
+            fi
+            sudo rm -rf "${ANDROID_SDK_ROOT}/ndk/28.2.13676358"
+            if [ "$attempt" -eq 3 ]; then exit 1; fi
+            sleep 6
+          done
+      - name: Compile Flutter M9 Android debug with M9 code enabled
+        run: flutter build apk --debug --no-pub --dart-define=ORBIT_M9_PRESENCE_ENABLED=true
+  ios-m9-simulator-compile:
+    runs-on: macos-15
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Compile Flutter M9 iOS simulator without signing
+        run: flutter build ios --simulator --no-codesign --no-pub --dart-define=ORBIT_M9_PRESENCE_ENABLED=true
