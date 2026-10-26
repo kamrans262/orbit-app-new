@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:orbit_ui/features/auth/data/orbit_identity_client.dart';
 import 'package:orbit_ui/features/auth/presentation/screens/orbit_account_deletion_status_screen.dart';
 
@@ -27,9 +28,10 @@ class _FakeProfileRepository extends OrbitProfileSettingsRepository {
   Future<Map<String, dynamic>> loadProfile() async => Map<String, dynamic>.from(record);
 
   @override
-  Future<void> saveProfile(String name, String username, {String? bio}) async {
+  Future<void> saveProfile(String name, String username, {String? bio, String? avatarMediaId}) async {
     record = <String, dynamic>{...record, 'display_name': name,
-      'username': username, if (bio != null) 'bio': bio};
+      'username': username, if (bio != null) 'bio': bio,
+      if (avatarMediaId != null) 'avatar_media_id': avatarMediaId};
   }
 }
 
@@ -50,6 +52,18 @@ class _FakeDeletionClient extends OrbitIdentityClient {
 
 void main() {
   final repo = OrbitProfileSettingsRepository();
+
+  test('Profile maps decrypted owner avatar without exposing a public URL', () {
+    final bytes=Uint8List.fromList(<int>[255,216,255,217]);
+    final model=OrbitProfileSettingsRepository().fromProfile(<String,dynamic>{
+      'id':'2d184c7a-4f2a-40f6-8c48-a1fab1213456',
+      'display_name':'Real User','bio':'Private',
+      'avatar_media_id':'b0541eaa-9337-41ac-a3d9-9e6c692bc319',
+      '_avatar_bytes':bytes,
+    });
+    expect(model.imageBytes,same(bytes));
+    expect(model.imageUrl,isNull);
+  });
 
   test('Authenticated profile mapping never displays fabricated users or counts', () {
     final profile = repo.fromProfile(<String, dynamic>{

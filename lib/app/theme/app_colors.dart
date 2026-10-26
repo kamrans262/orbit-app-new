@@ -9,6 +9,10 @@ abstract final class AppColors {
   // Primary CTA gradient follows the Figma direction: pink -> purple.
   static const primaryStart = Color(0xFFED65C9);
   static const primaryEnd = Color(0xFF7C3AED);
+  /// Approved Orbit primary gradient for right-side header action glyphs.
+  static const primaryGradient = LinearGradient(
+    colors: <Color>[primaryStart, primaryEnd],
+  );
   static const pinkGlow = Color(0x29F43F8E); // 16% opacity.
 
   static const buttonShadow = Color(0x40000000); // 25% opacity.

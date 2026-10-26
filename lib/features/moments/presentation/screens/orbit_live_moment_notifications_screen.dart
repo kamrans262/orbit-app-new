@@ -143,7 +143,8 @@ class _OrbitLiveMomentNotificationsScreenState
             semanticLabel:'Mute Circle notifications',
             onPressed:()=>unawaited(_configureMute()),
             icon:Icons.notifications_off_outlined,
-            iconSize:20,size:40),
+            iconSize:20,size:40,
+            iconGradient:AppColors.primaryGradient),
         ]),
         const SizedBox(height:18),
         Expanded(child:_loading

@@ -259,7 +259,8 @@ class _CircleSettingScreenState extends State<CircleSettingScreen> {
             onPressed: widget.onManagePressed!,
             icon: Icons.more_horiz_rounded,
             iconSize: 24,
-            iconColor: Colors.black,
+            iconColor: AppColors.primaryEnd,
+            iconGradient: AppColors.primaryGradient,
           ),
       ],
     );

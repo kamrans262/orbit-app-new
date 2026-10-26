@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_ui/features/home/domain/models/home_models.dart';
+import 'package:orbit_ui/core/widgets/app_circular_icon_button.dart';
+import 'package:orbit_ui/app/theme/app_colors.dart';
 import 'package:orbit_ui/features/home/presentation/screens/home_screen.dart';
 import 'package:orbit_ui/features/home/presentation/widgets/home_circle_avatar_tile.dart';
 import 'package:orbit_ui/features/more_menu/presentation/widgets/more_menu_tile.dart';
@@ -49,6 +51,28 @@ Widget buildHome({
 );
 
 void main(){
+  testWidgets('Home header precedes retry notice and uses gradient icons',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390,844));
+    addTearDown(()=>tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(buildHome(onCircle:(){}));
+    await tester.pumpAndSettle();
+    final header = find.byKey(HomeKeys.greeting);
+    final notice = find.text('Some Home sections could not be verified. Retry.');
+    expect(header, findsOneWidget);
+    expect(notice, findsOneWidget);
+    expect(tester.getTopLeft(header).dy, lessThan(tester.getTopLeft(notice).dy));
+    final findFriends = tester.widget<AppCircularIconButton>(
+      find.byKey(HomeKeys.findFriendsButton),
+    );
+    final notifications = tester.widget<AppCircularIconButton>(
+      find.byKey(HomeKeys.notificationButton),
+    );
+    expect(findFriends.iconGradient, AppColors.primaryGradient);
+    expect(notifications.iconGradient, AppColors.primaryGradient);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('M8 uses original Orbit Menu row with Circle image and heart', (tester) async {
     await tester.binding.setSurfaceSize(const Size(390,844));
     addTearDown(()=>tester.binding.setSurfaceSize(null));

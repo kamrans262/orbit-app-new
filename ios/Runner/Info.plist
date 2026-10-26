@@ -66,6 +66,6 @@
     <key>NSContactsUsageDescription</key>
     <string>Orbit may access only a contact you choose to find friends. Contact discovery is optional.</string>
     <key>NSPhotoLibraryUsageDescription</key>
-    <string>Allow Orbit to select photos for chat messages.</string>
+    <string>Orbit lets you select photos to update your profile picture and create Moments.</string>
 </dict>
 </plist>

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../app/theme/app_typography.dart';
-import '../../../../core/widgets/app_bottom_navigation_bar.dart';
+import '../../../../app/theme/app_colors.dart';
 import '../../../../core/widgets/app_circular_icon_button.dart';
 import '../../domain/models/profile_models.dart';
 import 'profile_media_image.dart';
@@ -128,7 +128,8 @@ class ProfileSummaryHeader extends StatelessWidget {
                 icon: Icons.settings_outlined,
                 size: 30,
                 iconSize: 17,
-                iconColor: AppBottomNavigationBar.activeColor,
+                iconColor: AppColors.primaryEnd,
+                iconGradient: AppColors.primaryGradient,
                 semanticLabel: 'Settings',
               ),
             ),
@@ -151,6 +152,7 @@ class _ProfileAvatar extends StatelessWidget {
         child: ProfileMediaImage(
           assetPath: profile.imagePath,
           imageUrl: profile.imageUrl,
+          bytes: profile.imageBytes,
           width: 80,
           height: 80,
           fit: BoxFit.cover,

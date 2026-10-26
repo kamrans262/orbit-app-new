@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_typography.dart';
 import 'app_circular_icon_button.dart';
 
@@ -189,7 +190,8 @@ class OrbitSearchableHeader extends StatelessWidget {
             },
             icon: Icons.search_rounded,
             iconSize: compactTitle ? 24 : 20,
-            iconColor: compactTitle ? Colors.black : const Color(0xFF7C3AED),
+            iconColor: compactTitle ? Colors.black : AppColors.primaryEnd,
+            iconGradient: AppColors.primaryGradient,
             size: compactTitle ? 30 : 40,
           ),
         ),
@@ -236,7 +238,8 @@ class OrbitSearchableHeader extends StatelessWidget {
             onPressed: _closeSearch,
             icon: Icons.close,
             iconSize: compactTitle ? 24 : 20,
-            iconColor: compactTitle ? Colors.black : const Color(0xFF0F1724),
+            iconColor: compactTitle ? Colors.black : AppColors.primaryEnd,
+            iconGradient: AppColors.primaryGradient,
             size: compactTitle ? 30 : 40,
           ),
         ),

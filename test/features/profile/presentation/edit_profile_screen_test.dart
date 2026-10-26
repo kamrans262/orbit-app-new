@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_ui/features/profile/domain/models/edit_profile_models.dart';
@@ -35,7 +36,7 @@ void main() {
       final fields = tester
           .widgetList<TextField>(find.byType(TextField))
           .toList();
-      expect(fields, hasLength(2));
+      expect(fields, hasLength(3)); // Name, username and optional bio.
       expect(fields[0].controller?.text, 'Emma Shan');
       expect(fields[1].controller?.text, 'Emma');
 
@@ -46,6 +47,32 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('Photo picker previews without upload and submits bytes only on Save',
+      (tester) async {
+    UpdateProfileRequest? captured;
+    final bytes=Uint8List.fromList(<int>[255,216,255,217]);
+    await tester.pumpWidget(MaterialApp(home:EditProfileScreen(
+      profile:profile,
+      onPickPhoto:(_)=>Future<EditProfilePhotoSelection?>.value(
+        EditProfilePhotoSelection(
+          previewImage:MemoryImage(bytes),
+          profilePhotoBytes:bytes,
+        ),
+      ),
+      onSave:(request) async {captured=request;},
+    )));
+    await tester.tap(find.byKey(EditProfileKeys.changePhoto));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(EditProfileKeys.chooseGallery));
+    await tester.pumpAndSettle();
+    expect(captured,isNull);
+    await tester.tap(find.byKey(EditProfileKeys.saveButton));
+    await tester.pumpAndSettle();
+    expect(captured?.profilePhotoBytes,same(bytes));
+    expect(captured?.profileImageReference,isNull);
+    expect(tester.takeException(),isNull);
+  });
 
   testWidgets('Edit Profile validates and submits a backend-ready request', (
     tester,
