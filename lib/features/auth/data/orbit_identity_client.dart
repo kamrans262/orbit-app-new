@@ -536,12 +536,14 @@ class OrbitIdentityClient {
     String name,
     String username, {
     String? bio,
+    String? avatarMediaId,
   }) async {
     final result = await _send('PATCH', '/me/profile', protected: true,
         body: <String, Object?>{
           'display_name': name.trim(),
           'username': username.trim(),
           if (bio != null) 'bio': bio.trim(),
+          if (avatarMediaId != null) 'avatar_media_id': avatarMediaId,
         });
     _startupProfile = null;
     await _storage.delete(key: _profileCacheKey);

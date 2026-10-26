@@ -12,6 +12,7 @@ class ProfileData {
     required this.moments,
     this.imagePath,
     this.imageUrl,
+    this.imageBytes,
   });
 
   final String id;
@@ -22,6 +23,8 @@ class ProfileData {
   final int momentCount;
   final String? imagePath;
   final String? imageUrl;
+  /// Owner-only M6 avatar decrypted in RAM, not a public URL.
+  final Uint8List? imageBytes;
   final List<ProfileMomentData> moments;
 }
 

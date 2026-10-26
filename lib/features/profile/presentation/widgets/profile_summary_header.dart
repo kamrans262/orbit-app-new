@@ -152,6 +152,7 @@ class _ProfileAvatar extends StatelessWidget {
         child: ProfileMediaImage(
           assetPath: profile.imagePath,
           imageUrl: profile.imageUrl,
+          bytes: profile.imageBytes,
           width: 80,
           height: 80,
           fit: BoxFit.cover,

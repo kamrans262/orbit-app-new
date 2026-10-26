@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import '../../../../app/theme/app_typography.dart';
@@ -28,10 +29,12 @@ class EditProfilePhotoSelection {
   const EditProfilePhotoSelection({
     required this.previewImage,
     this.profileImageReference,
+    this.profilePhotoBytes,
   });
 
   final ImageProvider<Object> previewImage;
   final String? profileImageReference;
+  final Uint8List? profilePhotoBytes;
 }
 
 class EditProfileScreen extends StatefulWidget {
@@ -393,12 +396,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       return;
     }
 
-    final selection = await picker(source);
-    if (selection == null || !mounted) {
-      return;
+    try {
+      final selection = await picker(source);
+      if (selection == null || !mounted) return;
+      setState(() => _selectedPhoto = selection);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Could not select the photo. Check permissions and try again.'),
+        behavior: SnackBarBehavior.floating,
+      ));
     }
-
-    setState(() => _selectedPhoto = selection);
   }
 
   Future<void> _handleSave() async {
@@ -421,6 +429,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       username: _usernameController.text.trim(),
       bio: _bioController.text.trim(),
       profileImageReference: _selectedPhoto?.profileImageReference,
+      profilePhotoBytes: _selectedPhoto?.profilePhotoBytes,
     );
 
     setState(() => _isSaving = true);
@@ -490,6 +499,7 @@ class _ProfileAvatar extends StatelessWidget {
               ? ProfileMediaImage(
                   assetPath: profile.imagePath,
                   imageUrl: profile.imageUrl,
+                  bytes: profile.imageBytes,
                   width: size,
                   height: size,
                   fit: BoxFit.cover,
