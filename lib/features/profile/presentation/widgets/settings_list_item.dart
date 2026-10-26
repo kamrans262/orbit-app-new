@@ -14,6 +14,7 @@ class SettingsListItem extends StatelessWidget {
     required this.onTap,
     this.iconWidget,
     this.trailing,
+    this.enabled = true,
     super.key,
   });
 
@@ -23,6 +24,7 @@ class SettingsListItem extends StatelessWidget {
   final IconData icon;
   final Widget? iconWidget;
   final Widget? trailing;
+  final bool enabled;
   final String label;
   final VoidCallback onTap;
 
@@ -30,11 +32,12 @@ class SettingsListItem extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       button: true,
+      enabled: enabled,
       label: label,
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: onTap,
+          onTap: enabled ? onTap : null,
           borderRadius: BorderRadius.circular(21),
           splashColor: Colors.transparent,
           highlightColor: Colors.transparent,
