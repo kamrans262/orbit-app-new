@@ -69,20 +69,24 @@ class _OrbitLiveCircleManageScreenState extends State<OrbitLiveCircleManageScree
     }
   }
 
-  void _errorNotice(Object error) {
+  void _notice(String message) {
     if (!mounted) return;
     showOrbitPopupModal<void>(
       context: context,
       builder: (dialog) => OrbitPopupModal(
         title: 'Circle',
-        description: error is OrbitIdentityException
-            ? error.message : 'Circle action failed. Please retry.',
+        description: message,
         primaryAction: OrbitPopupPrimaryButton(
           label: 'OK',
           onPressed: () => Navigator.of(dialog).pop(),
         ),
       ),
     );
+  }
+
+  void _errorNotice(Object error) {
+    _notice(error is OrbitIdentityException
+        ? error.message : 'Circle action failed. Please retry.');
   }
 
   Future<bool> _confirm(String title,String text,String action) =>
@@ -132,8 +136,7 @@ class _OrbitLiveCircleManageScreenState extends State<OrbitLiveCircleManageScree
       await _repo.choosePrimary(_circle.id);
       if(mounted) {
         setState(() {_primaryCircleId=_circle.id;_primaryFallback=false;});
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content:Text('Primary Circle updated.')));
+        _notice('Primary Circle updated.');
       }
     } catch(e){_errorNotice(e);}
   }
@@ -146,8 +149,7 @@ class _OrbitLiveCircleManageScreenState extends State<OrbitLiveCircleManageScree
         _primaryCircleId=resolved['circle_id'] as String?;
         _primaryFallback=resolved['fallback']==true;
       });
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content:Text('Manual primary selection cleared. Default Circle restored.')));
+      _notice('Manual primary selection cleared. Default Circle restored.');
     }catch(e){_errorNotice(e);}
   }
 
