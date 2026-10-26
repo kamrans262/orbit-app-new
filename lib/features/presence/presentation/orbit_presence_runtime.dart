@@ -197,6 +197,10 @@ class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
     }
     final circle=event['circle_id'];
     if (circle is! String || !_watches.contains(circle)) return;
+    // M13 typing frames must never change the independently authorized
+    // Presence snapshot or erase legitimate current-status labels.
+    if (type!='presence.changed' && type!='presence.clear'
+        && type!='presence.circle_clear') return;
     // Invalidate first: even an old queued event cannot resurrect a revoked dot.
     _circleVersions[circle]=(_circleVersions[circle] ?? 0)+1;
     _circles.remove(circle);

@@ -1,7 +1,23 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_ui/features/presence/data/orbit_presence_repository.dart';
+import 'package:orbit_ui/features/presence/data/orbit_presence_socket.dart';
 import 'package:orbit_ui/features/presence/data/orbit_presence_rollout.dart';
 import 'package:orbit_ui/features/presence/presentation/orbit_presence_runtime.dart';
+
+class _MockPresenceSocket extends OrbitPresenceSocket {
+  final controller=StreamController<Map<String,dynamic>>.broadcast();
+  @override
+  Stream<Map<String,dynamic>> get events => controller.stream;
+  @override
+  bool get connected => true;
+  @override
+  Future<void> connect() async {}
+  @override
+  Future<void> stop() async {}
+  Future<void> closeMock() => controller.close();
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -75,6 +91,64 @@ void main() {
       await runtime.start();
       await runtime.watch(circle);
       expect(runtime.member(circle,alice),isNull);
+    } finally {
+      await runtime.stop();
+    }
+  });
+
+  test('typing frames never erase an authorized online Presence snapshot', () async {
+    final socket=_MockPresenceSocket();
+    var reads=0;
+    final repo=OrbitPresenceRepository(request:(method,path,{body}) async {
+      if (path.endsWith('/presence')) {
+        reads++;
+        return {'data':{'circle_id':circle,'members':[{
+          'user_id':alice,'state':'active_now',
+          'expires_at':DateTime.now().toUtc()
+              .add(const Duration(seconds:90)).toIso8601String(),
+        }]}};
+      }
+      return {'data':{'state':'active'}};
+    });
+    final runtime=OrbitPresenceRuntime(repository:repo,socket:socket);
+    try {
+      await runtime.start();
+      await runtime.watch(circle);
+      expect(runtime.member(circle,alice)?.state,'active_now');
+      socket.controller.add({'type':'presence.typing','circle_id':circle,
+        'subject_id':alice,'typing':true});
+      await Future<void>.delayed(Duration.zero);
+      expect(runtime.member(circle,alice)?.state,'active_now');
+      expect(reads,1);
+    } finally {
+      await runtime.stop();
+      await socket.closeMock();
+    }
+  });
+
+  test('an input arriving during an idle heartbeat queues a fresh active beat',
+      () async {
+    var clock=DateTime.utc(2026,10,27,10);
+    final pending=Completer<Map<String,dynamic>>();
+    final states=<String>[];
+    final repo=OrbitPresenceRepository(request:(method,path,{body}) async {
+      if (path.endsWith('/heartbeat')) {
+        final state=body?['state'] as String;
+        states.add(state);
+        if (state=='idle') return pending.future;
+      }
+      return {'data':{'state':'active'}};
+    });
+    final runtime=OrbitPresenceRuntime(repository:repo,clock:()=>clock);
+    try {
+      await runtime.start();
+      clock=clock.add(const Duration(seconds:61));
+      final idle=runtime.heartbeatNow();
+      runtime.recordActivity();
+      pending.complete({'data':{'state':'idle'}});
+      await idle;
+      await Future<void>.delayed(Duration.zero);
+      expect(states,['active','idle','active']);
     } finally {
       await runtime.stop();
     }
