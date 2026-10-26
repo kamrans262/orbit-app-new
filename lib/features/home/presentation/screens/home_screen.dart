@@ -69,6 +69,7 @@ class HomeScreen extends StatefulWidget {
     this.isLoading = false,
     this.useLiveDate = false,
     this.enableDemoCircleNavigation = false,
+    this.enableDemoOrbitNavigation = false,
     super.key,
   });
 
@@ -201,6 +202,7 @@ class HomeScreen extends StatefulWidget {
       onTabSelected: onTabSelected ?? (index) {},
       onAddPressed: onAddPressed ?? () {},
       enableDemoCircleNavigation:enableDemoCircleNavigation,
+      enableDemoOrbitNavigation:enableDemoCircleNavigation,
     );
   }
 
@@ -237,6 +239,7 @@ class HomeScreen extends StatefulWidget {
   /// Preserves approved design-preview fixture behavior but never opens
   /// fabricated Circle rosters in authenticated production navigation.
   final bool enableDemoCircleNavigation;
+  final bool enableDemoOrbitNavigation;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -308,6 +311,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _openOrbit() {
+    if (!widget.enableDemoOrbitNavigation) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content:Text('Explore is not available yet. No location was shared.'),
+      ));
+      return;
+    }
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (routeContext) => OrbitScreen.demo(
@@ -334,6 +343,12 @@ class _HomeScreenState extends State<HomeScreen> {
               return;
             }
             if (momentsIndex == 1) {
+              if (!widget.enableDemoOrbitNavigation) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                  content:Text('Explore is not available yet. No location was shared.'),
+                ));
+                return;
+              }
               Navigator.of(routeContext).pushReplacement(
                 MaterialPageRoute<void>(
                   builder: (orbitContext) => OrbitScreen.demo(
@@ -536,6 +551,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final trimmedName = widget.greetingName.trim();
     final displayName = trimmedName.isEmpty ? 'there' : trimmedName;
     final today=DateTime.now();
+    final daypart = !widget.useLiveDate || today.hour<12 ? 'Morning'
+        : today.hour<17 ? 'Afternoon' : 'Evening';
     final weekdays=const ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
     final months=const ['January','February','March','April','May','June',
       'July','August','September','October','November','December'];
@@ -596,7 +613,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         const SizedBox(height: 14),
         AppEmojiSafeText(
-          'Good Morning, $displayName \u{1F44B}',
+          'Good $daypart, $displayName \u{1F44B}',
           key: HomeKeys.greeting,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
