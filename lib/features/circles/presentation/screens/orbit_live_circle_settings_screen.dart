@@ -154,6 +154,7 @@ class _OrbitLiveCircleSettingsScreenState extends State<OrbitLiveCircleSettingsS
       child: CircleSettingScreen(
       settings:_pending ?? _settings,
       sharingControlsEnabled:false,
+      sharingControlsReadOnly:true,
       archiveInsteadOfDelete:true,
       showDestructiveAction:_circle.can('archive'),
       onBack:_back,
