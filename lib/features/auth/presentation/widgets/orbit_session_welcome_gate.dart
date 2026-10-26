@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../data/orbit_identity_client.dart';
+import '../../../presence/presentation/orbit_presence_runtime.dart';
+import '../../../presence/data/orbit_presence_rollout.dart';
 
 /// Prevents demo/mock navigation from being mistaken for a verified login.
 class OrbitSessionWelcomeGate extends StatefulWidget {
@@ -85,7 +87,8 @@ class _OrbitProtectedHomeState extends State<OrbitProtectedHome> {
           );
         }
         if (snapshot.data == OrbitRestoreState.authenticated) {
-          return widget.home;
+          return OrbitPresenceRollout.enabled
+            ? OrbitPresenceLifecycle(child:widget.home) : widget.home;
         }
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
