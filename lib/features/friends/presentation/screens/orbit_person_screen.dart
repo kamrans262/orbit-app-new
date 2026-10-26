@@ -196,6 +196,7 @@ class _OrbitPersonScreenState extends State<OrbitPersonScreen> {
                     ? const Icon(Icons.check_circle_outline_rounded,
                         color: Color(0xFF7C3AED), size: 22)
                     : null,
+                enabled: !_busy && !friend,
                 onTap: _busy || friend ? () {}
                     : outgoing ? () => _openRequests('outgoing')
                     : incoming ? () => _openRequests('incoming')
@@ -206,6 +207,7 @@ class _OrbitPersonScreenState extends State<OrbitPersonScreen> {
                 SettingsListItem(
                   icon: Icons.person_remove_outlined,
                   label: 'Remove friend',
+                  enabled: !_busy,
                   onTap: _busy ? () {} : () async {
                     if (await _confirm('Remove friend?',
                         'This will end your friendship.', 'Remove')) {
@@ -216,7 +218,8 @@ class _OrbitPersonScreenState extends State<OrbitPersonScreen> {
                 ),
               SettingsListItem(
                 icon: Icons.block, label: 'Block user',
-                onTap: _busy ? () {} : () async {
+                enabled: !_busy,
+                  onTap: _busy ? () {} : () async {
                   if (await _confirm('Block ${_person.name}?',
                       'This removes the friendship and stops protected '
                       'interactions. Unblocking will not restore the friendship.',
