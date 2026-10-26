@@ -40,7 +40,7 @@ class HomeCircleSummaryTile extends StatelessWidget {
       ),
       // Original Orbit heart. Decorative and unselected until favorites
       // are actually supported by the server — no fake persistent toggle.
-      trailingWidget: const Semantics(
+      trailingWidget: Semantics(
         label: 'Circle favorites unavailable',
         child: Icon(
           Icons.favorite_border_rounded,
