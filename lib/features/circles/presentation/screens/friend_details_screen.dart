@@ -241,7 +241,7 @@ class _FriendDetailsScreenState extends State<FriendDetailsScreen> {
               ),
               const SliverToBoxAdapter(child:SizedBox(height:_sectionGap)),
             ],
-            if(widget.momentsTabBuilder!=null &&
+            if(!widget.liveInviteMode && widget.momentsTabBuilder!=null &&
                widget.viewState==FriendDetailsViewState.loaded) ...<Widget>[
               SliverPadding(
                 padding:const EdgeInsets.symmetric(horizontal:_horizontalPadding),
@@ -264,7 +264,8 @@ class _FriendDetailsScreenState extends State<FriendDetailsScreen> {
               ),
               const SliverToBoxAdapter(child:SizedBox(height:_sectionGap)),
             ],
-            if (widget.showGroupSegment && !_showingMoments) ...<Widget>[
+            if (widget.showGroupSegment &&
+                (widget.liveInviteMode || !_showingMoments)) ...<Widget>[
               SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal:_horizontalPadding),
                 sliver: SliverToBoxAdapter(
@@ -420,7 +421,8 @@ class _FriendDetailsScreenState extends State<FriendDetailsScreen> {
           ),
         ];
       case FriendDetailsViewState.loaded:
-        if(_showingMoments && widget.momentsTabBuilder!=null){
+        if(!widget.liveInviteMode && _showingMoments &&
+           widget.momentsTabBuilder!=null){
           return <Widget>[SliverPadding(
             padding:const EdgeInsets.symmetric(horizontal:_horizontalPadding),
             sliver:SliverToBoxAdapter(
