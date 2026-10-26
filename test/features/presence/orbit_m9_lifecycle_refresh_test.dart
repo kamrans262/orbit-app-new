@@ -38,6 +38,29 @@ void main() {
     await stopped;
   });
 
+  testWidgets('foreground idle is based on touch inactivity, not network uptime',
+      (tester) async {
+    final states=<String>[];
+    final repo=OrbitPresenceRepository(request:(method,path,{body}) async {
+      if (path.endsWith('/heartbeat')) states.add(body?['state'] as String);
+      return {'data':{'state':'active'}};
+    });
+    final runtime=OrbitPresenceRuntime(repository:repo);
+    final start=runtime.start();
+    await tester.pump();
+    await start;
+    expect(states.first,'active');
+    await tester.pump(const Duration(seconds:80));
+    await tester.pump();
+    expect(states,contains('idle'));
+    runtime.recordActivity();
+    await tester.pump();
+    expect(states.last,'active');
+    final end=runtime.stop();
+    await tester.pump();
+    await end;
+  });
+
   testWidgets('unwatch prevents further snapshot reads', (tester) async {
     var reads=0;
     final repo=OrbitPresenceRepository(request:(method,path,{body}) async {
