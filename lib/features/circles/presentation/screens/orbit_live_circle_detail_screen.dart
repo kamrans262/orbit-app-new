@@ -16,6 +16,9 @@ import 'orbit_live_circle_settings_screen.dart';
 import 'orbit_live_invite_member_screen.dart';
 import '../../../profile/presentation/screens/orbit_live_profile_moments.dart';
 import '../../../moments/data/orbit_m7_rollout.dart';
+import '../../../presence/data/orbit_presence_rollout.dart';
+import '../../../presence/presentation/orbit_presence_runtime.dart';
+import '../../../presence/presentation/orbit_circle_presence_settings_screen.dart';
 
 class OrbitLiveCircleDetailScreen extends StatefulWidget {
   const OrbitLiveCircleDetailScreen({required this.circleId,super.key,this.repository,this.changeSource});
@@ -42,6 +45,9 @@ class _OrbitLiveCircleDetailScreenState extends State<OrbitLiveCircleDetailScree
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    if (OrbitPresenceRollout.enabled) {
+      OrbitPresenceRuntime.instance.addListener(_presenceChanged);
+    }
     if (widget.changeSource == null) {
       OrbitM5FirebaseChangeSource.instance.setBootstrap(_repo.realtimeBootstrap);
     }
@@ -69,8 +75,16 @@ class _OrbitLiveCircleDetailScreenState extends State<OrbitLiveCircleDetailScree
     _epoch++;
     _authorizationRefresh?.cancel();
     _invalidationSubscription?.cancel();
+    if (OrbitPresenceRollout.enabled) {
+      OrbitPresenceRuntime.instance.removeListener(_presenceChanged);
+      OrbitPresenceRuntime.instance.unwatch(widget.circleId);
+    }
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  void _presenceChanged() {
+    if (mounted && !_loading) setState(() {});
   }
 
   @override
@@ -93,10 +107,16 @@ class _OrbitLiveCircleDetailScreenState extends State<OrbitLiveCircleDetailScree
       }
       if(!mounted || epoch!=_epoch) return;
       setState(() {_circle=circle; _members=members; _loading=false;});
+      if (OrbitPresenceRollout.enabled && OrbitPresenceRuntime.instance.started) {
+        unawaited(OrbitPresenceRuntime.instance.watch(widget.circleId));
+      }
     } catch (_) {
       if(!mounted || epoch!=_epoch) return;
       setState(() {
         _circle=null;_members=const [];
+        if (OrbitPresenceRollout.enabled) {
+          OrbitPresenceRuntime.instance.unwatch(widget.circleId);
+        }
         _error='Circle access could not be verified. Reconnect or return to My Circles.';
         _loading=false;
       });
@@ -164,15 +184,28 @@ class _OrbitLiveCircleDetailScreenState extends State<OrbitLiveCircleDetailScree
             title: 'Role: ${member.role.toUpperCase()}',
           ),
           const SizedBox(height: 10),
-          const AppActionRow(
+          AppActionRow(
             leadingIcon: Icons.lock_outline_rounded,
             iconBackgroundColor: Color(0xFFF2EAFE),
             leadingIconColor: AppColors.primaryEnd,
-            title: 'Live presence and location are private',
+            title: OrbitPresenceRollout.enabled
+              ? (OrbitPresenceRuntime.instance
+                  .member(widget.circleId,member.id)?.labelAt(DateTime.now())
+                   ?? 'Presence not shared • location private')
+              : 'Live presence and location are private',
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _openPresenceSettings() async {
+    final circle=_circle;
+    if (circle==null || !OrbitPresenceRollout.enabled) return;
+    await Navigator.of(context).push<void>(AppFadeSlidePageRoute<void>(
+      builder:(_)=>OrbitCirclePresenceSettingsScreen(
+        circleId:circle.id,circleName:circle.name)));
+    if (mounted) await _refresh(silent:true);
   }
 
   Future<void> _openInvite() async {
@@ -205,7 +238,12 @@ class _OrbitLiveCircleDetailScreenState extends State<OrbitLiveCircleDetailScree
       circleName: _circle?.name ?? 'Circle',
       members: _members.map((p) => FriendMemberData(
         id:p.id,name:p.name,
-        status:'${p.username.isEmpty ? p.role : '@${p.username} • ${p.role}'}',
+        status: [
+          p.username.isEmpty ? p.role : '@${p.username} • ${p.role}',
+          if (OrbitPresenceRollout.enabled)
+            OrbitPresenceRuntime.instance.member(widget.circleId,p.id)
+                ?.labelAt(DateTime.now()),
+        ].whereType<String>().join(' • '),
         imagePath:null,
         onTap:()=>_memberPreview(p),
       )).toList(growable:false),
@@ -230,14 +268,27 @@ class _OrbitLiveCircleDetailScreenState extends State<OrbitLiveCircleDetailScree
       onRetry:_refresh,
     ),
     if(!_loading && _circle!=null)
-      Positioned(right:20,bottom:25,
-        child: FloatingActionButton.extended(
-          heroTag:'m5-circle-settings',
-          backgroundColor:AppColors.background,
-          foregroundColor:const Color(0xFF7C3AED),
-          onPressed:_openSettings,
-          label:const Text('Circle settings'),
-          icon:const Icon(Icons.settings_outlined),
-        )),
+      Positioned(right:20,bottom:25, child: Column(
+        mainAxisSize:MainAxisSize.min,
+        crossAxisAlignment:CrossAxisAlignment.end,
+        children:[
+          if (OrbitPresenceRollout.enabled) ...[
+            FloatingActionButton.extended(
+              heroTag:'m9-circle-presence',
+              backgroundColor:AppColors.background,
+              foregroundColor:AppColors.primaryEnd,
+              onPressed:_openPresenceSettings,
+              label:const Text('Presence'),
+              icon:const Icon(Icons.visibility_outlined)),
+            const SizedBox(height:12),
+          ],
+          FloatingActionButton.extended(
+            heroTag:'m5-circle-settings',
+            backgroundColor:AppColors.background,
+            foregroundColor:AppColors.primaryEnd,
+            onPressed:_openSettings,
+            label:const Text('Circle settings'),
+            icon:const Icon(Icons.settings_outlined)),
+        ])),
   ]);
 }
