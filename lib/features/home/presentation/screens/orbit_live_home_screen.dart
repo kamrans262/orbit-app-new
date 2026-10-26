@@ -16,6 +16,8 @@ import '../../../moments/presentation/screens/orbit_live_moments_screen.dart';
 import '../../../moments/presentation/screens/orbit_live_moment_notifications_screen.dart';
 import '../../data/orbit_dashboard_repository.dart';
 import '../../data/orbit_m8_rollout.dart';
+import '../../../presence/data/orbit_presence_rollout.dart';
+import '../../../presence/presentation/orbit_presence_runtime.dart';
 import '../../domain/models/home_models.dart';
 import 'home_screen.dart';
 
@@ -50,6 +52,7 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
   final Map<String,OrbitPerson> _peopleById={};
   final Map<String,OrbitLiveMoment> _byId={};
   final Map<String,String> _authors={};
+  final Set<String> _presenceCircles=<String>{};
   String _name='',_owner='';
   String? _notice;
   bool _showCircles=false,_loading=false;
@@ -61,6 +64,9 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
   void initState(){
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    if (OrbitPresenceRollout.enabled) {
+      OrbitPresenceRuntime.instance.addListener(_presenceChanged);
+    }
     _pushEvents=OrbitMomentPushRuntime.instance.updates.listen((_){
       if(mounted)unawaited(_reload());
     });
@@ -73,6 +79,43 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
           ModalRoute.of(context)?.isCurrent==true) unawaited(_reload());
     });
     unawaited(_reload());
+  }
+
+  void _presenceChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _syncPresenceCircles() {
+    if (!OrbitPresenceRollout.enabled || !OrbitPresenceRuntime.instance.started) return;
+    final wanted=_circleCards.take(8).map((c)=>c.id).toSet();
+    for(final id in _presenceCircles.difference(wanted).toList()) {
+      OrbitPresenceRuntime.instance.unwatch(id,source:'home');
+      _presenceCircles.remove(id);
+    }
+    for(final id in wanted.difference(_presenceCircles)) {
+      _presenceCircles.add(id);
+      unawaited(OrbitPresenceRuntime.instance.watch(id,source:'home'));
+    }
+  }
+
+  void _dropHomePresence() {
+    if (!OrbitPresenceRollout.enabled) return;
+    for (final id in _presenceCircles.toList()) {
+      OrbitPresenceRuntime.instance.unwatch(id,source:'home');
+    }
+    _presenceCircles.clear();
+  }
+
+  List<FavoritePersonData> get _peopleWithPresence {
+    if (!OrbitPresenceRollout.enabled) return _people;
+    return _people.map((person) {
+      final state=OrbitPresenceRuntime.instance
+          .memberInCircles(_presenceCircles,person.id);
+      return FavoritePersonData(id:person.id,name:person.name,
+        imagePath:person.imagePath,isFavorite:person.isFavorite,
+        status:state?.labelAt(DateTime.now()) ?? person.status,
+        isOnline:state?.state=='active_now' ? true : null);
+    }).toList(growable:false);
   }
 
   void _clearProtected(){
@@ -107,6 +150,10 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
   void dispose(){
     ++_epoch;
     _revalidation?.cancel();
+    if (OrbitPresenceRollout.enabled) {
+      OrbitPresenceRuntime.instance.removeListener(_presenceChanged);
+      _dropHomePresence();
+    }
     unawaited(_pushEvents?.cancel());
     if(OrbitM7Rollout.enabled) unawaited(OrbitMomentPushRuntime.instance.stop());
     WidgetsBinding.instance.removeObserver(this);
@@ -134,6 +181,7 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
         return;
       }
       if(_owner!=owner){
+        _dropHomePresence();
         // Account switch must purge all private in-memory cards before fetch.
         setState((){
           _clearProtected();
@@ -194,17 +242,17 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
             id:c.id,name:c.name,role:c.role,memberCount:c.memberCount,
             colorValue:c.colorValue)).toList(growable:false);
         }
-        if(mounted&&serial==_epoch&&_owner==owner)setState((){
-          _showCircles=show;
-          _circleCards=list;
-        });
+        if(mounted&&serial==_epoch&&_owner==owner) {
+          setState(() {_showCircles=show; _circleCards=list;});
+          _syncPresenceCircles();
+        }
       }catch(e){
         if(_denied(e))rethrow;
         if(e is! OrbitIdentityException || e.statusCode!=404)partialUnavailable=true;
-        if(mounted&&serial==_epoch)setState((){
-          _circleCards=const [];
-          _showCircles=false;
-        });
+        if(mounted&&serial==_epoch) {
+          setState(() {_circleCards=const []; _showCircles=false;});
+          _syncPresenceCircles();
+        }
       }
 
       try {
@@ -297,6 +345,7 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
           if(_denied(e)){_owner='';_name='';}
         });
         if(_denied(e)){
+          _dropHomePresence();
           try{await _identity.clearDashboardSafeShell();}catch(_){}
         }
       }
@@ -351,7 +400,7 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
         iconColor:Color(0xFF16B88B),iconBackground:Color(0xFFE2F8F2)),
     ],
     upcomingPlans:const <UpcomingPlanData>[],promoBanner:null,
-    favoritePeople:_people,recentMoments:_recent,
+    favoritePeople:_peopleWithPresence,recentMoments:_recent,
     onNotificationPressed:(){
       Navigator.of(context).push<void>(MaterialPageRoute(
         builder:(_)=>const OrbitLiveMomentNotificationsScreen()));
