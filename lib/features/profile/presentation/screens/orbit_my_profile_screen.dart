@@ -1,7 +1,11 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../../auth/data/orbit_identity_client.dart';
+import '../../../media/data/orbit_media_crypto.dart';
 import '../../data/orbit_profile_settings_repository.dart';
 import '../../domain/models/edit_profile_models.dart';
 import '../../domain/models/profile_models.dart';
@@ -50,26 +54,40 @@ class _OrbitMyProfileScreenState extends State<OrbitMyProfileScreen> {
           initialUsername: username,
           initialBio: profile.bio,
           onBack: () => Navigator.of(editContext).pop(),
-          onPickPhoto: (_) async {
-            ScaffoldMessenger.of(editContext).showSnackBar(const SnackBar(
-              content: Text('Photo uploads need the encrypted Media module and are not available yet.'),
-            ));
-            return null;
+          onPickPhoto: (source) async {
+            final picked=await ImagePicker().pickImage(
+              source:source==EditProfilePhotoSource.camera
+                  ? ImageSource.camera : ImageSource.gallery,
+              maxWidth:1440,maxHeight:1440,imageQuality:85,
+            );
+            if(picked==null)return null;
+            final bytes=await picked.readAsBytes();
+            if(bytes.isEmpty||bytes.length>OrbitMediaFormat.imageLimit) {
+              throw const FormatException('Photo must be smaller than 25 MB.');
+            }
+            return EditProfilePhotoSelection(
+              previewImage:MemoryImage(Uint8List.fromList(bytes)),
+              profilePhotoBytes:bytes,
+            );
           },
           onSave: (request) async {
-            if (request.profileImageReference != null) {
-              throw const EditProfileSaveException(
-                message: 'Profile photo uploads are not enabled yet.');
-            }
             try {
+              String? avatarMediaId;
+              if(request.profilePhotoBytes!=null) {
+                avatarMediaId=await _repo.uploadAvatar(request.profilePhotoBytes!);
+              }
               await _repo.saveProfile(request.fullName, request.username,
-                  bio: request.bio);
+                  bio: request.bio, avatarMediaId:avatarMediaId);
             } on OrbitIdentityException catch (error) {
               throw EditProfileSaveException(
                 message: error.message,
                 usernameError: error.statusCode == 422
                     ? 'Please check this username for availability and format.'
                     : null,
+              );
+            } catch (_) {
+              throw const EditProfileSaveException(
+                message: 'Photo could not be saved. Check M6 Media on the server and retry.',
               );
             }
             if (!editContext.mounted || !settingsContext.mounted) return;
