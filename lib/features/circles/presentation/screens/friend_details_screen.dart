@@ -33,6 +33,9 @@ class FriendDetailsScreen extends StatefulWidget {
     required this.groups,
     required this.onBack,
     required this.onAddMember,
+    this.onSettingsPressed,
+    this.onPresencePressed,
+    this.favoriteChangesEnabled = true,
     this.liveInviteMode = false,
     this.showAddMemberButton = true,
     this.showGroupSegment = true,
@@ -148,6 +151,9 @@ class FriendDetailsScreen extends StatefulWidget {
   final List<CircleGroupData> groups;
   final VoidCallback onBack;
   final VoidCallback onAddMember;
+  final VoidCallback? onSettingsPressed;
+  final VoidCallback? onPresencePressed;
+  final bool favoriteChangesEnabled;
   final bool liveInviteMode;
   final bool showAddMemberButton;
   final bool showGroupSegment;
@@ -305,6 +311,28 @@ class _FriendDetailsScreenState extends State<FriendDetailsScreen> {
             titleKey: FriendDetailsKeys.title,
           ),
         ),
+        if (widget.onPresencePressed != null) ...<Widget>[
+          const SizedBox(width: 10),
+          AppCircularIconButton(
+            semanticLabel: 'Circle presence',
+            onPressed: widget.onPresencePressed!,
+            icon: Icons.visibility_outlined,
+            iconSize: 24,
+            iconColor: AppColors.primaryEnd,
+            iconGradient: AppColors.primaryGradient,
+          ),
+        ],
+        if (widget.onSettingsPressed != null) ...<Widget>[
+          const SizedBox(width: 10),
+          AppCircularIconButton(
+            semanticLabel: 'Circle settings',
+            onPressed: widget.onSettingsPressed!,
+            icon: Icons.settings_outlined,
+            iconSize: 24,
+            iconColor: AppColors.primaryEnd,
+            iconGradient: AppColors.primaryGradient,
+          ),
+        ],
         if (widget.showAddMemberButton) ...<Widget>[
           const SizedBox(width: 10),
           AppCircularIconButton(
@@ -442,6 +470,7 @@ class _FriendDetailsScreenState extends State<FriendDetailsScreen> {
                 onTap: member.onTap ?? () {},
                 onFavoritePressed: () => _toggleMemberFavorite(memberIndex),
                 showFavoriteAction:widget.showFavoriteActions,
+                favoriteEnabled:widget.favoriteChangesEnabled,
               ),
             );
           }, childCount: childCount),
