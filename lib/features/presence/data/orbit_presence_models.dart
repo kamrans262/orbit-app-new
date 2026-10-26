@@ -4,11 +4,13 @@ import 'package:flutter/foundation.dart';
 @immutable
 class OrbitPresenceMember {
   const OrbitPresenceMember({required this.userId, required this.state,
-    required this.expiresAt, this.observedAt});
+    required this.expiresAt, this.observedAt, this.recentUntil});
   final String userId;
   final String state;
   final DateTime expiresAt;
   final DateTime? observedAt;
+  // Ephemeral hint only; never persisted or used as a historical last-seen.
+  final DateTime? recentUntil;
 
   static OrbitPresenceMember fromJson(Map<String, dynamic> json) {
     final id = json['user_id'];
@@ -20,13 +22,19 @@ class OrbitPresenceMember {
     }
     return OrbitPresenceMember(userId: id, state: state,
       expiresAt: expires.toUtc(),
-      observedAt: DateTime.tryParse(json['observed_at'] as String? ?? '')?.toUtc());
+      observedAt: DateTime.tryParse(json['observed_at'] as String? ?? '')?.toUtc(),
+      recentUntil: state == 'idle'
+        ? DateTime.tryParse(json['recent_until'] as String? ?? '')?.toUtc()
+        : null);
   }
 
   bool validAt(DateTime now) => now.toUtc().isBefore(expiresAt);
   String? labelAt(DateTime now) {
     if (!validAt(now)) return null;
     if (state == 'active_now') return 'Active now';
+    if (recentUntil != null && now.toUtc().isBefore(recentUntil!)) {
+      return 'Recently active';
+    }
     return 'Idle';
   }
 }

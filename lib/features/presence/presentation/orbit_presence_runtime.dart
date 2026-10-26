@@ -37,6 +37,7 @@ class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
   DateTime _lastInteraction=DateTime.now();
   String _lastPublishedState='active';
   bool _beating=false;
+  bool _freshBeatQueued=false;
   int _epoch=0;
 
   bool get started => _started;
@@ -71,7 +72,14 @@ class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
   void recordActivity() {
     if (!_started || !_active) return;
     _lastInteraction=_now();
-    if (_lastPublishedState=='idle') unawaited(_beat());
+    if (_lastPublishedState=='idle') {
+      if (_beating) {
+        // Never lose a return-to-active signal during an in-flight idle beat.
+        _freshBeatQueued=true;
+      } else {
+        unawaited(_beat());
+      }
+    }
   }
 
   /// Refreshes current server-scoped snapshots before the 30s UI expiry.
@@ -92,11 +100,17 @@ class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> _beat() async {
     if (!_started || !_active || _beating) return;
     _beating=true;
+    final epoch=_epoch;
     final state=_now().difference(_lastInteraction)
         >= const Duration(seconds:60) ? 'idle':'active';
     try {
       await _repository.heartbeat(state);
-      if (_started && _active) _lastPublishedState=state;
+      if (_started && _active && epoch==_epoch) {
+        _lastPublishedState=state;
+        // A user may have interacted while the idle network call was pending.
+        if (state=='idle' && _now().difference(_lastInteraction)
+            < const Duration(seconds:60)) _freshBeatQueued=true;
+      }
     } on OrbitIdentityException catch (error) {
       if (error.statusCode == 401 || error.statusCode == 403 ||
           error.statusCode == 404 || error.statusCode == 409) {
@@ -108,6 +122,9 @@ class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
       clear();
     } finally {
       _beating=false;
+      final retry=_freshBeatQueued && _started && _active && epoch==_epoch;
+      _freshBeatQueued=false;
+      if (retry) unawaited(_beat());
     }
   }
 
@@ -138,6 +155,9 @@ class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
     _circleVersions[circle]=revision;
     try {
       final snapshot=await _repository.circle(circle);
+      if (snapshot.circleId!=circle) {
+        throw const FormatException('Presence response Circle mismatch.');
+      }
       if (!_started || !_active || epoch!=_epoch ||
           _circleVersions[circle]!=revision || !_watches.contains(circle)) return;
       _circles[circle]=snapshot;
@@ -222,6 +242,7 @@ class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
     _active=false;
     _epoch++;
     _lastPublishedState='active';
+    _freshBeatQueued=false;
     _heartbeat?.cancel(); _heartbeat=null;
     _expiry?.cancel(); _expiry=null;
     _revalidation?.cancel(); _revalidation=null;

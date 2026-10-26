@@ -27,6 +27,22 @@ void main() {
     expect(snapshot.member('new',t.add(const Duration(seconds:31))),isNull);
   });
 
+  test('Recently active is bounded by an ephemeral lease and server hint', () {
+    final t=DateTime.utc(2026,10,27,10);
+    final snap=OrbitPresenceSnapshot.fromJson({
+      'circle_id':'circle-a',
+      'members':[{
+        'user_id':'peer','state':'idle',
+        'expires_at':t.add(const Duration(seconds:90)).toIso8601String(),
+        'recent_until':t.add(const Duration(seconds:20)).toIso8601String(),
+      }],
+    },now:t);
+    expect(snap.member('peer',t)?.labelAt(t),'Recently active');
+    expect(snap.member('peer',t.add(const Duration(seconds:21)))?.labelAt(
+      t.add(const Duration(seconds:21))),'Idle');
+    expect(snap.member('peer',t.add(const Duration(seconds:31))),isNull);
+  });
+
   test('Ghost Mode and Nobody global settings are fail-closed', () {
     final settings=OrbitPresencePreferences.fromJson({
       'global':{'ghost_mode_enabled':true,'presence_visibility':'My Circle'},

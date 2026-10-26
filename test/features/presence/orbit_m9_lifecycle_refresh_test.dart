@@ -60,6 +60,26 @@ void main() {
     }
   });
 
+  test('mismatched Circle response cannot populate protected Presence', () async {
+    final repo=OrbitPresenceRepository(request:(method,path,{body}) async {
+      if (path.endsWith('/presence')) return {'data':{
+        'circle_id':'another-circle',
+        'members':[{'user_id':alice,'state':'active_now',
+          'expires_at':DateTime.now().toUtc()
+              .add(const Duration(seconds:90)).toIso8601String()}],
+      }};
+      return {'data':{'state':'active'}};
+    });
+    final runtime=OrbitPresenceRuntime(repository:repo);
+    try {
+      await runtime.start();
+      await runtime.watch(circle);
+      expect(runtime.member(circle,alice),isNull);
+    } finally {
+      await runtime.stop();
+    }
+  });
+
   test('unwatch stops further revalidation and rejects removed Circle', () async {
     var reads=0;
     final repo=OrbitPresenceRepository(request:(method,path,{body}) async {
