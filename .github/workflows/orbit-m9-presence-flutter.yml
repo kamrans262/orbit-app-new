@@ -7,6 +7,10 @@ on:
       - 'lib/features/auth/data/orbit_identity_client.dart'
       - 'lib/features/auth/presentation/widgets/orbit_session_welcome_gate.dart'
       - 'lib/features/circles/presentation/screens/orbit_live_circle_detail_screen.dart'
+      - 'lib/features/home/presentation/screens/orbit_live_home_screen.dart'
+      - 'lib/features/home/data/orbit_dashboard_repository.dart'
+      - 'test/features/home/presentation/m8_home_sections_test.dart'
+      - 'test/features/home/data/orbit_dashboard_repository_test.dart'
       - 'test/features/presence/**'
       - '.github/workflows/orbit-m9-presence-flutter.yml'
   workflow_dispatch:
@@ -30,9 +34,13 @@ jobs:
         run: flutter pub get
       - name: Analyze only M9 and integration touchpoints
         run: |
-          dart analyze lib/features/presence lib/features/auth/data/orbit_identity_client.dart lib/features/auth/presentation/widgets/orbit_session_welcome_gate.dart lib/features/circles/presentation/screens/orbit_live_circle_detail_screen.dart test/features/presence
+          dart analyze lib/features/presence lib/features/auth/data/orbit_identity_client.dart lib/features/auth/presentation/widgets/orbit_session_welcome_gate.dart lib/features/circles/presentation/screens/orbit_live_circle_detail_screen.dart lib/features/home/presentation/screens/orbit_live_home_screen.dart test/features/presence
       - name: Test M9 privacy and REST contracts
         run: flutter test test/features/presence
+      - name: Check M8 consolidated Home contracts
+        run: |
+          flutter test test/features/home/data/orbit_dashboard_repository_test.dart
+          flutter test test/features/home/presentation/m8_home_sections_test.dart
       - name: Check original M5 Circle integration regressions
         run: |
           flutter test test/features/circles/orbit_m5_live_circles_test.dart
