@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 
 import 'orbit_offline_profile_snapshot.dart';
 import '../../circles/data/orbit_m5_firebase_change_source.dart';
+import '../../presence/presentation/orbit_presence_runtime.dart';
 import '../../media/data/orbit_media_outbox.dart';
 import '../../moments/data/orbit_moment_offline_cache.dart';
 import '../../moments/data/orbit_moment_capture_vault.dart';
@@ -249,6 +250,7 @@ class OrbitIdentityClient {
           try { await OrbitMomentIntentVault().purge(lastUser); }catch(_){}
           try { await OrbitMomentAudienceMemory().purge(lastUser); }catch(_){}
         }
+        await OrbitPresenceRuntime.instance.stop();
         await OrbitM5FirebaseChangeSource.instance.stop();
         _startupProfile = null;
         _startupNotifications = null;
@@ -361,6 +363,7 @@ class OrbitIdentityClient {
 
   Future<void> clearSession() async {
     final oldMediaOwner=await _storage.read(key:_userIdKey);
+    await OrbitPresenceRuntime.instance.stop();
     await OrbitM5FirebaseChangeSource.instance.stop();
     if(oldMediaOwner != null && oldMediaOwner.isNotEmpty) {
       try { await OrbitMediaOutbox().purge(oldMediaOwner); }
