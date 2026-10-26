@@ -62,6 +62,7 @@ class OrbitSearchableHeader extends StatelessWidget {
     this.onSearchOpened,
     this.onSearchPressed,
     this.searchSemanticLabel,
+    this.actionIcon = Icons.search_rounded,
     this.showBack = true,
     this.compactTitle = false,
     this.trailingActions = const <Widget>[],
@@ -83,6 +84,8 @@ class OrbitSearchableHeader extends StatelessWidget {
   /// Without an override the existing inline search behavior is preserved.
   final VoidCallback? onSearchPressed;
   final String? searchSemanticLabel;
+  /// Existing header action icon; defaults to the original search glyph.
+  final IconData actionIcon;
   final bool showBack;
   /// Reuses the compact 16pt title and 30px back control of AppScreenHeader.
   /// All compact header icon actions use the same 30px circular button as Back.
@@ -188,7 +191,7 @@ class OrbitSearchableHeader extends StatelessWidget {
               onSearchOpened?.call();
               controller.open();
             },
-            icon: Icons.search_rounded,
+            icon: actionIcon,
             iconSize: compactTitle ? 24 : 20,
             iconColor: compactTitle ? Colors.black : AppColors.primaryEnd,
             iconGradient: AppColors.primaryGradient,
