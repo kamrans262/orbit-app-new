@@ -245,7 +245,11 @@ class _OrbitLiveInviteMemberScreenState extends State<OrbitLiveInviteMemberScree
       loadingPeople: _loading,
       peopleError: _error,
       onRetryPeople: _load,
-      canAddPerson: !_sending && !_rateLimited,
+      canAddPerson: !_sending && !_rateLimited && !_loading &&
+          _error == null,
+      emptyPeopleMessage: _query.trim().isNotEmpty
+          ? 'No eligible friends match your search.'
+          : null,
       nearbyPeople: eligible.map((person) => NearbyPerson(
         id: person.id,
         name: person.name,
