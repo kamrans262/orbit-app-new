@@ -11,6 +11,7 @@ class NearbyPersonTile extends StatelessWidget {
     this.tileKey,
     this.imageKey,
     this.addButtonKey,
+    this.enabled = true,
     super.key,
   });
 
@@ -25,6 +26,7 @@ class NearbyPersonTile extends StatelessWidget {
   final Key? tileKey;
   final Key? imageKey;
   final Key? addButtonKey;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
@@ -37,14 +39,20 @@ class NearbyPersonTile extends StatelessWidget {
             child: SizedBox.square(
               key: imageKey,
               dimension: profileSize,
-              child: Image.asset(
-                person.imageAsset,
-                width: profileSize,
-                height: profileSize,
-                fit: BoxFit.cover,
-                filterQuality: FilterQuality.high,
-                gaplessPlayback: true,
-              ),
+              child: person.imageAsset.isNotEmpty
+                  ? Image.asset(
+                      person.imageAsset,
+                      width: profileSize,
+                      height: profileSize,
+                      fit: BoxFit.cover,
+                      filterQuality: FilterQuality.high,
+                      gaplessPlayback: true,
+                    )
+                  : const ColoredBox(
+                      color: Color(0xFFF2EAFE),
+                      child: Icon(Icons.person_outline_rounded,
+                          color: Color(0xFF7C3AED), size: 26),
+                    ),
             ),
           ),
           const SizedBox(width: imageToTextGap),
@@ -94,6 +102,7 @@ class NearbyPersonTile extends StatelessWidget {
           const SizedBox(width: 12),
           Semantics(
             button: true,
+            enabled: enabled,
             label: 'Add ${person.name}',
             child: Material(
               key: addButtonKey,
@@ -101,7 +110,7 @@ class NearbyPersonTile extends StatelessWidget {
               shape: const CircleBorder(),
               clipBehavior: Clip.antiAlias,
               child: InkWell(
-                onTap: onAdd,
+                onTap: enabled ? onAdd : null,
                 customBorder: const CircleBorder(),
                 child: const SizedBox.square(
                   dimension: addButtonSize,
