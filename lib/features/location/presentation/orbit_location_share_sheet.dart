@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import '../data/orbit_location_permission_service.dart';
+import '../data/orbit_location_avatar_grant_service.dart';
+import '../../circles/presentation/widgets/circle_setting_toggle.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_typography.dart';
@@ -35,7 +37,8 @@ class OrbitLocationShareForm extends StatefulWidget {
 class _OrbitLocationShareFormState extends State<OrbitLocationShareForm> {
   String _type='person',_target='',_precision='approximate',_duration='one_hour';
   Map<String,String> _friends={},_circles={};
-  bool _busy=true,_creating=false;
+  bool _busy=true,_creating=false,_sharePhoto=false,_photoAvailable=false;
+  final OrbitLocationAvatarGrantService _avatar=OrbitLocationAvatarGrantService();
   String? _error;
   late final OrbitSocialRepository _social=widget.social??OrbitSocialRepository();
   late final OrbitCircleRepository _circlesRepo=widget.circles??OrbitCircleRepository();
@@ -60,7 +63,11 @@ class _OrbitLocationShareFormState extends State<OrbitLocationShareForm> {
       }catch(_){
         // A disabled M5 Circle route cannot block friend-only sharing.
       }
-      if(mounted)setState((){_friends=people;_circles=circles;_busy=false;});
+      var hasPhoto=false;
+      try{hasPhoto=(await _avatar.currentPrivateAvatarId())!=null;}catch(_){}
+      if(mounted)setState((){
+        _friends=people;_circles=circles;_photoAvailable=hasPhoto;_busy=false;
+      });
     }catch(_){
       if(mounted)setState((){
         _friends={};_circles={};_busy=false;
@@ -82,10 +89,13 @@ class _OrbitLocationShareFormState extends State<OrbitLocationShareForm> {
       'always'=>'until you stop manually, including future sessions',
       _=>'until you stop manually'
     };
+    OrbitLocationShare? created;
     final confirmed=await showOrbitCircleConfirmation(context:context,
       title:'Confirm location sharing',
       description:'Share '+_precision+' location with '+who+' ('+_type+
-        ') for '+durationDescription+'? Only you can stop it. Location is sent only while Orbit is foregrounded; no live WebSocket service is available.',
+        ') for '+durationDescription+'? '+
+        (_sharePhoto?'Also grant this friend access to your encrypted profile photo. ':'')+
+        'Only you can stop it. Location uploads run while Orbit is foregrounded.',
       confirmLabel:'Start sharing');
     if(!confirmed||!mounted)return;
     setState(()=>_creating=true);
@@ -103,12 +113,22 @@ class _OrbitLocationShareFormState extends State<OrbitLocationShareForm> {
         throw const FormatException('Allow precise device location or choose approximate.');
       }
       if(!mounted)return;
-      await widget.repository.create(audienceType:_type,audienceId:_target,
+      created=await widget.repository.create(audienceType:_type,audienceId:_target,
         precision:_precision,duration:_duration,timezone:timezone,
         exitRadius:_duration=='until_leaving'?250:null);
+      if(_sharePhoto&&_type=='person'){
+        await _avatar.shareWithFriend(created,_target);
+      }
       if(mounted)Navigator.of(context).pop(true);
     }catch(_){
-      if(mounted)setState(()=>_error='Location sharing was not confirmed. Check privacy, permissions and connection.');
+      var rollbackConfirmed=true;
+      if(created!=null){
+        try{await widget.repository.revoke(created.id);}
+        catch(_){rollbackConfirmed=false;}
+      }
+      if(mounted)setState(()=>_error=rollbackConfirmed
+          ?'Sharing was not completed. No new grant remains. Check permissions or retry.'
+          :'Could not confirm the share was stopped. Open Sharing and stop it manually.');
     }finally{if(mounted)setState(()=>_creating=false);}
   }
 
@@ -131,6 +151,7 @@ class _OrbitLocationShareFormState extends State<OrbitLocationShareForm> {
           OrbitDropdownField(label:'Share with',value:_type=='person'?'One friend':'A Circle',
             items:const ['One friend','A Circle'],onChanged:(v)=>setState((){
               _type=v=='One friend'?'person':'circle';_target='';
+              if(_type!='person')_sharePhoto=false;
               if(_duration=='always'&&_type=='circle')_duration='manual';
             })),
           const SizedBox(height:14),
@@ -148,6 +169,17 @@ class _OrbitLocationShareFormState extends State<OrbitLocationShareForm> {
               if(widget.capabilities.untilLeaving)'until_leaving'],
             onChanged:(v)=>setState(()=>_duration=v)),
           const SizedBox(height:14),
+          if(_type=='person' && _photoAvailable)...[
+            Row(children:[
+              const Expanded(child:Text('Share my encrypted profile photo with this friend',
+                style:TextStyle(fontFamily:AppTypography.fontFamily,
+                  fontSize:13,color:AppColors.textMuted))),
+              CircleSettingToggle(value:_sharePhoto,
+                semanticLabel:'Allow selected friend to see my profile picture',
+                onChanged:(v)=>setState(()=>_sharePhoto=v)),
+            ]),
+            const SizedBox(height:14),
+          ],
           if(_duration=='until_leaving')
             const Text('Until leaving uses an approved 250m radius and reliable outside observations.',
               style:TextStyle(color:AppColors.textMuted)),
