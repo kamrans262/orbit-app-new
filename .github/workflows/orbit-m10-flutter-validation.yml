@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/orbit-m10-flutter-validation.yml'
       - 'lib/features/location/**'
+      - 'lib/features/presence/**'
       - 'lib/features/orbit/presentation/screens/orbit_screen.dart'
       - 'lib/features/home/presentation/screens/home_screen.dart'
       - 'lib/features/profile/presentation/screens/orbit_preferences_screens.dart'
@@ -15,6 +16,7 @@ on:
       - 'pubspec.yaml'
       - 'pubspec.lock'
       - 'test/features/location/**'
+      - 'test/features/presence/**'
   workflow_dispatch:
 permissions:
   contents: read
@@ -42,4 +44,6 @@ jobs:
             lib/features/profile/presentation/screens/orbit_preferences_screens.dart \
             test/features/location
       - name: Focused contract and existing Orbits presentation tests
-        run: flutter test --no-pub test/features/location
+        run: |
+          flutter test --no-pub test/features/location
+          flutter test --no-pub test/features/presence

@@ -1089,7 +1089,11 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       _drawMode=false;
       final old=_capturedClip;
       if(old!=null)await _deleteClip(old);
-      try { await _captureVault.clear(); } catch (_) {}
+      // A preview-only test has no encrypted draft to clear. Never access
+      // platform storage when the native camera/recovery layer is disabled.
+      if(widget.enableCamera) {
+        try { await _captureVault.clear(); } catch (_) {}
+      }
       if(!mounted)return;
       setState(() {
         _capturedBytes=null;

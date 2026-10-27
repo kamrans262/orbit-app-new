@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../../app/theme/app_colors.dart';
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../profile/domain/models/profile_models.dart';
