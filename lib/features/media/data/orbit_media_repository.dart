@@ -197,11 +197,13 @@ class OrbitMediaRepository {
     required String audience, required List<String> recipients,
     required List<Map<String,Object?>> keyEnvelopes,
     required String idempotencyKey,
+    DateTime? expiresAt,
   }) async {
     final data=await control('POST','/media/'+Uri.encodeComponent(mediaId)+'/grants',
       idempotencyKey:idempotencyKey,body:{
         'audience_kind':audience,'target_ids':recipients,
         'key_envelopes':keyEnvelopes,
+        if(expiresAt!=null)'expires_at':expiresAt.toUtc().toIso8601String(),
       });
     if(data['grant_ids'] is! List)throw StateError('Media grant not confirmed.');
     return (data['grant_ids'] as List).cast<String>();
