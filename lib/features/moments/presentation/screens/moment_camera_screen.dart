@@ -95,6 +95,7 @@ class MomentCameraScreen extends StatefulWidget {
 class _MomentCameraScreenState extends State<MomentCameraScreen>
     with WidgetsBindingObserver {
   CameraController? _controller;
+  Future<void>? _cameraDisposalInFlight;
   CameraDescription? _activeCamera;
   List<CameraDescription> _cameras = const <CameraDescription>[];
 
@@ -229,11 +230,19 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
 
       final controller = _controller;
       _controller = null;
-      unawaited(controller?.dispose());
+      if (controller != null) {
+        // Wait for the native camera resource to finish releasing before any
+        // subsequent initialization. Android otherwise reports camera-in-use.
+        final closing = controller.dispose();
+        _cameraDisposalInFlight = closing;
+        unawaited(closing.catchError((_){ }));
+      }
       return;
     }
 
-    if (state == AppLifecycleState.resumed && _capturedBytes == null) {
+    if (state == AppLifecycleState.resumed &&
+        _capturedBytes == null && _capturedClip == null &&
+        !_isCapturing && !_recording) {
       // If the permission dialog resumed the app while the original
       // initialization is still running, let that one finish. Never start a
       // second CameraController concurrently.
@@ -307,6 +316,12 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
 
       if (firstOpen) unawaited(_showOrbitCameraLoadingPopup());
 
+      final disposing = _cameraDisposalInFlight;
+      _cameraDisposalInFlight = null;
+      if (disposing != null) {
+        try { await disposing; } catch (_) {}
+      }
+      if (!mounted) return;
       final oldController = _controller;
       _controller = null;
       if (oldController != null) {
@@ -850,7 +865,16 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
           const SnackBar(content:Text('Unable to open this gallery photo.')));
       }
     }finally{
-      if(mounted)setState(()=>_isCapturing=false);
+      if(mounted){
+        setState(()=>_isCapturing=false);
+        // The picker can pause/dispose CameraController. Restart only when
+        // selection was cancelled or failed; never while processing a photo.
+        if(widget.enableCamera && _capturedBytes==null &&
+           _capturedClip==null && _controller==null &&
+           !_cameraInitializationInProgress){
+          unawaited(_initializeCamera(preferredCamera:_activeCamera));
+        }
+      }
     }
   }
 
