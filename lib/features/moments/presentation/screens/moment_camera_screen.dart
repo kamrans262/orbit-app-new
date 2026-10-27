@@ -588,23 +588,36 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
           scrollDirection:Axis.horizontal,
           children:[
             for(final filter in MomentFilter.values)
-              Padding(padding:const EdgeInsets.only(right:8),
-                child:ChoiceChip(
-                  key:MomentCameraKeys.filter(filter.name),
-                  label:Text(filter.label),
-                  selected:_selectedFilter==filter,
-                  selectedColor:AppColors.primaryEnd,
-                  backgroundColor:const Color(0x33FFFFFF),
-                  labelStyle:AppTypography.body.copyWith(
-                    fontSize:12,
-                    color:Colors.white,
-                    fontWeight:_selectedFilter==filter
-                      ?FontWeight.w600:FontWeight.w400),
-                  side:BorderSide(
-                    color:_selectedFilter==filter
-                      ? AppColors.primaryEnd:const Color(0x66FFFFFF)),
-                  onSelected:(_)=>_selectFilter(filter),
-                )),
+              Padding(
+                padding:const EdgeInsets.only(right:8),
+                child:Material(
+                  color:Colors.transparent,
+                  child:InkWell(
+                    key:MomentCameraKeys.filter(filter.name),
+                    borderRadius:BorderRadius.circular(22),
+                    onTap:()=>_selectFilter(filter),
+                    child:Container(
+                      constraints:const BoxConstraints(minWidth:72),
+                      alignment:Alignment.center,
+                      padding:const EdgeInsets.symmetric(horizontal:14),
+                      decoration:BoxDecoration(
+                        gradient:_selectedFilter==filter
+                            ? AppColors.primaryGradient:null,
+                        color:_selectedFilter==filter
+                            ? null:const Color(0xB3000000),
+                        borderRadius:BorderRadius.circular(22),
+                        border:Border.all(color:_selectedFilter==filter
+                            ? Colors.white:const Color(0x85FFFFFF)),
+                      ),
+                      child:Text(filter.label,maxLines:1,
+                        style:AppTypography.body.copyWith(
+                          fontSize:12,color:Colors.white,
+                          fontWeight:_selectedFilter==filter
+                              ?FontWeight.w600:FontWeight.w500)),
+                    ),
+                  ),
+                ),
+              ),
           ],
         )),
       ]),
