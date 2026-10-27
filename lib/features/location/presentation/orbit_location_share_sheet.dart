@@ -51,10 +51,14 @@ class _OrbitLocationShareFormState extends State<OrbitLocationShareForm> {
         for(final p in result.items)people[p.id]=p.name;
         if(!result.hasMore)break;
       }
-      for(var page=1;page<=20;page++){
-        final result=await _circlesRepo.list(page:page);
-        for(final c in result.items)circles[c.id]=c.name;
-        if(!result.hasMore)break;
+      try{
+        for(var page=1;page<=20;page++){
+          final result=await _circlesRepo.list(page:page);
+          for(final c in result.items)circles[c.id]=c.name;
+          if(!result.hasMore)break;
+        }
+      }catch(_){
+        // A disabled M5 Circle route cannot block friend-only sharing.
       }
       if(mounted)setState((){_friends=people;_circles=circles;_busy=false;});
     }catch(_){

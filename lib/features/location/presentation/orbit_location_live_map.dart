@@ -164,12 +164,14 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
     if(!_foreground||!_active){
       _locations?.cancel();_locations=null;return;
     }
-    if(_locations!=null)return;
     try{
       if(!await _gps.granted()){
-        if(mounted)setState(()=>_message='Location permission is off. Sharing is not updating.');
-        return; // A map view never requests an OS permission.
+        await _stopAfterPermissionFailure();return;
       }
+      if(_locations!=null)return; // Recheck permission even with a running stream.
+      unawaited(_gps.current().then(_sendPosition).catchError((Object _){
+        // A GPS timeout does not grant permission or imply an update.
+      }));
       _locations=_gps.foregroundStream().listen((position){
         unawaited(_sendPosition(position));
       },onError:(Object _){
