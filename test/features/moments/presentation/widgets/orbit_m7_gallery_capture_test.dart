@@ -225,4 +225,50 @@ void main() {
     expect(tester.takeException(),isNull);
   });
 
+  testWidgets('graphic stickers are included in exported photo bytes',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 820));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final source=Uint8List.fromList(base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAOEGFykAAAAASUVORK5CYII='));
+    Uint8List? exported;
+    await tester.pumpWidget(MaterialApp(home:MomentCameraScreen(
+      enableCamera:false,galleryPicker:()async=>source,
+      onSendPressed:(bytes)=>exported=bytes,
+    )));
+    await tester.pump();
+    await tester.tap(find.byKey(MomentCameraKeys.galleryButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(MomentCameraKeys.stickersButton));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('moment_camera_sticker_choice_10084')));
+    await tester.pump();
+    await tester.tap(find.byKey(MomentCameraKeys.sendButton));
+    await tester.pumpAndSettle();
+    expect(exported,isNotNull);
+    expect(exported!.take(8).toList(),<int>[
+      137,80,78,71,13,10,26,10,
+    ]);
+    expect(exported!.length,greaterThan(source.length));
+    expect(tester.takeException(),isNull);
+  });
+
+  testWidgets('voice recording consent can be declined without changing mode',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 820));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(const MaterialApp(home:MomentCameraScreen(
+      enableCamera:false,
+    )));
+    await tester.pump();
+    await tester.tap(find.byKey(MomentCameraKeys.voiceMode));
+    await tester.pumpAndSettle();
+    expect(find.byKey(MomentCameraKeys.voiceConsent),findsOneWidget);
+    await tester.tap(find.text('Not Now'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(MomentCameraKeys.voiceConsent),findsNothing);
+    expect(find.bySemanticsLabel('Capture moment'),findsOneWidget);
+    expect(tester.takeException(),isNull);
+  });
+
 }
