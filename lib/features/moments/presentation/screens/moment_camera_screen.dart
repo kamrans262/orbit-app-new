@@ -40,6 +40,10 @@ abstract final class MomentCameraKeys {
   static const cameraError = Key('moment_camera_error');
   static const filterTray = Key('moment_camera_filter_tray');
   static const toolHint = Key('moment_camera_tool_hint');
+  static const savedDraftBanner = Key('moment_camera_saved_draft_banner');
+  static const resumeDraft = Key('moment_camera_resume_draft');
+  static const discardDraft = Key('moment_camera_discard_draft');
+  static const retakeButton = Key('moment_camera_retake_button');
   static Key filter(String name) => Key('moment_camera_filter_${name}');
 }
 
@@ -1156,13 +1160,22 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
                           onTap: widget.onFilterPressed ?? _toggleFilterTray,
                         ),
                       ),
-                      Positioned(
-                        top: 70,
-                        right: edgePadding,
-                        bottom: 114,
-                        width: 68,
-                        child: _buildToolColumn(),
-                      ),
+                      if(!_filterTrayOpen)
+                        Positioned(
+                          top: 70,
+                          right: edgePadding,
+                          bottom: 114,
+                          width: 68,
+                          child: _buildToolColumn(),
+                        ),
+                      if(_hasSavedDraft && _capturedBytes==null &&
+                          _capturedClip==null)
+                        Positioned(
+                          top:70,
+                          left:edgePadding,
+                          right:edgePadding+76,
+                          child:_buildSavedDraftBanner(),
+                        ),
                       if(_filterTrayOpen)
                         Positioned(
                           left:edgePadding,
@@ -1263,6 +1276,45 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       ),
     );
   }
+
+  Widget _buildSavedDraftBanner() => Container(
+    key:MomentCameraKeys.savedDraftBanner,
+    padding:const EdgeInsets.all(12),
+    decoration:BoxDecoration(
+      color:const Color(0xDE000000),
+      borderRadius:BorderRadius.circular(18),
+      border:Border.all(color:const Color(0x42FFFFFF))),
+    child:Column(
+      mainAxisSize:MainAxisSize.min,
+      crossAxisAlignment:CrossAxisAlignment.start,
+      children:[
+        Text('Saved Moment',style:AppTypography.body.copyWith(
+          color:Colors.white,fontWeight:FontWeight.w600)),
+        const SizedBox(height:4),
+        Text('Start fresh or resume your encrypted draft.',
+          style:AppTypography.body.copyWith(
+            fontSize:12,color:Colors.white)),
+        const SizedBox(height:8),
+        Row(children:[
+          Expanded(child:TextButton(
+            key:MomentCameraKeys.resumeDraft,
+            onPressed:_restoringSavedDraft ? null
+                : ()=>unawaited(_restoreEncryptedCapture()),
+            child:Text(_restoringSavedDraft ? 'Opening...' : 'Resume',
+              style:AppTypography.body.copyWith(
+                color:Colors.white,fontWeight:FontWeight.w600)),
+          )),
+          Expanded(child:TextButton(
+            key:MomentCameraKeys.discardDraft,
+            onPressed:_restoringSavedDraft ? null
+                : ()=>unawaited(_discardSavedDraft()),
+            child:Text('Discard',style:AppTypography.body.copyWith(
+              color:Colors.white,fontWeight:FontWeight.w500)),
+          )),
+        ]),
+      ],
+    ),
+  );
 
   Widget _buildCameraBackground() {
     final captured = _capturedBytes;
@@ -1472,10 +1524,31 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       children: <Widget>[
         Align(
           alignment: Alignment.centerLeft,
-          child: _CameraTextButton(
-            key: MomentCameraKeys.textButton,
-            onTap: widget.onTextPressed ?? ()=>unawaited(_openEditorTool('text')), 
-          ),
+          child: _capturedBytes!=null || _capturedClip!=null
+              ? Semantics(
+                  button:true,
+                  label:'Retake Moment',
+                  child:InkWell(
+                    key:MomentCameraKeys.retakeButton,
+                    onTap:()=>unawaited(_retake()),
+                    borderRadius:BorderRadius.circular(18),
+                    child:Padding(
+                      padding:const EdgeInsets.all(4),
+                      child:Column(mainAxisSize:MainAxisSize.min,children:[
+                        const Icon(Icons.refresh_rounded,
+                          color:Colors.white,size:24),
+                        Text('Retake',style:AppTypography.body.copyWith(
+                          fontSize:12,color:Colors.white,
+                          fontWeight:FontWeight.w600)),
+                      ]),
+                    ),
+                  ),
+                )
+              : _CameraTextButton(
+                  key:MomentCameraKeys.textButton,
+                  onTap: widget.onTextPressed ??
+                      ()=>unawaited(_openEditorTool('text')),
+                ),
         ),
         Align(
           alignment: Alignment.center,
@@ -1485,6 +1558,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
             onTap: _handleCapturePressed,
             recordMode:_mode!=_OrbitCaptureMode.photo,
             isRecording:_recording,
+            retake:_capturedBytes!=null || _capturedClip!=null,
             onHoldStart:(){
               _stopWhenStarted=false;
               if(!_recording)unawaited(_beginRecording());
@@ -1704,19 +1778,20 @@ class _CameraTextButton extends StatelessWidget {
 
 class _CaptureButton extends StatelessWidget {
   const _CaptureButton({required this.isBusy, required this.onTap,
-    this.recordMode=false,this.isRecording=false,
+    this.recordMode=false,this.isRecording=false,this.retake=false,
     this.onHoldStart,this.onHoldEnd,super.key});
 
   final bool isBusy;
   final VoidCallback onTap;
-  final bool recordMode,isRecording;
+  final bool recordMode,isRecording,retake;
   final VoidCallback? onHoldStart,onHoldEnd;
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
       button: true,
-      label: isBusy?'Capturing moment':(isRecording?'Recording moment':
+      label: retake ? 'Retake Moment' :
+        isBusy?'Capturing moment':(isRecording?'Recording moment':
         (recordMode?'Hold to record moment':'Capture moment')),
       child: InkResponse(
         onTap: isBusy ? null : onTap,
@@ -1732,11 +1807,15 @@ class _CaptureButton extends StatelessWidget {
             shape: BoxShape.circle,
             border: Border.all(color: Colors.white, width: 4),
           ),
-          child: const DecoratedBox(
-            decoration: BoxDecoration(
+          child: DecoratedBox(
+            decoration:const BoxDecoration(
               shape: BoxShape.circle,
               color: Colors.white,
             ),
+            child:retake
+              ? const Icon(Icons.refresh_rounded,
+                  color:Color(0xFF7C3AED),size:36)
+              : null,
           ),
         ),
       ),
