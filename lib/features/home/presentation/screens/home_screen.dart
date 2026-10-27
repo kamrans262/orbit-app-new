@@ -311,15 +311,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _openOrbit() {
-    if (!widget.enableDemoOrbitNavigation) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content:Text('Explore is not available yet. No location was shared.'),
-      ));
-      return;
-    }
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (routeContext) => OrbitScreen.demo(
+        builder: (routeContext) => (widget.enableDemoOrbitNavigation
+          ? OrbitScreen.demo(onAddPressed:_openMomentCamera,onTabSelected: (index){
+              if(index==0)Navigator.of(routeContext).pop();
+            })
+          : OrbitScreen.live(
           onTabSelected: (orbitIndex) {
             if (orbitIndex == 0) {
               Navigator.of(routeContext).pop();
@@ -328,7 +326,7 @@ class _HomeScreenState extends State<HomeScreen> {
             widget.onTabSelected(orbitIndex);
           },
           onAddPressed: _openMomentCamera,
-        ),
+        )),
       ),
     );
   }
@@ -343,24 +341,21 @@ class _HomeScreenState extends State<HomeScreen> {
               return;
             }
             if (momentsIndex == 1) {
-              if (!widget.enableDemoOrbitNavigation) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                  content:Text('Explore is not available yet. No location was shared.'),
-                ));
-                return;
-              }
               Navigator.of(routeContext).pushReplacement(
                 MaterialPageRoute<void>(
-                  builder: (orbitContext) => OrbitScreen.demo(
-                    onTabSelected: (orbitIndex) {
+                  builder: (orbitContext) => (widget.enableDemoOrbitNavigation
+                    ? OrbitScreen.demo(onTabSelected:(index){
+                        if(index==0)Navigator.of(orbitContext).pop();
+                      },onAddPressed:()=>{})
+                    : OrbitScreen.live(onTabSelected: (orbitIndex) {
                       if (orbitIndex == 0) {
                         Navigator.of(orbitContext).pop();
                         return;
                       }
                       widget.onTabSelected(orbitIndex);
                     },
-                    onAddPressed: () {},
-                  ),
+                    onAddPressed: _openMomentCamera,
+                  )),
                 ),
               );
               return;
@@ -699,7 +694,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   key: ValueKey<String>('quick_action_${action.id}'),
                   width: cardWidth,
                   data: action,
-                  onTap: () => widget.onQuickActionPressed(action),
+                  onTap: () => action.id=='explore'?_openOrbit():widget.onQuickActionPressed(action),
                 );
               },
             );

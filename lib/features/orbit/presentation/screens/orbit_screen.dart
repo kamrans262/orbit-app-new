@@ -20,6 +20,11 @@ import '../../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../../direct_chat/presentation/screens/direct_chat_screen.dart';
 
 import '../../../check_in/presentation/screens/check_in_screen.dart';
+import '../../../location/data/orbit_location_models.dart';
+import '../../../location/presentation/orbit_location_live_map.dart';
+import '../../../friends/data/orbit_social_repository.dart';
+import '../../../friends/presentation/screens/orbit_person_screen.dart';
+import '../../../moments/presentation/screens/orbit_live_moments_screen.dart';
 
 abstract final class OrbitKeys {
   static const map = Key('orbit_map');
@@ -50,8 +55,18 @@ class OrbitScreen extends StatefulWidget {
     required this.onTabSelected,
     required this.onAddPressed,
     this.mapAssetPath = 'assets/orbit_map.png',
+    this.liveMode = false,
     super.key,
   });
+
+  /// Uses the original Orbits draggable sheet and navigation; no demo people.
+  factory OrbitScreen.live({ValueChanged<int>? onTabSelected,
+    VoidCallback? onAddPressed})=>OrbitScreen(
+    people:const [],gifts:const [],liveMode:true,
+    onCheckInPressed:(){},onPersonSelected:(_){},
+    onCameraPressed:(){},onSendPressed:(_,__){},
+    onGiftPressed:(_){},onTabSelected:onTabSelected??(_){},
+    onAddPressed:onAddPressed??(){});
 
   factory OrbitScreen.demo({
     ValueChanged<int>? onTabSelected,
@@ -123,6 +138,7 @@ class OrbitScreen extends StatefulWidget {
   final List<OrbitPersonData> people;
   final List<OrbitGiftData> gifts;
   final String mapAssetPath;
+  final bool liveMode;
   final VoidCallback onCheckInPressed;
   final ValueChanged<OrbitPersonData> onPersonSelected;
   final VoidCallback onCameraPressed;
@@ -141,6 +157,8 @@ class _OrbitScreenState extends State<OrbitScreen> {
   final TextEditingController _messageController = TextEditingController();
 
   OrbitPersonData? _selectedPerson;
+  List<OrbitPersonData> _authorizedPeople=const [];
+  final Set<String> _authorizedIds={};
   bool _expandedContent = false;
   double _collapsedFraction = 0.30;
   double _expandedTargetFraction = 0.56;
@@ -192,12 +210,17 @@ class _OrbitScreenState extends State<OrbitScreen> {
             return Stack(
               fit: StackFit.expand,
               children: <Widget>[
-                _OrbitMapBackground(assetPath: widget.mapAssetPath),
-                _OrbitMapMarkers(
-                  people: widget.people,
-                  onPersonPressed: _selectPerson,
-                ),
-                const _OrbitMapHud(),
+                if(widget.liveMode)
+                  OrbitLocationLiveMap(
+                    onMarkersChanged:_receiveAuthorizedMarkers,
+                    onPersonPressed:(id)=>unawaited(_openLivePerson(id)),
+                  )
+                else ...<Widget>[
+                  _OrbitMapBackground(assetPath: widget.mapAssetPath),
+                  _OrbitMapMarkers(
+                    people: widget.people,onPersonPressed: _selectPerson),
+                  const _OrbitMapHud(),
+                ],
                 NotificationListener<DraggableScrollableNotification>(
                   onNotification: _handleSheetNotification,
                   child: DraggableScrollableSheet(
@@ -210,7 +233,8 @@ class _OrbitScreenState extends State<OrbitScreen> {
                       return _OrbitBottomPanel(
                         scrollController: scrollController,
                         expanded: _expandedContent && _selectedPerson != null,
-                        people: widget.people,
+                        people: widget.liveMode?_authorizedPeople:widget.people,
+                        showCheckIn:!widget.liveMode,
                         gifts: widget.gifts,
                         selectedPerson: _selectedPerson,
                         messageController: _messageController,
@@ -229,6 +253,36 @@ class _OrbitScreenState extends State<OrbitScreen> {
         ),
       ),
     );
+  }
+
+  void _receiveAuthorizedMarkers(List<OrbitLocationMarker> markers) {
+    if(!mounted||!widget.liveMode)return;
+    final ids=markers.map((m)=>m.userId).toSet();
+    setState((){
+      _authorizedIds..clear()..addAll(ids);
+      // Backend intentionally returns only opaque IDs; never invent a name,
+      // avatar, presence label or GPS position.
+      _authorizedPeople=markers.map((m)=>OrbitPersonData(
+        id:m.userId,name:'Shared location',imagePath:null,
+        markerX:0,markerY:0)).toList(growable:false);
+      if(_selectedPerson!=null&&!ids.contains(_selectedPerson!.id)){
+        _selectedPerson=null;_expandedContent=false;
+      }
+    });
+  }
+
+  Future<void> _openLivePerson(String userId) async {
+    if(!widget.liveMode||!_authorizedIds.contains(userId))return;
+    try{
+      // Real identity is resolved only after an authorized M4 person preview.
+      final person=await OrbitSocialRepository().preview(userId);
+      if(!mounted||!_authorizedIds.contains(userId))return;
+      await Navigator.of(context).push<void>(AppFadeSlidePageRoute(
+        builder:(_)=>OrbitPersonScreen(person:person)));
+    }catch(_){
+      if(mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content:Text('This member detail is unavailable or access was revoked.')));
+    }
   }
 
   void _handleBottomTabSelected(int index) {
@@ -269,6 +323,12 @@ class _OrbitScreenState extends State<OrbitScreen> {
   }
 
   Future<void> _openMoments() async {
+    if(widget.liveMode){
+      await Navigator.of(context).push<void>(MaterialPageRoute(
+        builder:(_)=>OrbitLiveMomentsScreen(onTabSelected:(_){},
+          onAddPressed:widget.onAddPressed)));
+      return;
+    }
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     if (!mounted) {
       return;
@@ -333,6 +393,7 @@ class _OrbitScreenState extends State<OrbitScreen> {
   }
 
   void _selectPerson(OrbitPersonData person) {
+    if(widget.liveMode){unawaited(_openLivePerson(person.id));return;}
     setState(() {
       _selectedPerson = person;
       _expandedContent = true;
@@ -543,6 +604,7 @@ class _OrbitBottomPanel extends StatelessWidget {
   const _OrbitBottomPanel({
     required this.scrollController,
     required this.expanded,
+    this.showCheckIn = true,
     required this.people,
     required this.gifts,
     required this.selectedPerson,
@@ -556,6 +618,7 @@ class _OrbitBottomPanel extends StatelessWidget {
 
   final ScrollController scrollController;
   final bool expanded;
+  final bool showCheckIn;
   final List<OrbitPersonData> people;
   final List<OrbitGiftData> gifts;
   final OrbitPersonData? selectedPerson;
@@ -603,6 +666,7 @@ class _OrbitBottomPanel extends StatelessWidget {
                   people: people,
                   onPersonPressed: onPersonPressed,
                   onCheckInPressed: onCheckInPressed,
+                  showCheckIn:showCheckIn,
                 ),
         ),
       ),
@@ -635,6 +699,7 @@ class _CollapsedPanelContent extends StatelessWidget {
     required this.people,
     required this.onPersonPressed,
     required this.onCheckInPressed,
+    this.showCheckIn=true,
     super.key,
   });
 
@@ -642,6 +707,7 @@ class _CollapsedPanelContent extends StatelessWidget {
   final List<OrbitPersonData> people;
   final ValueChanged<OrbitPersonData> onPersonPressed;
   final VoidCallback onCheckInPressed;
+  final bool showCheckIn;
 
   @override
   Widget build(BuildContext context) {
@@ -707,7 +773,7 @@ class _CollapsedPanelContent extends StatelessWidget {
             ),
           ),
         const SizedBox(height: 12),
-        Center(
+        if(showCheckIn) Center(
           child: KeyedSubtree(
             key: OrbitKeys.checkInButton,
             child: _CheckInButton(onPressed: onCheckInPressed),

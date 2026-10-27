@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
+import '../data/orbit_location_permission_service.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_typography.dart';
@@ -90,6 +91,14 @@ class _OrbitLocationShareFormState extends State<OrbitLocationShareForm> {
         timezone=(await FlutterTimezone.getLocalTimezone()).identifier;
         if(timezone.trim().isEmpty)throw const FormatException('Timezone unavailable.');
       }
+      final permission=const OrbitLocationPermissionService();
+      if(!await permission.granted(request:true)){
+        throw const FormatException('Device location permission denied.');
+      }
+      if(_precision=='precise'&&!await permission.precise()){
+        throw const FormatException('Allow precise device location or choose approximate.');
+      }
+      if(!mounted)return;
       await widget.repository.create(audienceType:_type,audienceId:_target,
         precision:_precision,duration:_duration,timezone:timezone,
         exitRadius:_duration=='until_leaving'?250:null);

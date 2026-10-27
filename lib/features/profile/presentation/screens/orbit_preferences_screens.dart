@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-
+import '../../../location/data/orbit_location_repository.dart';
 import '../../data/orbit_profile_settings_repository.dart';
 import '../../domain/models/notification_settings.dart';
 import '../../domain/models/privacy_settings.dart';
@@ -64,6 +64,17 @@ class _OrbitPrivacyPreferencesScreenState
     });
   }
 
+  Future<PrivacySettings> _savePrivacy(PrivacySettings next) async {
+    final saved=await _repo.savePrivacy(next);
+    if(saved.ghostModeEnabled||!saved.locationSharingEnabled||
+       saved.locationActivity=='Off'||saved.locationVisibility=='Nobody') {
+      // Global privacy is authoritative even if M10 is not yet deployed.
+      // Best-effort further clears grants and encrypted latest GPS.
+      try{await OrbitLocationRepository().stopAll();}catch(_){}
+    }
+    return saved;
+  }
+
   @override
   Widget build(BuildContext context) => FutureBuilder<PrivacySettings>(
     future: _future,
@@ -74,7 +85,7 @@ class _OrbitPrivacyPreferencesScreenState
       return PrivacySettingScreen(
         initialSettings: snapshot.data!,
         locationActivityOptions: const ['Active', 'While moving', 'Off'],
-        onSaveSettings: _repo.savePrivacy,
+        onSaveSettings: _savePrivacy,
         onBack: () => Navigator.of(context).pop(),
       );
     },
