@@ -784,6 +784,38 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     try{if(await file.exists())await file.delete();}catch(_){}
   }
 
+
+  Future<void> _confirmVoiceRecording() async {
+    if(!mounted || _recording || _capturedBytes!=null ||
+       _capturedClip!=null || _isCapturing ||
+       _mode==_OrbitCaptureMode.voice)return;
+    await showOrbitPopupModal<void>(
+      context:context,
+      popupId:'m7_voice_recording_confirmation',
+      builder:(dialog)=>OrbitPopupModal(
+        key:MomentCameraKeys.voiceConsent,
+        title:'Record a Voice Moment?',
+        description:'A Voice Moment records audio for up to 60 seconds. '
+          'Orbit will request microphone permission when you begin. '
+          'Hold the capture button to record and release to stop. '
+          'You can review your recording before choosing who sees it.',
+        icon:const Icon(Icons.mic_none_rounded,
+          size:52,color:AppColors.primaryEnd),
+        primaryAction:OrbitPopupPrimaryButton(
+          label:'Continue to Voice',
+          onPressed:(){
+            Navigator.of(dialog).pop();
+            if(mounted)unawaited(
+              _selectCaptureMode(_OrbitCaptureMode.voice));
+          }),
+        secondaryAction:OrbitPopupSecondaryButton(
+          label:'Not Now',
+          onPressed:()=>Navigator.of(dialog).pop(),
+        ),
+      ),
+    );
+  }
+
   Future<void> _selectCaptureMode(_OrbitCaptureMode next) async {
     if(_isCapturing || _recording || _publishSheetOpen ||
        _capturedBytes!=null || _capturedClip!=null || _mode==next)return;
@@ -1814,7 +1846,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
           assetPath:'assets/icons/flip.svg',
           icon:Icons.mic_none_outlined,
           label:'Voice',
-          onTap:()=>unawaited(_selectCaptureMode(_OrbitCaptureMode.voice)),
+          onTap:()=>unawaited(_confirmVoiceRecording()),
         ),
         const SizedBox(height:10),
         _CameraToolItem(
