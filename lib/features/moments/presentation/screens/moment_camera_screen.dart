@@ -1050,23 +1050,73 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         return;
       }
       final selected=await showModalBottomSheet<String>(
-        context:context,useSafeArea:true,
-        backgroundColor:AppColors.background,
+        context:context,
+        useSafeArea:true,
+        isScrollControlled:true,
+        backgroundColor:Colors.white,
         shape:const RoundedRectangleBorder(
           borderRadius:BorderRadius.vertical(top:Radius.circular(28))),
-        builder:(sheet)=>Padding(
-          padding:const EdgeInsets.all(20),
-          child:Column(mainAxisSize:MainAxisSize.min,
-            crossAxisAlignment:CrossAxisAlignment.start,children:[
-            Text('Choose a photo sticker',style:AppTypography.smallHeading),
-            const SizedBox(height:12),
-            Wrap(spacing:8,runSpacing:8,children:[
-              for(final label in const ['LOVE!','WOW!','YES!','GO!','SMILE!'])
-                ActionChip(label:Text(label,style:AppTypography.body),
-                  onPressed:()=>Navigator.of(sheet).pop(label)),
-            ]),
-          ]),
-        ),
+        builder:(sheet)=>SafeArea(child:Padding(
+          padding:EdgeInsets.fromLTRB(
+            20,12,20,20+MediaQuery.viewInsetsOf(sheet).bottom),
+          child:Column(
+            mainAxisSize:MainAxisSize.min,
+            crossAxisAlignment:CrossAxisAlignment.stretch,
+            children:[
+              Center(child:Container(width:38,height:4,
+                decoration:BoxDecoration(
+                  color:const Color(0xFFD8D8D8),
+                  borderRadius:BorderRadius.circular(4)))),
+              const SizedBox(height:20),
+              Row(children:[
+                Expanded(child:Text('Add Sticker',
+                  style:AppTypography.smallHeading)),
+                IconButton(
+                  key:const Key('moment_camera_sticker_close'),
+                  tooltip:'Close stickers',
+                  onPressed:()=>Navigator.of(sheet).pop(),
+                  icon:const Icon(Icons.close_rounded,
+                    color:Color(0xFF0F1724))),
+              ]),
+              const SizedBox(height:8),
+              Text('Choose a text sticker for your photo.',
+                style:AppTypography.bodyMuted),
+              const SizedBox(height:20),
+              Wrap(spacing:10,runSpacing:10,children:[
+                for(final label in const <String>[
+                  'LOVE!','WOW!','YES!','GO!','SMILE!'
+                ])
+                  Material(
+                    color:Colors.transparent,
+                    child:InkWell(
+                      key:Key('moment_camera_sticker_$label'),
+                      borderRadius:BorderRadius.circular(22),
+                      onTap:()=>Navigator.of(sheet).pop(label),
+                      child:Container(
+                        constraints:const BoxConstraints(minHeight:44),
+                        padding:const EdgeInsets.symmetric(
+                          horizontal:17,vertical:11),
+                        decoration:BoxDecoration(
+                          color:const Color(0xFFF2EAFE),
+                          borderRadius:BorderRadius.circular(22),
+                          border:Border.all(
+                            color:const Color(0x337C3AED))),
+                        child:Text(label,
+                          style:AppTypography.body.copyWith(
+                            color:AppColors.primaryEnd,
+                            fontWeight:FontWeight.w600)),
+                      ),
+                    ),
+                  ),
+              ]),
+              const SizedBox(height:22),
+              TextButton(
+                onPressed:()=>Navigator.of(sheet).pop(),
+                child:Text('Cancel',style:AppTypography.body.copyWith(
+                  color:AppColors.primaryEnd))),
+            ],
+          ),
+        )),
       );
       if(selected==null||!mounted)return;
       initialText=selected;
@@ -1442,6 +1492,35 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   }
 
   Widget _buildToolColumn() {
+    // After a capture, camera-only controls are not actionable. Keep only
+    // available editing tools; Retake returns to the live camera.
+    if (_capturedBytes!=null || _capturedClip!=null) {
+      return SingleChildScrollView(
+        key:MomentCameraKeys.toolsColumn,
+        physics:const BouncingScrollPhysics(),
+        child:Column(mainAxisSize:MainAxisSize.min,children:[
+          if (_capturedBytes!=null) ...[
+            _CameraToolItem(
+              key:MomentCameraKeys.stickersButton,
+              semanticLabel:'Open stickers',
+              assetPath:'assets/icons/sticker.svg',
+              label:'Stickers',
+              onTap:widget.onStickersPressed ??
+                  ()=>unawaited(_openEditorTool('sticker')),
+            ),
+            const SizedBox(height:10),
+            _CameraToolItem(
+              key:MomentCameraKeys.textButton,
+              semanticLabel:'Add text',
+              assetPath:'assets/icons/text.svg',
+              label:'Text',
+              onTap:widget.onTextPressed ??
+                  ()=>unawaited(_openEditorTool('text')),
+            ),
+          ],
+        ]),
+      );
+    }
     final timerSeconds = _captureDelay.inSeconds;
     final flashSemantic = switch (_flashMode) {
       FlashMode.off => 'Flash off',
