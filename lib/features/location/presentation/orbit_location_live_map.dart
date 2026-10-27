@@ -41,6 +41,7 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
   Timer? _refreshTimer;
   bool _styleReady=false,_loading=false,_sending=false,_foreground=true,_didZoom=false;
   DateTime? _lastSent;
+  String? _accountOwner;
   int _epoch=0;
   String? _message;
 
@@ -77,7 +78,9 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
       _locations=null;
       _lastSent=null;
       _cap=null;_snapshot=null;_shares=const [];
+      unawaited(_clearAnnotations());
       _circleOwners.clear();
+      _map=null;_styleReady=false;_didZoom=false;
       if(mounted){widget.onMarkersChanged?.call(const []);setState(() {});}
     } else {
       _foreground=true;
@@ -94,6 +97,14 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
     try{
       final owner=await OrbitIdentityClient.instance.currentLocalSocialOwner();
       if(owner==null||owner.isEmpty)throw const FormatException('Sign in to view Orbits.');
+      if(_accountOwner!=owner){
+        _accountOwner=owner;
+        _locations?.cancel();_locations=null;_lastSent=null;
+        _snapshot=null;_shares=const [];_cap=null;
+        widget.onMarkersChanged?.call(const []);
+        await _clearAnnotations();
+        if(mounted)setState((){});
+      }
       final cap=await _repo.capabilities();
       final shares=await _repo.shares();
       final snapshot=await _repo.map();
@@ -196,6 +207,13 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
        now.difference(p.timestamp)>const Duration(seconds:90))return;
     _sending=true;_lastSent=now;
     try {
+      // A user switch cannot inherit another account's GPS stream or grants.
+      final owner=await OrbitIdentityClient.instance.currentLocalSocialOwner();
+      if(owner==null||owner!=_accountOwner){
+        _locations?.cancel();_locations=null;
+        if(mounted)await _refresh();
+        return;
+      }
       if(!await _gps.granted()){
         await _stopAfterPermissionFailure();return;
       }
@@ -273,7 +291,9 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
       :markers.isEmpty?'No authorized location updates to show.'
       :'Last confirmed locations · not live');
     return Stack(children:[
-      Positioned.fill(child:configured&&OrbitM10Rollout.enabled
+      Positioned.fill(child:!_foreground
+        ?const ColoredBox(color:AppColors.background)
+        :configured&&OrbitM10Rollout.enabled
         ?gl.MapLibreMap(
           key:const Key('orbit_map'),styleString:OrbitM10Rollout.mapStyleUrl,
           initialCameraPosition:const gl.CameraPosition(target:gl.LatLng(0,0),zoom:1.7),
