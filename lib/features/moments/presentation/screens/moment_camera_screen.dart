@@ -1053,6 +1053,8 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     try {
       _stopWhenStarted=false;
       _filterTrayOpen=false;
+      _stickerTrayOpen=false;
+      _drawMode=false;
       final old=_capturedClip;
       if(old!=null)await _deleteClip(old);
       try { await _captureVault.clear(); } catch (_) {}
@@ -1379,7 +1381,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
                       ),
                       Positioned(
                         top: 8,
-                        right: edgePadding,
+                        right: edgePadding + 14,
                         child: _CameraTopButton(
                           key: MomentCameraKeys.filterButton,
                           semanticLabel: 'Camera filters and settings',
@@ -1409,6 +1411,16 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
                           right:edgePadding,
                           bottom:108,
                           child:_buildFilterTray(),
+                        ),
+                      if(_stickerTrayOpen && _capturedBytes!=null)
+                        Positioned(
+                          left:edgePadding,right:edgePadding,
+                          bottom:108,child:_buildStickerTray(),
+                        ),
+                      if(_drawMode && _capturedBytes!=null)
+                        Positioned(
+                          left:edgePadding,right:edgePadding,
+                          bottom:108,child:_buildDrawingPalette(),
                         ),
                       if(_toolHint!=null)
                         Positioned(
@@ -1557,12 +1569,62 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         ])));
     }
     if (captured != null) {
-      return _filteredPreview(Image.memory(
-        captured,
-        key: MomentCameraKeys.capturedPreview,
-        fit: BoxFit.cover,
-        gaplessPlayback: true,
-      ));
+      return RepaintBoundary(
+        key:_photoCompositionKey,
+        child:LayoutBuilder(builder:(context,viewport){
+          final size=viewport.biggest;
+          return Stack(fit:StackFit.expand,children:[
+            _exportingPhoto
+              ? Image.memory(captured,key:MomentCameraKeys.capturedPreview,
+                  fit:BoxFit.cover,gaplessPlayback:true)
+              : _filteredPreview(Image.memory(captured,
+                  key:MomentCameraKeys.capturedPreview,
+                  fit:BoxFit.cover,gaplessPlayback:true)),
+            if(_photoStrokes.isNotEmpty || _activePhotoStroke!=null ||
+               _drawMode)
+              Positioned.fill(child:IgnorePointer(
+                ignoring:!_drawMode,
+                child:GestureDetector(
+                  behavior:HitTestBehavior.opaque,
+                  onPanStart:_drawMode
+                    ? (d)=>_beginInk(d.localPosition,size):null,
+                  onPanUpdate:_drawMode
+                    ? (d)=>_extendInk(d.localPosition,size):null,
+                  onPanEnd:_drawMode ? (_)=>_endInk():null,
+                  child:CustomPaint(
+                    key:MomentCameraKeys.photoInk,
+                    painter:_CameraInkPainter([
+                      ..._photoStrokes,
+                      if(_activePhotoStroke!=null)_activePhotoStroke!,
+                    ]),
+                  ),
+                ),
+              )),
+            for(final sticker in _photoStickers)
+              Positioned(
+                left:(sticker.position.dx*size.width-32)
+                  .clamp(0.0,math.max(0.0,size.width-64)),
+                top:(sticker.position.dy*size.height-32)
+                  .clamp(0.0,math.max(0.0,size.height-64)),
+                child:GestureDetector(
+                  key:MomentCameraKeys.sticker(sticker.id.toString()),
+                  behavior:HitTestBehavior.translucent,
+                  onPanUpdate:_drawMode ? null
+                    : (d)=>_moveSticker(sticker,d.delta,size),
+                  onLongPress:_drawMode ? null
+                    : ()=>setState(()=>_photoStickers.remove(sticker)),
+                  child:SizedBox(width:64,height:64,
+                    child:Center(child:Text(sticker.emoji,
+                      style:const TextStyle(fontSize:48,
+                        fontFamilyFallback:<String>[
+                          'Noto Color Emoji','Apple Color Emoji',
+                          'Segoe UI Emoji',
+                        ])))),
+                ),
+              ),
+          ]);
+        }),
+      );
     }
 
     if (!widget.enableCamera) {
@@ -1671,6 +1733,22 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
               label:'Stickers',
               onTap:widget.onStickersPressed ??
                   ()=>unawaited(_openEditorTool('sticker')),
+            ),
+            const SizedBox(height:10),
+            _CameraToolItem(
+              key:MomentCameraKeys.drawButton,
+              semanticLabel:'Draw on photo',
+              assetPath:'assets/icons/sticker.svg',
+              icon:Icons.draw_outlined,
+              label:'Draw',
+              selected:_drawMode,
+              onTap:(){
+                setState((){
+                  _stickerTrayOpen=false;
+                  _filterTrayOpen=false;
+                  _drawMode=!_drawMode;
+                });
+              },
             ),
             const SizedBox(height:10),
             _CameraToolItem(
@@ -1841,6 +1919,37 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       ],
     );
   }
+}
+
+class _CameraInkPainter extends CustomPainter {
+  const _CameraInkPainter(this.strokes);
+  final List<_CameraInkStroke> strokes;
+  @override
+  void paint(Canvas canvas,Size size) {
+    for(final stroke in strokes){
+      if(stroke.points.isEmpty)continue;
+      final brush=Paint()
+        ..color=stroke.color
+        ..strokeWidth=4
+        ..strokeCap=StrokeCap.round
+        ..strokeJoin=StrokeJoin.round
+        ..style=PaintingStyle.stroke;
+      final first=stroke.points.first;
+      if(stroke.points.length==1){
+        canvas.drawCircle(
+          Offset(first.dx*size.width,first.dy*size.height),2,
+          brush..style=PaintingStyle.fill);
+        continue;
+      }
+      final path=Path()..moveTo(first.dx*size.width,first.dy*size.height);
+      for(final point in stroke.points.skip(1)){
+        path.lineTo(point.dx*size.width,point.dy*size.height);
+      }
+      canvas.drawPath(path,brush);
+    }
+  }
+  @override
+  bool shouldRepaint(covariant _CameraInkPainter old) => true;
 }
 
 class _CoverCameraPreview extends StatelessWidget {
