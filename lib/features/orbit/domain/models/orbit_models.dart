@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 class OrbitPersonData {
   const OrbitPersonData({
     required this.id,
@@ -6,11 +8,13 @@ class OrbitPersonData {
     required this.markerX,
     required this.markerY,
     this.isNew = false,
+    this.imageBytes,
   });
 
   final String id;
   final String name;
   final String? imagePath;
+  final Uint8List? imageBytes;
 
   /// Relative map position in the 0..1 range.
   final double markerX;
