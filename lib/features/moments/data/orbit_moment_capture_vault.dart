@@ -139,145 +139,24 @@ class OrbitMomentCaptureVault {
     }
   }
 
-  /// Inspect only encrypted index metadata so opening Camera never decrypts
-  /// or replaces the live preview with a previous day's capture.
+  /// Detect an encrypted M7 draft without decrypting it or changing the camera view.
   Future<bool> hasRecoverableDraft() async {
-    final owner=await _account();
-    final data=await _metadata(owner);
-    if(data==null)return false;
-    final saved=DateTime.tryParse(data['saved_at'] as String? ?? '');
-    final now=DateTime.now().toUtc();
-    if(saved==null || now.difference(saved.toUtc())>maxAge ||
-       saved.toUtc().isAfter(now.add(const Duration(minutes:5)))){
+    final owner = await _account();
+    final data = await _metadata(owner);
+    if (data == null) return false;
+    final saved = DateTime.tryParse(data['saved_at'] as String? ?? '');
+    final now = DateTime.now().toUtc();
+    if (saved == null || now.difference(saved.toUtc()) > maxAge ||
+        saved.toUtc().isAfter(now.add(const Duration(minutes: 5)))) {
       await clear();
       return false;
     }
-    final name=data['name'];
-    if(name is! String ||
-       !RegExp(r'^[a-fA-F0-9-]{36}\\.cipher
-    final owner=await _account();
-    final data=await _metadata(owner);
-    if(data==null)return null;
-    final timestamp=DateTime.tryParse(data['saved_at'] as String? ?? '');
-    if(timestamp==null ||
-        DateTime.now().toUtc().difference(timestamp.toUtc())>maxAge ||
-        timestamp.toUtc().isAfter(DateTime.now().toUtc().add(
-          const Duration(minutes:5)))){
-      await clear();
-      return null;
-    }
-    final name=data['name'];
-    final id=data['id'];
-    final kind=data['kind'];
-    if(name is! String || id is! String ||
-       !RegExp(r'^[a-fA-F0-9-]{36}\.cipher$').hasMatch(name) ||
-       !RegExp(r'^[a-fA-F0-9-]{36}$').hasMatch(id) ||
-       !['image','video','audio'].contains(kind)){
-      throw const FormatException('Untrusted encrypted capture index.');
-    }
-    final file=File('${(await _root(owner)).path}/$name');
-    if(!await file.exists() ||
-       await file.length()!=data['cipher_bytes']){
-      throw const FileSystemException('Encrypted capture is unavailable.');
-    }
-    final checksum=await hashes.sha256.bind(file.openRead()).first;
-    if(checksum.toString()!=data['sha256']){
-      throw StateError('Encrypted capture integrity mismatch.');
-    }
-    final key=Uint8List.fromList(base64Decode(data['key'] as String));
-    final prefix=Uint8List.fromList(base64Decode(data['prefix'] as String));
-    final bytes=(data['plain_bytes'] as num).toInt();
-    if(key.length!=32 || prefix.length!=8 || bytes<=0 ||
-       bytes>(kind=='video'?OrbitMediaFormat.videoLimit:
-         kind=='audio'?OrbitMediaFormat.audioLimit:OrbitMediaFormat.imageLimit)){
-      throw const FormatException('Invalid encrypted capture key.');
-    }
-    final sealed=OrbitSealedMedia(file:file,key:key,noncePrefix:prefix,
-      plainBytes:bytes,bytes:(data['cipher_bytes'] as num).toInt(),
-      sha256:data['sha256'] as String,ownerId:owner,transferId:id,
-      purpose:'moment',variant:'capture');
-    if(kind=='image'){
-      final photo=await _crypto.openInMemory(
-        await file.readAsBytes(),key:key,noncePrefix:prefix,
-        ownerId:owner,transferId:id,purpose:'moment',
-        variant:'capture',maxPlainBytes:OrbitMediaFormat.imageLimit);
-      if(await _owner()!=owner)throw StateError('Account changed.');
-      return OrbitRecoveredMomentCapture(
-        kind:'image',clientId:id,photo:photo);
-    }
-    final temporary=await _temporary();
-    final target=File('${temporary.path}/orbit-m7-recovered-$id.'+
-      (kind=='video'?'mp4':'m4a'));
-    await _decryptClip(sealed,target);
-    if(await _owner()!=owner){
-      if(await target.exists())await target.delete();
-      throw StateError('Account changed during capture recovery.');
-    }
-    return OrbitRecoveredMomentCapture(
-      kind:kind,clientId:id,clip:target,
-      durationMs:(data['duration_ms'] as num?)?.toInt());
+    final name = data['name'];
+    if (name is! String || !name.endsWith('.cipher') ||
+        name.contains('/') || name.contains('\\')) return false;
+    final root = await _root(owner);
+    return File(root.path + '/' + name).exists();
   }
-
-  Future<void> _decryptClip(OrbitSealedMedia sealed,File target) async {
-    final input=await sealed.file.open();
-    final output=await target.open(mode:FileMode.write);
-    final cipher=AesGcm.with256bits();
-    try{
-      var remaining=sealed.plainBytes;
-      var part=0;
-      while(remaining>0){
-        final plainCount=min(OrbitMediaFormat.plainChunkBytes,remaining);
-        final length=plainCount+OrbitMediaFormat.tagBytes;
-        final encrypted=Uint8List(length);
-        var position=0;
-        while(position<length){
-          final got=await input.readInto(encrypted,position,length);
-          if(got<=0)throw const FormatException('Truncated encrypted capture.');
-          position+=got;
-        }
-        final nonce=Uint8List(12)..setRange(0,8,sealed.noncePrefix);
-        ByteData.sublistView(nonce).setUint32(8,part,Endian.big);
-        final box=SecretBox(encrypted.sublist(0,plainCount),
-          nonce:nonce,mac:Mac(encrypted.sublist(plainCount)));
-        final decoded=await cipher.decrypt(box,
-          secretKey:SecretKey(sealed.key),
-          aad:utf8.encode('orbit-m6-v1|${sealed.ownerId}|${sealed.transferId}'
-            '|moment|capture|$part'));
-        await output.writeFrom(decoded);
-        remaining-=plainCount;
-        part++;
-      }
-    }catch(_){
-      await output.close();
-      if(await target.exists())await target.delete();
-      rethrow;
-    }finally{
-      await input.close();
-    }
-    await output.close();
-  }
-
-  Future<void> clear() async => purge(await _account());
-
-  /// Called by session revocation/account switch BEFORE owner credentials
-  /// are removed; purge does not require a currently active session.
-  Future<void> purge(String owner) async {
-    if(owner.isEmpty)return;
-    final metadata=await _metadata(owner);
-    await _vault.delete(_index(owner));
-    final name=metadata?['name'];
-    if(name is String && RegExp(r'^[a-fA-F0-9-]{36}\.cipher$').hasMatch(name)){
-      final file=File('${(await _root(owner)).path}/$name');
-      if(await file.exists())await file.delete();
-    }
-  }
-}
-).hasMatch(name)){
-      return false;
-    }
-    return File('${(await _root(owner)).path}/$name').exists();
-  }
-
   Future<OrbitRecoveredMomentCapture?> restore() async {
     final owner=await _account();
     final data=await _metadata(owner);
