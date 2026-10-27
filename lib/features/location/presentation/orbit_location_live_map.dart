@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:typed_data';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:maplibre_gl/maplibre_gl.dart' as gl;
@@ -6,6 +8,10 @@ import 'package:maplibre_gl/maplibre_gl.dart' as gl;
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_typography.dart';
 import '../../../core/widgets/app_circular_icon_button.dart';
+import '../../orbit/domain/models/orbit_models.dart';
+import '../../orbit/presentation/widgets/orbit_map_marker.dart';
+import '../../media/data/orbit_media_repository.dart';
+import '../../media/data/orbit_media_crypto.dart';
 import '../../auth/data/orbit_identity_client.dart';
 import '../../circles/presentation/widgets/orbit_circle_confirmation.dart';
 import '../../circles/presentation/widgets/orbit_circle_sheet.dart';
@@ -20,10 +26,11 @@ import 'orbit_location_share_sheet.dart';
 /// Markers are ONLY the M10 server's viewer-authorized projection, never demos.
 class OrbitLocationLiveMap extends StatefulWidget {
   const OrbitLocationLiveMap({super.key,this.repository,this.permissions,
-    this.onMarkersChanged,this.onPersonPressed});
+    this.onMarkersChanged,this.onPersonPressed,this.onAvatarsChanged});
   final OrbitLocationRepository? repository;
   final OrbitLocationPermissionService? permissions;
   final ValueChanged<List<OrbitLocationMarker>>? onMarkersChanged;
+  final ValueChanged<Map<String,Uint8List>>? onAvatarsChanged;
   final ValueChanged<String>? onPersonPressed;
   @override
   State<OrbitLocationLiveMap> createState()=>_OrbitLocationLiveMapState();
@@ -36,7 +43,10 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
   OrbitLocationMapSnapshot? _snapshot;
   List<OrbitLocationShare> _shares=const [];
   gl.MapLibreMapController? _map;
-  final Map<gl.Circle,String> _circleOwners={};
+  final Map<String,Uint8List> _avatarBytes={};
+  List<_OrbitPinGroup> _pinGroups=const [];
+  int _projectSerial=0;
+  final OrbitMediaRepository _media=OrbitMediaRepository();
   StreamSubscription<Position>? _locations;
   Timer? _refreshTimer;
   bool _styleReady=false,_loading=false,_sending=false,_foreground=true,_didZoom=false;
@@ -51,7 +61,7 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
     WidgetsBinding.instance.addObserver(this);
     if(OrbitM10Rollout.enabled) {
       unawaited(_refresh());
-      _refreshTimer=Timer.periodic(const Duration(seconds:40),(_){
+      _refreshTimer=Timer.periodic(const Duration(seconds:20),(_){
         if(_foreground&&mounted&&ModalRoute.of(context)?.isCurrent==true) {
           unawaited(_refresh(silent:true));
         }
@@ -66,7 +76,7 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
     unawaited(_locations?.cancel());
     _locations=null;
     WidgetsBinding.instance.removeObserver(this);
-    _circleOwners.clear();
+    _avatarBytes.clear();_pinGroups=const [];
     super.dispose();
   }
   @override
@@ -79,7 +89,8 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
       _lastSent=null;
       _cap=null;_snapshot=null;_shares=const [];
       unawaited(_clearAnnotations());
-      _circleOwners.clear();
+      _avatarBytes.clear();
+      widget.onAvatarsChanged?.call(const {});
       _map=null;_styleReady=false;_didZoom=false;
       if(mounted){widget.onMarkersChanged?.call(const []);setState(() {});}
     } else {
@@ -102,6 +113,8 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
         _locations?.cancel();_locations=null;_lastSent=null;
         _snapshot=null;_shares=const [];_cap=null;
         widget.onMarkersChanged?.call(const []);
+        widget.onAvatarsChanged?.call(const {});
+        _avatarBytes.clear();
         await _clearAnnotations();
         if(mounted)setState((){});
       }
@@ -113,7 +126,12 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
         _cap=cap;_shares=shares;_snapshot=snapshot;_message=null;
       });
       widget.onMarkersChanged?.call(snapshot.markers);
+      // Never carry one viewer's photo or media id into the next authorized snapshot.
+      final allowed=snapshot.markers.map((x)=>x.userId).toSet();
+      _avatarBytes.removeWhere((userId,_)=>!allowed.contains(userId));
+      widget.onAvatarsChanged?.call(Map.unmodifiable(_avatarBytes));
       await _syncAnnotations();
+      unawaited(_loadAuthorizedAvatars(serial));
       await _syncGps();
     }catch(e){
       if(!mounted||serial!=_epoch)return;
@@ -126,49 +144,85 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
           : 'Map access could not be verified. Reconnect and retry.';
       });
       widget.onMarkersChanged?.call(const []);
+      widget.onAvatarsChanged?.call(const {});
+      _avatarBytes.clear();
       await _clearAnnotations();
     }finally{_loading=false;}
   }
 
   Future<void> _clearAnnotations() async {
-    final map=_map;
-    if(map==null||!_styleReady)return;
-    _circleOwners.clear();
-    try{await map.clearCircles();}catch(_){}
+    ++_projectSerial;
+    if(mounted)setState(()=>_pinGroups=const []);
   }
-  void _onMapCreated(gl.MapLibreMapController controller){
+  void _onMapCreated(gl.MapLibreMapController controller) {
     _map=controller;
-    controller.onCircleTapped.add((circle){
-      final user=_circleOwners[circle];
-      if(user!=null&&mounted)widget.onPersonPressed?.call(user);
-    });
+    unawaited(_syncAnnotations());
   }
-  Future<void> _syncAnnotations() async{
+
+  // Uses the existing Flutter OrbitMapMarker widgets over MapLibre so real
+  // private M6 photo bytes never enter third-party tile providers.
+  Future<void> _syncAnnotations() async {
     final map=_map;
-    if(map==null||!_styleReady||!mounted)return;
+    if(map==null||!_styleReady||!mounted||!_foreground)return;
+    final serial=++_projectSerial;
+    final markers=_snapshot?.markers??const <OrbitLocationMarker>[];
+    if(markers.isEmpty){
+      if(mounted)setState(()=>_pinGroups=const []);
+      return;
+    }
     try{
-      await map.clearCircles();_circleOwners.clear();
-      final markers=_snapshot?.markers??const <OrbitLocationMarker>[];
-      if(markers.isEmpty)return;
-      final circleOptions=markers.map((m)=>gl.CircleOptions(
-        geometry:gl.LatLng(m.latitude,m.longitude),circleRadius:18,
-        circleColor:'#7C3AED',circleStrokeWidth:3,
-        circleStrokeColor:'#FFFFFF')).toList();
-      final circles=await map.addCircles(circleOptions);
-      if(!mounted)return;
-      for(var i=0;i<circles.length&&i<markers.length;i++){
-        _circleOwners[circles[i]]=markers[i].userId;
-      }
       if(!_didZoom){
         _didZoom=true;
         await map.animateCamera(gl.CameraUpdate.newLatLngZoom(
           gl.LatLng(markers.first.latitude,markers.first.longitude),12));
       }
+      final points=await Future.wait(markers.map((p)=>
+        map.toScreenLocation(gl.LatLng(p.latitude,p.longitude))));
+      if(!mounted||serial!=_projectSerial||!_foreground)return;
+      final groups=<_OrbitPinGroup>[];
+      for(var i=0;i<markers.length;i++){
+        final px=points[i].x.toDouble(),py=points[i].y.toDouble();
+        if(!px.isFinite||!py.isFinite)continue;
+        // Cluster after projection, not by world-coordinate distance.
+        final existing=groups.indexWhere((group)=>
+          math.sqrt(math.pow(group.x-px,2)+math.pow(group.y-py,2))<58);
+        if(existing>=0){
+          groups[existing].add(markers[i],px,py);
+        }else{
+          groups.add(_OrbitPinGroup(markers[i],px,py));
+        }
+      }
+      if(mounted&&serial==_projectSerial)setState(()=>_pinGroups=groups);
     }catch(_){
-      // Map SDK failure cannot relax authorization or restore a stale pin.
-      _circleOwners.clear();
-      if(mounted)setState(()=>_message='Map pins could not be displayed. Refresh the map.');
+      if(mounted)setState(()=>_pinGroups=const []);
     }
+  }
+  Future<void> _loadAuthorizedAvatars(int serial) async{
+    final markers=_snapshot?.markers??const <OrbitLocationMarker>[];
+    final withGrant=markers.where((m)=>m.avatarMediaId!=null).take(40).toList();
+    if(withGrant.isEmpty)return;
+    try{
+      final trusted=await OrbitIdentityClient.instance.trustedMediaDevice();
+      for(final m in withGrant){
+        if(!mounted||!_foreground||serial!=_epoch)return;
+        if(_avatarBytes.containsKey(m.userId))continue;
+        try{
+          final image=await _media.downloadPhoto(m.avatarMediaId!,
+            deviceId:trusted.id,privateKey:trusted.privateKey,
+            publicKey:trusted.publicKey,
+            maxPlainBytes:OrbitMediaFormat.imageLimit);
+          // A revoked marker or mismatched grant cannot outlive the request.
+          if(!mounted||!_foreground||serial!=_epoch)return;
+          if(!(_snapshot?.markers.any((x)=>x.userId==m.userId&&
+            x.avatarMediaId==m.avatarMediaId)??false))continue;
+          _avatarBytes[m.userId]=image;
+          widget.onAvatarsChanged?.call(Map.unmodifiable(_avatarBytes));
+          setState((){});
+        }catch(_){
+          // Owner-only encrypted media or revoked grant -> existing initials.
+        }
+      }
+    }catch(_){}
   }
 
   Future<void> _syncGps() async{
@@ -304,9 +358,32 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
           initialCameraPosition:const gl.CameraPosition(target:gl.LatLng(0,0),zoom:1.7),
           onMapCreated:_onMapCreated,
           onStyleLoadedCallback:(){_styleReady=true;unawaited(_syncAnnotations());},
+          onCameraIdle:()=>unawaited(_syncAnnotations()),
         )
         :Image.asset('assets/orbit_map.png',fit:BoxFit.cover,
           semanticLabel:'Map preview, no live location data')),
+      // Render the original Orbit avatar component at authorized coordinates.
+      // Never synthesize profile photos or reveal names for absent records.
+      if(_foreground && _styleReady && configured && OrbitM10Rollout.enabled)
+        ..._pinGroups.map((group)=>Positioned(
+          left:group.x-24,top:group.y-24,
+          child:group.members.length==1
+            ?OrbitMapMarker(
+              person:OrbitPersonData(id:group.members.first.userId,
+                name:group.members.first.displayName??'Orbit member',
+                imagePath:null,markerX:0,markerY:0,
+                imageBytes:_avatarBytes[group.members.first.userId]),
+              onTap:()=>widget.onPersonPressed?.call(group.members.first.userId))
+            :Semantics(label:'Location cluster of '+group.members.length.toString()+
+                ' people',button:true,
+              child:Material(shape:const CircleBorder(),color:AppColors.primaryEnd,
+                elevation:3,child:InkWell(customBorder:const CircleBorder(),
+                onTap:()=>_map?.animateCamera(gl.CameraUpdate.zoomIn()),
+                child:SizedBox(width:46,height:46,child:Center(
+                  child:Text(group.members.length.toString(),
+                    style:const TextStyle(fontFamily:AppTypography.fontFamily,
+                      color:Colors.white,fontWeight:FontWeight.w700))))))),
+        )),
       Positioned(left:15,right:15,top:42,child:Row(children:[
         Expanded(child:DecoratedBox(decoration:BoxDecoration(color:AppColors.white,
           borderRadius:BorderRadius.circular(30)),
@@ -336,5 +413,17 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
           label:const Text('Stop')),
       ])),
     ]);
+  }
+}
+
+class _OrbitPinGroup {
+  _OrbitPinGroup(OrbitLocationMarker marker,this.x,this.y):members=[marker];
+  final List<OrbitLocationMarker> members;
+  double x,y;
+  void add(OrbitLocationMarker marker,double px,double py) {
+    final count=members.length;
+    x=(x*count+px)/(count+1);
+    y=(y*count+py)/(count+1);
+    members.add(marker);
   }
 }
