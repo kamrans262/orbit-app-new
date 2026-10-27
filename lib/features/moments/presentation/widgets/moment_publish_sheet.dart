@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import '../../data/moment_photo_processor.dart';
 import '../../data/orbit_moment_audience_memory.dart';
+import '../../../auth/data/orbit_identity_client.dart';
 import 'orbit_moment_draft_player.dart';
 
 import 'package:flutter/material.dart';
@@ -303,7 +304,8 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
   // A live repository must inject circles and a publisher together. A missing
   // publisher deliberately never claims a post was published.
   bool get _canPublish => widget.publisher != null;
-  bool get _canSavePrivate => widget.privateSaver != null;
+  bool get _canSavePrivate => widget.privateSaver != null &&
+      widget.mediaKind=='image';
   bool get _hasAudience => _canPublish
       ? (_audienceKind=='only_me' ||
         (_audienceKind=='accepted_friends' && widget.friends.isNotEmpty) ||
@@ -328,6 +330,68 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
     _placeLabel.dispose();
     _caption.dispose();
     super.dispose();
+  }
+
+  String _explainPrivateSaveFailure(Object error) {
+    if(error is OrbitIdentityException) {
+      if(error.statusCode==401) {
+        return 'Your Orbit session expired. Sign in again before saving '
+          'encrypted private media. Your capture remains in this review.';
+      }
+      if(error.statusCode==403) {
+        return 'This device is not approved for encrypted media, or Media '
+          'access is disabled. Check device approval and M6 Media settings.';
+      }
+      if(error.statusCode==404 || error.statusCode==405 ||
+         error.statusCode==503) {
+        return 'The Orbit private-media service is unavailable on the '
+          'server. Check that M6 Media is enabled and deployed on Hostinger. '
+          'Your capture has not been confirmed as saved.';
+      }
+      if(error.statusCode==413) {
+        return 'This image exceeds the private-media upload limit. '
+          'Go back to review and reduce its size.';
+      }
+      if(error.statusCode==429) {
+        return 'Too many media requests were sent. Wait before retrying.';
+      }
+      if(error.statusCode==null) {
+        return 'Could not contact Orbit. Check your internet connection '
+          'and retry when the server is reachable.';
+      }
+      return 'Orbit rejected this private save (HTTP ${error.statusCode}). '
+        'Check device trust, account access and M6 Media configuration.';
+    }
+    if(error is FileSystemException) {
+      return 'Private encrypted storage could not be read or written. '
+        'Check available device storage before retrying.';
+    }
+    if(error is FormatException) {
+      return 'This photo could not be prepared for encrypted storage. '
+        'Return to review and try another image.';
+    }
+    if(error is StateError) {
+      final reason=error.message.toString();
+      if(reason.contains('still pending') ||
+         reason.contains('still verifying')) {
+        return 'The encrypted upload is still waiting for verification. '
+          'Your private save is not confirmed. Retry when M6 is available.';
+      }
+      if(reason.contains('no longer queued')) {
+        return 'The previous encrypted upload is no longer in the retry '
+          'queue. Return to review before starting another save.';
+      }
+      if(reason.contains('transport is not configured')) {
+        return 'Private media transport is not configured on the server. '
+          'Check M6 Media storage settings on Hostinger.';
+      }
+      if(reason.contains('grant')) {
+        return 'Encrypted media was uploaded, but device-only access '
+          'could not be confirmed. The save is not complete.';
+      }
+    }
+    return 'Private save could not be confirmed. Return to review to '
+      'keep your photo, or retry after checking the M6 Media service.';
   }
 
   Future<void> _submit({bool previewOnly = false, bool privateOnly = false}) async {
@@ -408,11 +472,11 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
         _step = _PublishStep.finished;
         _progress = 1;
       });
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
       setState(() {
         _error = privateOnly
-            ? 'Private save was interrupted. Any encrypted draft stays queued for a safe retry.'
+            ? _explainPrivateSaveFailure(error)
             : 'Your Moment could not be published. Nothing was confirmed as sent.';
         _step = _PublishStep.failed;
       });
@@ -713,7 +777,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
           Text('UI preview only. No upload or notification is sent.',
             style:AppTypography.bodyMuted),
         if(_canSavePrivate && widget.mediaKind=='image')
-          Text('Private save uses only your trusted device; it does not post.',
+          Text('Private save needs trusted-device approval and the M6 encrypted media service. It does not publish a Moment.',
             style:AppTypography.bodyMuted),
         const SizedBox(height:8),
         AppPrimaryButton(
