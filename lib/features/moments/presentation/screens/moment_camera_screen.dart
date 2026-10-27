@@ -293,6 +293,9 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     }
 
     _cameraInitializationInProgress = true;
+    // An Orbit permission/loading popup is useful on first entry, but opening
+    // it for every camera flip or Photo/Video switch blocks live camera tools.
+    final firstOpen = _controller == null;
 
     try {
       if (mounted) {
@@ -302,7 +305,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         });
       }
 
-      unawaited(_showOrbitCameraLoadingPopup());
+      if (firstOpen) unawaited(_showOrbitCameraLoadingPopup());
 
       final oldController = _controller;
       _controller = null;
@@ -552,9 +555,14 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
 
   Future<void> _toggleFlash() async {
     final controller = _controller;
-    if (controller == null ||
-        !controller.value.isInitialized ||
-        _capturedBytes != null) {
+    if (_recording || _capturedClip != null || _isCapturing ||
+        _isInitializing) return;
+    if (controller == null || !controller.value.isInitialized) {
+      _showToolHint('Camera is not ready. Please try again.');
+      return;
+    }
+    if (_capturedBytes != null) {
+      _showToolHint('Retake the photo to change flash.');
       return;
     }
 
@@ -567,6 +575,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         return;
       }
     }
+    _showToolHint('Flash is not supported by this camera.');
   }
 
   Future<bool> _trySetFlashMode(
@@ -593,7 +602,9 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
 
   Future<void> _flipCamera() async {
     if (_capturedBytes != null || _capturedClip != null || _recording ||
-        _isCapturing || _cameras.length < 2 || _isInitializing) {
+        _isCapturing || _isInitializing) return;
+    if (_cameras.length < 2) {
+      _showToolHint('No second camera is available.');
       return;
     }
 
@@ -636,6 +647,9 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         _captureDelay = Duration.zero;
       }
     });
+    _showToolHint(_captureDelay == Duration.zero
+        ? 'Timer off'
+        : 'Timer set to ${_captureDelay.inSeconds} seconds.');
   }
 
   Future<void> _handleCapturePressed() async {
