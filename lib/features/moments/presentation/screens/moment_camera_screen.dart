@@ -939,13 +939,12 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   Future<void> _openEditorTool(String tool) async {
     if(_publishSheetOpen || !mounted)return;
     if(_capturedBytes==null && _capturedClip==null){
-      if(_mode!=_OrbitCaptureMode.photo){
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content:Text('Record the Moment before editing it.')));
-        return;
-      }
-      await _captureMoment();
-      if(!mounted||_capturedBytes==null)return;
+      // Editing controls must never silently take a photo. Snapchat-style
+      // camera tools remain over the live preview until capture is explicit.
+      _showToolHint(tool=='sticker'
+          ? 'Take a photo first, then add stickers.'
+          : 'Take a photo first, then add text.');
+      return;
     }
     String initialText='';
     if(tool=='sticker'){
@@ -1011,6 +1010,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         durationMs:_capturedDurationMs,
         waveformLevels:List<double>.unmodifiable(_waveform),
         initialOverlayText:initialOverlayText,
+        initialFilter:_selectedFilter,
         // An authenticated account must never show fabricated Circle names.
         circles: widget.momentAudienceCircles,
         friends: widget.momentAudienceFriends,
@@ -1074,14 +1074,40 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
                           key: MomentCameraKeys.filterButton,
                           semanticLabel: 'Camera filters and settings',
                           assetPath: 'assets/icons/filter.svg',
-                          onTap: widget.onFilterPressed ?? ()=>unawaited(_openEditorTool('filter')), 
+                          onTap: widget.onFilterPressed ?? _toggleFilterTray,
                         ),
                       ),
                       Positioned(
                         top: 70,
                         right: edgePadding,
+                        bottom: 114,
+                        width: 68,
                         child: _buildToolColumn(),
                       ),
+                      if(_filterTrayOpen)
+                        Positioned(
+                          left:edgePadding,
+                          right:edgePadding,
+                          bottom:108,
+                          child:_buildFilterTray(),
+                        ),
+                      if(_toolHint!=null)
+                        Positioned(
+                          top:72,
+                          left:edgePadding,
+                          right:edgePadding+80,
+                          child:Container(
+                            key:MomentCameraKeys.toolHint,
+                            padding:const EdgeInsets.all(12),
+                            decoration:BoxDecoration(
+                              color:const Color(0xD9000000),
+                              borderRadius:BorderRadius.circular(18)),
+                            child:Text(_toolHint!,
+                              textAlign:TextAlign.center,
+                              style:AppTypography.body.copyWith(
+                                color:Colors.white,fontSize:12)),
+                          ),
+                        ),
                       Positioned(
                         left: edgePadding,
                         right: edgePadding,
@@ -1173,12 +1199,12 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         ])));
     }
     if (captured != null) {
-      return Image.memory(
+      return _filteredPreview(Image.memory(
         captured,
         key: MomentCameraKeys.capturedPreview,
         fit: BoxFit.cover,
         gaplessPlayback: true,
-      );
+      ));
     }
 
     if (!widget.enableCamera) {
@@ -1193,7 +1219,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
           tap.localPosition,constraints.biggest)),
         onScaleStart:_startZoom,
         onScaleUpdate:_zoomCamera,
-        child:_CoverCameraPreview(controller:controller),
+        child:_filteredPreview(_CoverCameraPreview(controller:controller)),
       ));
     }
 
@@ -1283,10 +1309,12 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         ? 'Timer off'
         : 'Timer $timerSeconds seconds';
 
-    return Column(
+    return SingleChildScrollView(
       key: MomentCameraKeys.toolsColumn,
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
+      physics: const BouncingScrollPhysics(),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
         _CameraToolItem(
           semanticLabel:'Photo mode',
           assetPath:'assets/icons/flip.svg',
@@ -1354,7 +1382,8 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
           label: 'Stickers',
           onTap: widget.onStickersPressed ?? ()=>unawaited(_openEditorTool('sticker')), 
         ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -1514,7 +1543,7 @@ class _CameraToolItem extends StatelessWidget {
       label: semanticLabel,
       child: InkWell(
         onTap: onTap,
-        customBorder: const CircleBorder(),
+        borderRadius: BorderRadius.circular(16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
@@ -1550,7 +1579,9 @@ class _CameraToolItem extends StatelessWidget {
                 fontSize: 10,
                 height: 1.2,
                 fontWeight: FontWeight.w500,
-                color: Colors.black,
+                color: Colors.white,
+                shadows:<Shadow>[Shadow(
+                  color:Color(0x99000000),blurRadius:6)],
               ),
             ),
           ],
