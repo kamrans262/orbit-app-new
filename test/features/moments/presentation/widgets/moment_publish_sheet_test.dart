@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_ui/features/moments/domain/models/moment_publish_models.dart';
+import 'package:orbit_ui/features/auth/data/orbit_identity_client.dart';
 import 'package:orbit_ui/features/moments/presentation/widgets/moment_publish_sheet.dart';
 
 void main() {
@@ -153,5 +154,42 @@ void main() {
     expect(find.textContaining('Nothing was shared with a Circle'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('private save explains disabled M6 service and never claims success', (
+    tester,
+  ) async {
+    var attempts=0;
+    await showSheet(tester, privateSaver: (bytes, progress) async {
+      attempts++;
+      throw OrbitIdentityException('Media module disabled.',503);
+    });
+    await tester.ensureVisible(find.text('Save privately'));
+    await tester.tap(find.text('Save privately'));
+    await tester.pumpAndSettle();
+    expect(find.text('Private save interrupted'), findsOneWidget);
+    expect(find.textContaining('M6 Media is enabled'), findsOneWidget);
+    expect(find.text('Photo saved privately'), findsNothing);
+    await tester.tap(find.byKey(MomentPublishKeys.retry));
+    await tester.pumpAndSettle();
+    expect(attempts,2);
+    expect(find.text('Private save interrupted'), findsOneWidget);
+    expect(tester.takeException(),isNull);
+  });
+
+  testWidgets('private save trust failure explains device approval', (
+    tester,
+  ) async {
+    await showSheet(tester, privateSaver: (bytes, progress) async {
+      throw OrbitIdentityException('Trusted device required.',403);
+    });
+    await tester.ensureVisible(find.text('Save privately'));
+    await tester.tap(find.text('Save privately'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('not approved for encrypted media'),
+      findsOneWidget);
+    expect(find.text('Photo saved privately'),findsNothing);
+    expect(tester.takeException(),isNull);
+  });
+
 
 }
