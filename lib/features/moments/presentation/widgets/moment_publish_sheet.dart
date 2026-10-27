@@ -50,6 +50,7 @@ Future<void> showMomentPublishingSheet(
   List<double> waveformLevels=const [],
   bool enableNativePreview=true,
   String initialOverlayText='',
+  MomentFilter initialFilter=MomentFilter.natural,
   required List<MomentAudienceCircle> circles,
   List<MomentAudienceCircle> friends = const [],
   String privacyAudience = 'Nobody',
@@ -80,6 +81,7 @@ Future<void> showMomentPublishingSheet(
         waveformLevels:waveformLevels,
         enableNativePreview:enableNativePreview,
         initialOverlayText:initialOverlayText,
+        initialFilter: initialFilter,
         circles: circles,
         friends: friends,
         privacyAudience: privacyAudience,
@@ -102,6 +104,7 @@ class MomentPublishSheet extends StatefulWidget {
     this.waveformLevels=const [],
     this.enableNativePreview=true,
     this.initialOverlayText='',
+    this.initialFilter=MomentFilter.natural,
     this.friends = const [],
     this.privacyAudience = 'Nobody',
     this.publisher,
@@ -118,6 +121,7 @@ class MomentPublishSheet extends StatefulWidget {
   final List<double> waveformLevels;
   final bool enableNativePreview;
   final String initialOverlayText;
+  final MomentFilter initialFilter;
   final List<MomentAudienceCircle> circles;
   final List<MomentAudienceCircle> friends;
   final String privacyAudience;
@@ -141,7 +145,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
   final OrbitMomentAudienceMemory _audienceMemory=OrbitMomentAudienceMemory();
   OrbitMomentAudiencePreference? _previousAudience;
 
-  MomentFilter _filter=MomentFilter.natural;
+  late MomentFilter _filter;
   double _beautyStrength=0;
   bool _drawing=false;
   final List<MomentDrawStroke> _strokes=[];
@@ -221,6 +225,12 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
   @override
   void initState() {
     super.initState();
+    _filter=widget.initialFilter;
+    if(_filter!=MomentFilter.natural){
+      WidgetsBinding.instance.addPostFrameCallback((_){
+        if(mounted)_queuePreview();
+      });
+    }
     if(widget.publisher!=null)unawaited(_loadLastAudience());
     if(widget.initialOverlayText.isNotEmpty){
       _overlayText.text=widget.initialOverlayText.length>80
