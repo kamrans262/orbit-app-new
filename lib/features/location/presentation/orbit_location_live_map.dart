@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:typed_data';
 import 'dart:math' as math;
+import 'dart:convert';
+import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:maplibre_gl/maplibre_gl.dart' as gl;
@@ -48,6 +50,10 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
   int _projectSerial=0;
   final OrbitMediaRepository _media=OrbitMediaRepository();
   StreamSubscription<Position>? _locations;
+  WebSocketChannel? _realtime;
+  StreamSubscription<dynamic>? _realtimeEvents;
+  Timer? _ticketExpiry;
+  int _wsSerial=0;
   Timer? _refreshTimer;
   bool _styleReady=false,_loading=false,_sending=false,_foreground=true,_didZoom=false;
   DateTime? _lastSent;
@@ -73,6 +79,7 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
   void dispose(){
     ++_epoch;
     _refreshTimer?.cancel();
+    _dropRealtime();
     unawaited(_locations?.cancel());
     _locations=null;
     WidgetsBinding.instance.removeObserver(this);
@@ -86,6 +93,7 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
       ++_epoch;
       _locations?.cancel();
       _locations=null;
+      _dropRealtime();
       _lastSent=null;
       _cap=null;_snapshot=null;_shares=const [];
       unawaited(_clearAnnotations());
@@ -133,10 +141,12 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
       await _syncAnnotations();
       unawaited(_loadAuthorizedAvatars(serial));
       await _syncGps();
+      unawaited(_syncRealtime());
     }catch(e){
       if(!mounted||serial!=_epoch)return;
       // Never keep old position grants after auth/revocation/network failure.
       _locations?.cancel();_locations=null;
+      _dropRealtime();
       setState((){
         _cap=null;_shares=const [];_snapshot=null;
         _message=e is OrbitIdentityException && e.statusCode==404
@@ -223,6 +233,58 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
         }
       }
     }catch(_){}
+  }
+
+  void _dropRealtime() {
+    ++_wsSerial;
+    _ticketExpiry?.cancel();_ticketExpiry=null;
+    _realtimeEvents?.cancel();_realtimeEvents=null;
+    _realtime?.sink.close();_realtime=null;
+  }
+  Future<void> _syncRealtime() async {
+    if(!mounted||!_foreground||_cap?.realtimeAvailable!=true||
+       !OrbitM10Rollout.realtimeConfigured){
+      _dropRealtime();return;
+    }
+    if(_realtime!=null)return;
+    final serial=++_wsSerial;
+    try{
+      final info=await _repo.realtimeTicket();
+      if(!mounted||!_foreground||serial!=_wsSerial)return;
+      // WSS host is deployment-approved. Never accept arbitrary backend URL.
+      if(info['url']!=OrbitM10Rollout.realtimeSocketUrl)return;
+      final socket=WebSocketChannel.connect(Uri.parse(OrbitM10Rollout.realtimeSocketUrl));
+      _realtime=socket;
+      await socket.ready.timeout(const Duration(seconds:7));
+      if(!mounted||!_foreground||serial!=_wsSerial){
+        socket.sink.close();return;
+      }
+      // Ticket is sent as the first message over TLS, never in the URL/log.
+      socket.sink.add(jsonEncode({'type':'subscribe','ticket':info['ticket']}));
+      _realtimeEvents=socket.stream.listen((raw){
+        if(!mounted||!_foreground||serial!=_wsSerial)return;
+        try{
+          final event=jsonDecode(raw as String);
+          if(event is Map && event['v']==1 &&
+             event['type']=='location.invalidated') {
+            // Never trust GPS within a socket event. Always reauthorize REST.
+            unawaited(_refresh());
+          }
+        }catch(_){}
+      },onError:(_){
+        if(mounted&&serial==_wsSerial)_dropRealtime();
+      },onDone:(){
+        if(mounted&&serial==_wsSerial)_dropRealtime();
+      });
+      // Server tickets expire at 60s. Explicitly renew on the next refresh.
+      _ticketExpiry=Timer(const Duration(seconds:48),(){
+        if(!mounted||serial!=_wsSerial)return;
+        _dropRealtime();unawaited(_syncRealtime());
+      });
+    }catch(_){
+      if(mounted&&serial==_wsSerial)_dropRealtime();
+      // Preserve the safe 20s authorized REST refresh fallback.
+    }
   }
 
   Future<void> _syncGps() async{
