@@ -105,6 +105,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
 
   bool _isInitializing = true;
   bool _isCapturing = false;
+  bool _isRetaking = false;
   String? _cameraError;
   Uint8List? _capturedBytes;
   bool _publishSheetOpen = false;
@@ -1008,37 +1009,40 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   }
 
   Future<void> _retake() async {
-    if (!mounted) {
-      return;
-    }
-
-    _stopWhenStarted=false;
-    _filterTrayOpen=false;
-    final old=_capturedClip;
-    if(old!=null)await _deleteClip(old);
-    try{await _captureVault.clear();}catch(_){}
-    setState(() {
-      _capturedBytes = null;
-      _capturedClip=null;
-      _capturedDurationMs=null;
-      _captureClientId=null;
-      _hasSavedDraft=false;
-    });
-    final controller = _controller;
-    if (_mode!=_OrbitCaptureMode.photo && widget.enableCamera) {
-      // Video retakes must re-open a controller configured with audio.
-      await _initializeCamera(preferredCamera:_activeCamera);
-    } else if (controller != null && controller.value.isInitialized) {
-      try {
-        await controller.resumePreview();
-      } on CameraException {
-        await _initializeCamera(preferredCamera: _activeCamera);
+    if (!mounted || _isRetaking || _isCapturing || _recording) return;
+    _isRetaking=true;
+    try {
+      _stopWhenStarted=false;
+      _filterTrayOpen=false;
+      final old=_capturedClip;
+      if(old!=null)await _deleteClip(old);
+      try { await _captureVault.clear(); } catch (_) {}
+      if(!mounted)return;
+      setState(() {
+        _capturedBytes=null;
+        _capturedClip=null;
+        _capturedDurationMs=null;
+        _captureClientId=null;
+        _hasSavedDraft=false;
+      });
+      // A resumed video/voice capture needs a correctly configured camera;
+      // a photo only needs its paused preview resumed.
+      final controller=_controller;
+      if(_mode!=_OrbitCaptureMode.photo && widget.enableCamera) {
+        await _initializeCamera(preferredCamera:_activeCamera);
+      } else if(controller!=null && controller.value.isInitialized) {
+        try {
+          await controller.resumePreview();
+        } catch (_) {
+          if(mounted)await _initializeCamera(preferredCamera:_activeCamera);
+        }
+      } else if(widget.enableCamera) {
+        await _initializeCamera(preferredCamera:_activeCamera);
       }
-    } else {
-      await _initializeCamera(preferredCamera: _activeCamera);
+    } finally {
+      _isRetaking=false;
     }
   }
-
   Future<void> _openEditorTool(String tool) async {
     if(_publishSheetOpen || !mounted)return;
     if(_capturedBytes==null && _capturedClip==null){
@@ -1902,8 +1906,8 @@ class _CaptureButton extends StatelessWidget {
         (recordMode?'Hold to record moment':'Capture moment')),
       child: InkResponse(
         onTap: isBusy ? null : onTap,
-        onLongPress:recordMode && !isBusy ? onHoldStart : null,
-        onLongPressUp:recordMode && !isBusy ? onHoldEnd : null,
+        onLongPress:recordMode && !isBusy && !retake ? onHoldStart : null,
+        onLongPressUp:recordMode && !isBusy && !retake ? onHoldEnd : null,
         customBorder: const CircleBorder(),
         radius: 42,
         child: Container(
