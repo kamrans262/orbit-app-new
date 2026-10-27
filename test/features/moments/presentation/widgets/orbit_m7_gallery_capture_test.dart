@@ -64,9 +64,11 @@ void main() {
     expect(galleryReads,0);
     await tester.tap(find.byKey(MomentCameraKeys.filter(MomentFilter.warm.name)));
     await tester.pump();
-    final selected=tester.widget<ChoiceChip>(
-        find.byKey(MomentCameraKeys.filter(MomentFilter.warm.name)));
-    expect(selected.selected,isTrue);
+    final selected=tester.widget<Container>(
+      find.descendant(
+        of:find.byKey(MomentCameraKeys.filter(MomentFilter.warm.name)),
+        matching:find.byType(Container)).first);
+    expect((selected.decoration as BoxDecoration).gradient,isNotNull);
     expect(find.byKey(MomentCameraKeys.capturedPreview),findsNothing);
     await tester.tap(find.byKey(const Key('moment_camera_close_filters')));
     await tester.pump();
@@ -120,6 +122,54 @@ void main() {
     expect(find.byKey(MomentCameraKeys.toolHint),findsOneWidget);
     expect(find.byKey(MomentCameraKeys.capturedPreview),findsNothing);
     expect(find.byType(MomentPublishSheet),findsNothing);
+    expect(tester.takeException(),isNull);
+  });
+
+  testWidgets('retake clears captured gallery image and restores camera tools',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 820));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final photo=Uint8List.fromList(base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAOEGFykAAAAASUVORK5CYII='));
+    await tester.pumpWidget(MaterialApp(home:MomentCameraScreen(
+      enableCamera:false,galleryPicker:() async=>photo,
+    )));
+    await tester.pump();
+    await tester.tap(find.byKey(MomentCameraKeys.galleryButton));
+    await tester.pumpAndSettle();
+    expect(find.byKey(MomentCameraKeys.capturedPreview),findsOneWidget);
+    expect(find.byKey(MomentCameraKeys.retakeButton),findsOneWidget);
+    expect(find.byKey(MomentCameraKeys.galleryButton),findsNothing);
+    await tester.tap(find.byKey(MomentCameraKeys.retakeButton));
+    await tester.pumpAndSettle();
+    expect(find.byKey(MomentCameraKeys.capturedPreview),findsNothing);
+    expect(find.byKey(MomentCameraKeys.galleryButton),findsOneWidget);
+    expect(find.byKey(MomentCameraKeys.retakeButton),findsNothing);
+    expect(tester.takeException(),isNull);
+  });
+
+  testWidgets('sticker picker retains Orbit full width sheet and cancellation',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 820));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final photo=Uint8List.fromList(base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAOEGFykAAAAASUVORK5CYII='));
+    await tester.pumpWidget(MaterialApp(home:MomentCameraScreen(
+      enableCamera:false,galleryPicker:()async=>photo,
+    )));
+    await tester.pump();
+    await tester.tap(find.byKey(MomentCameraKeys.galleryButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(MomentCameraKeys.stickersButton));
+    await tester.pumpAndSettle();
+    expect(find.text('Add Sticker'),findsOneWidget);
+    final sheet=find.byType(BottomSheet);
+    expect(sheet,findsOneWidget);
+    expect(find.byKey(const Key('moment_camera_sticker_LOVE!')),findsOneWidget);
+    await tester.tap(find.byKey(const Key('moment_camera_sticker_close')));
+    await tester.pumpAndSettle();
+    expect(find.byType(BottomSheet),findsNothing);
+    expect(find.byKey(MomentCameraKeys.capturedPreview),findsOneWidget);
     expect(tester.takeException(),isNull);
   });
 
