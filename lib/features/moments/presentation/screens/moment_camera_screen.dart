@@ -747,6 +747,10 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   Future<void> _selectCaptureMode(_OrbitCaptureMode next) async {
     if(_isCapturing || _recording || _publishSheetOpen ||
        _capturedBytes!=null || _capturedClip!=null || _mode==next)return;
+    if(_cameraInitializationInProgress) {
+      _showToolHint('Camera is starting. Please try again.');
+      return;
+    }
     setState((){
       _mode=next;
       _filterTrayOpen=false;
@@ -936,12 +940,12 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
 
   Future<void> _captureMoment() async {
     final controller = _controller;
-    if (_isCapturing ||
-        controller == null ||
-        !controller.value.isInitialized ||
-        controller.value.isTakingPicture) {
+    if (_isCapturing)return;
+    if (controller==null || !controller.value.isInitialized) {
+      _showToolHint('Camera is not ready. Please try again.');
       return;
     }
+    if (controller.value.isTakingPicture)return;
 
     setState(() => _isCapturing = true);
 
@@ -1021,7 +1025,10 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       _hasSavedDraft=false;
     });
     final controller = _controller;
-    if (controller != null && controller.value.isInitialized) {
+    if (_mode!=_OrbitCaptureMode.photo && widget.enableCamera) {
+      // Video retakes must re-open a controller configured with audio.
+      await _initializeCamera(preferredCamera:_activeCamera);
+    } else if (controller != null && controller.value.isInitialized) {
       try {
         await controller.resumePreview();
       } on CameraException {
