@@ -39,7 +39,12 @@ void main() {
     await tester.pump();
     expect(find.bySemanticsLabel('Hold to record moment'),findsOneWidget);
     await tester.tap(find.byKey(MomentCameraKeys.voiceMode));
-    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(find.byKey(MomentCameraKeys.voiceConsent),findsOneWidget);
+    expect(find.text('Record a Voice Moment?'),findsOneWidget);
+    expect(find.text('Continue to Voice'),findsOneWidget);
+    await tester.tap(find.text('Continue to Voice'));
+    await tester.pumpAndSettle();
     expect(find.bySemanticsLabel('Hold to record moment'),findsOneWidget);
     expect(tester.takeException(),isNull);
   });
@@ -148,7 +153,7 @@ void main() {
     expect(tester.takeException(),isNull);
   });
 
-  testWidgets('sticker picker retains Orbit full width sheet and cancellation',
+  testWidgets('graphic sticker stays in camera and can be repositioned',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(390, 820));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -161,15 +166,62 @@ void main() {
     await tester.tap(find.byKey(MomentCameraKeys.galleryButton));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(MomentCameraKeys.stickersButton));
-    await tester.pumpAndSettle();
-    expect(find.text('Add Sticker'),findsOneWidget);
-    final sheet=find.byType(BottomSheet);
-    expect(sheet,findsOneWidget);
-    expect(find.byKey(const Key('moment_camera_sticker_LOVE!')),findsOneWidget);
-    await tester.tap(find.byKey(const Key('moment_camera_sticker_close')));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    expect(find.byKey(MomentCameraKeys.stickerTray),findsOneWidget);
     expect(find.byType(BottomSheet),findsNothing);
+    await tester.tap(find.byKey(const Key('moment_camera_sticker_choice_10084')));
+    await tester.pump();
+    expect(find.byKey(MomentCameraKeys.sticker('1')),findsOneWidget);
+    expect(find.byKey(MomentCameraKeys.stickerTray),findsNothing);
+    final before=tester.getCenter(find.byKey(MomentCameraKeys.sticker('1')));
+    await tester.drag(find.byKey(MomentCameraKeys.sticker('1')),
+      const Offset(35,70));
+    await tester.pump();
+    final after=tester.getCenter(find.byKey(MomentCameraKeys.sticker('1')));
+    expect(after.dx,greaterThan(before.dx));
+    expect(after.dy,greaterThan(before.dy));
+    expect(tester.takeException(),isNull);
+  });
+
+  testWidgets('draw colors and undo are on the captured photo without a sheet',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 820));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final photo=Uint8List.fromList(base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAOEGFykAAAAASUVORK5CYII='));
+    await tester.pumpWidget(MaterialApp(home:MomentCameraScreen(
+      enableCamera:false,galleryPicker:()async=>photo,
+    )));
+    await tester.pump();
+    await tester.tap(find.byKey(MomentCameraKeys.galleryButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(MomentCameraKeys.drawButton));
+    await tester.pump();
+    expect(find.byKey(MomentCameraKeys.drawPalette),findsOneWidget);
+    await tester.tap(find.byKey(const Key('moment_camera_ink_color_2')));
+    await tester.pump();
+    await tester.dragFrom(const Offset(85,230),const Offset(90,60));
+    await tester.pump();
+    expect(find.byKey(MomentCameraKeys.photoInk),findsOneWidget);
+    await tester.tap(find.byKey(const Key('moment_camera_draw_done')));
+    await tester.pump();
+    expect(find.byKey(MomentCameraKeys.drawPalette),findsNothing);
     expect(find.byKey(MomentCameraKeys.capturedPreview),findsOneWidget);
+    expect(find.byType(BottomSheet),findsNothing);
+    expect(tester.takeException(),isNull);
+  });
+
+  testWidgets('filter circle is centered on the vertical toolbar',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 820));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(const MaterialApp(home:MomentCameraScreen(
+      enableCamera:false,
+    )));
+    await tester.pump();
+    final filterX=tester.getCenter(find.byKey(MomentCameraKeys.filterButton)).dx;
+    final railX=tester.getCenter(find.byKey(MomentCameraKeys.toolsColumn)).dx;
+    expect(filterX,closeTo(railX,1));
     expect(tester.takeException(),isNull);
   });
 
