@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:typed_data';
 
 import '../../../../app/theme/app_typography.dart';
 import '../../domain/models/orbit_models.dart';
@@ -38,6 +39,7 @@ class OrbitPersonAvatar extends StatelessWidget {
             child: ClipOval(
               child: _OrbitAvatarImage(
                 imagePath: person.imagePath,
+                imageBytes: person.imageBytes,
                 name: person.name,
               ),
             ),
@@ -76,13 +78,18 @@ class OrbitPersonAvatar extends StatelessWidget {
 }
 
 class _OrbitAvatarImage extends StatelessWidget {
-  const _OrbitAvatarImage({required this.imagePath, required this.name});
+  const _OrbitAvatarImage({required this.imagePath,required this.imageBytes,required this.name});
 
   final String? imagePath;
+  final Uint8List? imageBytes;
   final String name;
 
   @override
   Widget build(BuildContext context) {
+    if(imageBytes!=null&&imageBytes!.isNotEmpty){
+      return Image.memory(imageBytes!,fit:BoxFit.cover,
+        errorBuilder:(_,__,___)=>_AvatarFallback(name:name));
+    }
     final path = imagePath?.trim();
     if (path == null || path.isEmpty) {
       return _AvatarFallback(name: name);
