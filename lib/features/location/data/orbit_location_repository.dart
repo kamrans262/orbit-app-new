@@ -34,6 +34,15 @@ class OrbitLocationRepository {
       if(timezone!=null)'timezone':timezone,if(exitRadius!=null)'exit_radius_m':exitRadius,
     }));
   }
+  Future<Map<String,dynamic>> realtimeTicket() async {
+    final d=await _data('POST','/location/realtime/ticket');
+    final token=d['ticket'],url=d['url'];
+    if(token is! String || token.length<40 ||
+       url is! String || !url.startsWith('wss://')) {
+      throw const FormatException('Unverified realtime subscription.');
+    }
+    return d;
+  }
   Future<void> stopAll() async {await _data('DELETE','/me/location/shares');}
   Future<void> revoke(String id) async {
     await _data('DELETE','/me/location/shares/'+Uri.encodeComponent(id));
