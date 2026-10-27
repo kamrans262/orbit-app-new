@@ -245,6 +245,14 @@ void main() {
     await tester.pump();
     await tester.tap(find.byKey(MomentCameraKeys.sendButton));
     await tester.pumpAndSettle();
+    // RepaintBoundary.toImage() and ui.Image.toByteData() complete on the
+    // raster thread, which can outlive pumpAndSettle's scheduled frames.
+    // Wait for actual exported bytes; never accept the unedited source.
+    for(var attempt=0; attempt<15 && exported==null; attempt++){
+      await tester.runAsync(() => Future<void>.delayed(
+        const Duration(milliseconds:30)));
+      await tester.pump(const Duration(milliseconds:30));
+    }
     expect(exported,isNotNull);
     expect(exported!.take(8).toList(),<int>[
       137,80,78,71,13,10,26,10,
