@@ -1089,94 +1089,193 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   }
   Future<void> _openEditorTool(String tool) async {
     if(_publishSheetOpen || !mounted)return;
-    if(_capturedBytes==null && _capturedClip==null){
-      // Editing controls must never silently take a photo. Snapchat-style
-      // camera tools remain over the live preview until capture is explicit.
-      _showToolHint(tool=='sticker'
-          ? 'Take a photo first, then add stickers.'
-          : 'Take a photo first, then add text.');
+    if(_capturedBytes==null || _mode!=_OrbitCaptureMode.photo){
+      _showToolHint('Take a photo first to add stickers or text.');
       return;
     }
-    String initialText='';
     if(tool=='sticker'){
-      if(_mode!=_OrbitCaptureMode.photo){
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content:Text('Stickers are available for photos only.')));
-        return;
-      }
-      final selected=await showModalBottomSheet<String>(
-        context:context,
-        useSafeArea:true,
-        isScrollControlled:true,
-        backgroundColor:Colors.white,
-        shape:const RoundedRectangleBorder(
-          borderRadius:BorderRadius.vertical(top:Radius.circular(28))),
-        builder:(sheet)=>SafeArea(child:Padding(
-          padding:EdgeInsets.fromLTRB(
-            20,12,20,20+MediaQuery.viewInsetsOf(sheet).bottom),
-          child:Column(
-            mainAxisSize:MainAxisSize.min,
-            crossAxisAlignment:CrossAxisAlignment.stretch,
-            children:[
-              Center(child:Container(width:38,height:4,
-                decoration:BoxDecoration(
-                  color:const Color(0xFFD8D8D8),
-                  borderRadius:BorderRadius.circular(4)))),
-              const SizedBox(height:20),
-              Row(children:[
-                Expanded(child:Text('Add Sticker',
-                  style:AppTypography.smallHeading)),
-                IconButton(
-                  key:const Key('moment_camera_sticker_close'),
-                  tooltip:'Close stickers',
-                  onPressed:()=>Navigator.of(sheet).pop(),
-                  icon:const Icon(Icons.close_rounded,
-                    color:Color(0xFF0F1724))),
-              ]),
-              const SizedBox(height:8),
-              Text('Choose a text sticker for your photo.',
-                style:AppTypography.bodyMuted),
-              const SizedBox(height:20),
-              Wrap(spacing:10,runSpacing:10,children:[
-                for(final label in const <String>[
-                  'LOVE!','WOW!','YES!','GO!','SMILE!'
-                ])
-                  Material(
-                    color:Colors.transparent,
-                    child:InkWell(
-                      key:Key('moment_camera_sticker_$label'),
-                      borderRadius:BorderRadius.circular(22),
-                      onTap:()=>Navigator.of(sheet).pop(label),
-                      child:Container(
-                        constraints:const BoxConstraints(minHeight:44),
-                        padding:const EdgeInsets.symmetric(
-                          horizontal:17,vertical:11),
-                        decoration:BoxDecoration(
-                          color:const Color(0xFFF2EAFE),
-                          borderRadius:BorderRadius.circular(22),
-                          border:Border.all(
-                            color:const Color(0x337C3AED))),
-                        child:Text(label,
-                          style:AppTypography.body.copyWith(
-                            color:AppColors.primaryEnd,
-                            fontWeight:FontWeight.w600)),
-                      ),
-                    ),
-                  ),
-              ]),
-              const SizedBox(height:22),
-              TextButton(
-                onPressed:()=>Navigator.of(sheet).pop(),
-                child:Text('Cancel',style:AppTypography.body.copyWith(
-                  color:AppColors.primaryEnd))),
-            ],
-          ),
-        )),
-      );
-      if(selected==null||!mounted)return;
-      initialText=selected;
+      setState((){
+        _drawMode=false;
+        _filterTrayOpen=false;
+        _stickerTrayOpen=!_stickerTrayOpen;
+      });
+      return;
     }
-    await _handleSendPressed(initialOverlayText:initialText);
+    // Keep the existing text editor and secure publishing flow unchanged.
+    await _handleSendPressed();
+  }
+
+  void _addSticker(String emoji) {
+    if(_capturedBytes==null || _photoStickers.length>=20){
+      _showToolHint('You can add up to 20 stickers.');
+      return;
+    }
+    setState((){
+      final index=_photoStickers.length;
+      _photoStickers.add(_CameraSticker(
+        ++_stickerCounter,emoji,
+        Offset((0.50+(index%4)*0.05).clamp(0.06,0.94),
+               (0.42+(index%4)*0.04).clamp(0.06,0.94)),
+      ));
+      _stickerTrayOpen=false;
+    });
+  }
+
+  void _moveSticker(_CameraSticker sticker,Offset delta,Size canvas) {
+    if(canvas.width<=0 || canvas.height<=0 || _exportingPhoto)return;
+    setState((){
+      sticker.position=Offset(
+        (sticker.position.dx+delta.dx/canvas.width).clamp(0.06,0.94),
+        (sticker.position.dy+delta.dy/canvas.height).clamp(0.06,0.94),
+      );
+    });
+  }
+
+  void _beginInk(Offset position,Size size){
+    if(!_drawMode || _photoStrokes.length>=48 ||
+        size.width<=0||size.height<=0)return;
+    setState((){
+      _activePhotoStroke=_CameraInkStroke(
+        _inkColor,[Offset((position.dx/size.width).clamp(0.0,1.0),
+                          (position.dy/size.height).clamp(0.0,1.0))]);
+    });
+  }
+  void _extendInk(Offset position,Size size){
+    if(!_drawMode || _activePhotoStroke==null ||
+       _activePhotoStroke!.points.length>=2000 ||
+       size.width<=0||size.height<=0)return;
+    setState(()=>_activePhotoStroke!.points.add(
+      Offset((position.dx/size.width).clamp(0.0,1.0),
+             (position.dy/size.height).clamp(0.0,1.0))));
+  }
+  void _endInk(){
+    if(_activePhotoStroke==null)return;
+    setState((){
+      if(_activePhotoStroke!.points.isNotEmpty){
+        _photoStrokes.add(_activePhotoStroke!);
+      }
+      _activePhotoStroke=null;
+    });
+  }
+
+  Widget _buildStickerTray() => Container(
+    key:MomentCameraKeys.stickerTray,
+    padding:const EdgeInsets.fromLTRB(12,8,12,12),
+    decoration:BoxDecoration(
+      color:const Color(0xEE000000),
+      border:Border.all(color:const Color(0x55FFFFFF)),
+      borderRadius:BorderRadius.circular(24)),
+    child:Column(mainAxisSize:MainAxisSize.min,children:[
+      Row(children:[
+        Text('Stickers',style:AppTypography.body.copyWith(
+          color:Colors.white,fontWeight:FontWeight.w600)),
+        const Spacer(),
+        IconButton(
+          key:const Key('moment_camera_sticker_close'),
+          onPressed:()=>setState(()=>_stickerTrayOpen=false),
+          icon:const Icon(Icons.close_rounded,color:Colors.white)),
+      ]),
+      SizedBox(height:66,child:ListView(
+        scrollDirection:Axis.horizontal,
+        children:[
+          for(final emoji in _stickerChoices)
+            Padding(padding:const EdgeInsets.only(right:8),
+              child:InkWell(
+                key:Key('moment_camera_sticker_choice_${emoji.runes.first}'),
+                onTap:()=>_addSticker(emoji),
+                borderRadius:BorderRadius.circular(18),
+                child:Container(width:58,alignment:Alignment.center,
+                  decoration:BoxDecoration(
+                    color:const Color(0x33FFFFFF),
+                    borderRadius:BorderRadius.circular(18)),
+                  child:Text(emoji,style:const TextStyle(fontSize:32))),
+              ),
+            ),
+        ],
+      )),
+      const SizedBox(height:6),
+      Text('Tap a sticker, then drag it anywhere on your photo.',
+        style:AppTypography.body.copyWith(
+          fontSize:12,color:Colors.white)),
+    ]),
+  );
+
+  Widget _buildDrawingPalette() => Container(
+    key:MomentCameraKeys.drawPalette,
+    padding:const EdgeInsets.fromLTRB(12,8,12,12),
+    decoration:BoxDecoration(
+      color:const Color(0xEE000000),
+      borderRadius:BorderRadius.circular(24)),
+    child:Column(mainAxisSize:MainAxisSize.min,children:[
+      Row(children:[
+        Text('Draw on photo',style:AppTypography.body.copyWith(
+          color:Colors.white,fontWeight:FontWeight.w600)),
+        const Spacer(),
+        TextButton(
+          key:const Key('moment_camera_draw_undo'),
+          onPressed:_photoStrokes.isEmpty ? null :
+            ()=>setState(()=>_photoStrokes.removeLast()),
+          child:const Text('Undo',style:TextStyle(color:Colors.white))),
+        IconButton(
+          key:const Key('moment_camera_draw_done'),
+          onPressed:()=>setState((){
+            _drawMode=false;
+            _endInk();
+          }),
+          icon:const Icon(Icons.check_rounded,color:Colors.white)),
+      ]),
+      SizedBox(height:46,child:ListView(
+        scrollDirection:Axis.horizontal,
+        children:[
+          for(var index=0;index<_inkColors.length;index++)
+            Padding(padding:const EdgeInsets.only(right:12),
+              child:InkWell(
+                key:Key('moment_camera_ink_color_$index'),
+                customBorder:const CircleBorder(),
+                onTap:()=>setState(()=>_inkColor=_inkColors[index]),
+                child:Container(width:40,height:40,
+                  decoration:BoxDecoration(shape:BoxShape.circle,
+                    color:_inkColors[index],
+                    border:Border.all(
+                      color:_inkColor==_inkColors[index]
+                        ? AppColors.primaryEnd:Colors.white,
+                      width:_inkColor==_inkColors[index]?3:1)),
+                ),
+              ),
+            ),
+        ],
+      )),
+    ]),
+  );
+
+  Future<Uint8List> _photoForPublishing() async {
+    final original=_capturedBytes;
+    if(original==null)throw StateError('No captured photo.');
+    if(_photoStickers.isEmpty && _photoStrokes.isEmpty)return original;
+    // Capture only the image and movable overlays, not camera controls.
+    // Compositing remains in memory; no unencrypted file is stored.
+    setState(()=>_exportingPhoto=true);
+    try {
+      await WidgetsBinding.instance.endOfFrame;
+      final boundary=_photoCompositionKey.currentContext
+        ?.findRenderObject() as RenderRepaintBoundary?;
+      if(boundary==null || !boundary.hasSize){
+        throw StateError('Photo editor is not ready.');
+      }
+      final size=boundary.size;
+      final ratio=(1440/math.max(size.width,size.height))
+        .clamp(1.0,3.0).toDouble();
+      final output=await boundary.toImage(pixelRatio:ratio);
+      try {
+        final data=await output.toByteData(format:ui.ImageByteFormat.png);
+        if(data==null)throw StateError('Unable to render edited Moment.');
+        return data.buffer.asUint8List();
+      }finally{
+        output.dispose();
+      }
+    }finally{
+      if(mounted)setState(()=>_exportingPhoto=false);
+    }
   }
 
   Future<void> _handleSendPressed({String initialOverlayText=''}) async {
@@ -1191,20 +1290,30 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       }
       return;
     }
-    // Preserve existing explicit Send integrations, including legacy tests.
-    final legacySend = widget.onSendPressed;
-    if (legacySend != null && captured != null) {
-      legacySend(captured);
+    if (_publishSheetOpen || !mounted) return;
+    Uint8List editedPhoto=captured??Uint8List(0);
+    if(captured!=null){
+      try {
+        editedPhoto=await _photoForPublishing();
+      } catch (_) {
+        _showToolHint('Could not save photo edits. Please try again.');
+        return;
+      }
+    }
+    if(!mounted)return;
+    // Explicit integrations receive the final photo with graphic edits.
+    final legacySend=widget.onSendPressed;
+    if(legacySend!=null && captured!=null){
+      legacySend(editedPhoto);
       return;
     }
-    if (_publishSheetOpen || !mounted) return;
     // Step7:photo-publishing-flow â€” the camera and its permission lifecycle
     // stay mounted under this sheet; no additional camera instance is created.
     _publishSheetOpen = true;
     try {
       await showMomentPublishingSheet(
         context,
-        photoBytes: captured ?? Uint8List(0),
+        photoBytes: editedPhoto,
         mediaFile:_capturedClip,
         mediaKind:_capturedClip==null?'image':
           (_mode==_OrbitCaptureMode.video?'video':'audio'),
