@@ -15,6 +15,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../domain/models/moment_publish_models.dart';
 import '../../data/orbit_moment_capture_vault.dart';
+import '../../data/moment_photo_processor.dart';
 import '../widgets/moment_publish_sheet.dart';
 import '../../../../core/widgets/app_bottom_navigation_bar.dart';
 import '../../../../core/popups/orbit_popup_variants.dart';
@@ -37,6 +38,9 @@ abstract final class MomentCameraKeys {
   static const countdown = Key('moment_camera_countdown');
   static const capturedPreview = Key('moment_camera_captured_preview');
   static const cameraError = Key('moment_camera_error');
+  static const filterTray = Key('moment_camera_filter_tray');
+  static const toolHint = Key('moment_camera_tool_hint');
+  static Key filter(String name) => Key('moment_camera_filter_${name}');
 }
 
 enum _OrbitCaptureMode { photo, video, voice }
@@ -117,6 +121,10 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
 
   FlashMode _flashMode = FlashMode.off;
   Duration _captureDelay = Duration.zero;
+  MomentFilter _selectedFilter = MomentFilter.natural;
+  bool _filterTrayOpen = false;
+  String? _toolHint;
+  Timer? _toolHintTimer;
   int? _countdownValue;
   bool _orbitLoadingPopupVisible = false;
   bool _orbitErrorPopupVisible = false;
@@ -191,6 +199,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     WidgetsBinding.instance.removeObserver(this);
     _recordLimit?.cancel();
     _recordTicker?.cancel();
+    _toolHintTimer?.cancel();
     unawaited(_amplitudeSubscription?.cancel());
     if(_recording && _mode==_OrbitCaptureMode.voice)unawaited(_audioRecorder.stop());
     unawaited(_audioRecorder.dispose());
@@ -436,6 +445,111 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     unawaited(c.setZoomLevel(value).catchError((_){ }));
   }
 
+  void _showToolHint(String message) {
+    if(!mounted)return;
+    _toolHintTimer?.cancel();
+    setState(() => _toolHint = message);
+    _toolHintTimer=Timer(const Duration(seconds:3),(){
+      if(mounted)setState(()=>_toolHint=null);
+    });
+  }
+
+  void _toggleFilterTray() {
+    if(_recording || _isCapturing || _publishSheetOpen) return;
+    if(_mode!=_OrbitCaptureMode.photo){
+      _showToolHint('Photo filters are available in Photo mode.');
+      return;
+    }
+    setState(() {
+      _filterTrayOpen = !_filterTrayOpen;
+      _toolHint = null;
+    });
+  }
+
+  void _selectFilter(MomentFilter filter) {
+    if(_mode!=_OrbitCaptureMode.photo || _recording || _isCapturing)return;
+    setState(() => _selectedFilter = filter);
+  }
+
+  Widget _filteredPreview(Widget preview) {
+    if(_selectedFilter==MomentFilter.natural ||
+       _mode!=_OrbitCaptureMode.photo)return preview;
+    // Live GPU preview approximates the selected local photo processor look.
+    // The actual encrypted Moment applies the canonical processor in the
+    // publish sheet (not by saving a screen capture of this preview).
+    final matrix=switch(_selectedFilter){
+      MomentFilter.natural => <double>[
+        1,0,0,0,0, 0,1,0,0,0, 0,0,1,0,0, 0,0,0,1,0],
+      MomentFilter.warm => <double>[
+        1,0,0,0,15, 0,1,0,0,4, 0,0,1,0,-13, 0,0,0,1,0],
+      MomentFilter.cool => <double>[
+        1,0,0,0,-10, 0,1,0,0,1, 0,0,1,0,16, 0,0,0,1,0],
+      MomentFilter.portrait => <double>[
+        1.03,0,0,0,7, 0,1.01,0,0,5, 0,0,1,0,5, 0,0,0,1,0],
+      MomentFilter.film => <double>[
+        .85,.1,.05,0,13, .07,.86,.07,0,7, .05,.13,.82,0,2,
+        0,0,0,1,0],
+      MomentFilter.night => <double>[
+        .68,0,0,0,0, 0,.76,0,0,0, 0,0,.95,0,9, 0,0,0,1,0],
+      MomentFilter.soft => <double>[
+        .84,.12,.04,0,6, .07,.86,.07,0,6, .06,.15,.79,0,6,
+        0,0,0,1,0],
+      MomentFilter.vibrant => <double>[
+        1.21,-.15,-.06,0,0, -.09,1.18,-.09,0,0,
+        -.08,-.13,1.21,0,0, 0,0,0,1,0],
+      MomentFilter.blackAndWhite => <double>[
+        .299,.587,.114,0,0, .299,.587,.114,0,0,
+        .299,.587,.114,0,0, 0,0,0,1,0],
+    };
+    return ColorFiltered(colorFilter:ColorFilter.matrix(matrix),child:preview);
+  }
+
+  Widget _buildFilterTray() {
+    return Container(
+      key: MomentCameraKeys.filterTray,
+      decoration:BoxDecoration(
+        color:const Color(0xD9000000),
+        border:Border.all(color:const Color(0x2EFFFFFF)),
+        borderRadius:BorderRadius.circular(22)),
+      padding:const EdgeInsets.fromLTRB(12,12,12,10),
+      child:Column(mainAxisSize:MainAxisSize.min,children:[
+        Row(children:[
+          Text('Filters',style:AppTypography.body.copyWith(
+            color:Colors.white,fontWeight:FontWeight.w600)),
+          const Spacer(),
+          Semantics(button:true,label:'Close filters',
+            child:IconButton(
+              key:const Key('moment_camera_close_filters'),
+              icon:const Icon(Icons.close_rounded,color:Colors.white,size:20),
+              onPressed:()=>setState(()=>_filterTrayOpen=false))),
+        ]),
+        SizedBox(height:48,child:ListView(
+          scrollDirection:Axis.horizontal,
+          children:[
+            for(final filter in MomentFilter.values)
+              Padding(padding:const EdgeInsets.only(right:8),
+                child:ChoiceChip(
+                  key:MomentCameraKeys.filter(filter.name),
+                  label:Text(filter.label),
+                  selected:_selectedFilter==filter,
+                  selectedColor:AppColors.primaryEnd,
+                  backgroundColor:const Color(0x33FFFFFF),
+                  labelStyle:AppTypography.body.copyWith(
+                    fontSize:12,
+                    color:Colors.white,
+                    fontWeight:_selectedFilter==filter
+                      ?FontWeight.w600:FontWeight.w400),
+                  side:BorderSide(
+                    color:_selectedFilter==filter
+                      ? AppColors.primaryEnd:const Color(0x66FFFFFF)),
+                  onSelected:(_)=>_selectFilter(filter),
+                )),
+          ],
+        )),
+      ]),
+    );
+  }
+
   Future<void> _toggleFlash() async {
     final controller = _controller;
     if (controller == null ||
@@ -478,7 +592,8 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   }
 
   Future<void> _flipCamera() async {
-    if (_capturedBytes != null || _cameras.length < 2 || _isInitializing) {
+    if (_capturedBytes != null || _capturedClip != null || _recording ||
+        _isCapturing || _cameras.length < 2 || _isInitializing) {
       return;
     }
 
@@ -505,7 +620,10 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   }
 
   void _cycleTimer() {
-    if (_capturedBytes != null || _isCapturing) {
+    if (_capturedBytes != null || _capturedClip != null ||
+        _isCapturing || _recording) return;
+    if(_mode!=_OrbitCaptureMode.photo){
+      _showToolHint('The photo timer is available in Photo mode.');
       return;
     }
 
@@ -544,7 +662,11 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   Future<void> _selectCaptureMode(_OrbitCaptureMode next) async {
     if(_isCapturing || _recording || _publishSheetOpen ||
        _capturedBytes!=null || _capturedClip!=null || _mode==next)return;
-    setState(()=>_mode=next);
+    setState((){
+      _mode=next;
+      _filterTrayOpen=false;
+      _toolHint=null;
+    });
     if(widget.enableCamera){
       // Video requires microphone access, requested only on explicit selection.
       await _initializeCamera(preferredCamera:_activeCamera);
