@@ -334,6 +334,15 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
 
   String _explainPrivateSaveFailure(Object error) {
     if(error is OrbitIdentityException) {
+      final message=error.message.toLowerCase();
+      if(message.contains('media module disabled') ||
+         message.contains('m6 media disabled') ||
+         message.contains('media feature disabled') ||
+         message.contains('media service unavailable')) {
+        return 'M6 Media is disabled or unavailable on this Orbit server. '
+          'Enable the private-media service before retrying. '
+          'The photo has not been confirmed as saved.';
+      }
       if(error.statusCode==401) {
         return 'Your Orbit session expired. Sign in again before saving '
           'encrypted private media. Your capture remains in this review.';
