@@ -1148,8 +1148,8 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       final index=_photoStickers.length;
       _photoStickers.add(_CameraSticker(
         ++_stickerCounter,emoji,
-        Offset((0.50+(index%4)*0.05).clamp(0.06,0.94),
-               (0.42+(index%4)*0.04).clamp(0.06,0.94)),
+        Offset((0.50+(index%4)*0.05).clamp(0.06,0.94).toDouble(),
+               (0.42+(index%4)*0.04).clamp(0.06,0.94).toDouble()),
       ));
       _stickerTrayOpen=false;
     });
@@ -1159,8 +1159,8 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     if(canvas.width<=0 || canvas.height<=0 || _exportingPhoto)return;
     setState((){
       sticker.position=Offset(
-        (sticker.position.dx+delta.dx/canvas.width).clamp(0.06,0.94),
-        (sticker.position.dy+delta.dy/canvas.height).clamp(0.06,0.94),
+        (sticker.position.dx+delta.dx/canvas.width).clamp(0.06,0.94).toDouble(),
+        (sticker.position.dy+delta.dy/canvas.height).clamp(0.06,0.94).toDouble(),
       );
     });
   }
@@ -1170,8 +1170,8 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         size.width<=0||size.height<=0)return;
     setState((){
       _activePhotoStroke=_CameraInkStroke(
-        _inkColor,[Offset((position.dx/size.width).clamp(0.0,1.0),
-                          (position.dy/size.height).clamp(0.0,1.0))]);
+        _inkColor,[Offset((position.dx/size.width).clamp(0.0,1.0).toDouble(),
+                          (position.dy/size.height).clamp(0.0,1.0).toDouble())]);
     });
   }
   void _extendInk(Offset position,Size size){
@@ -1179,8 +1179,8 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
        _activePhotoStroke!.points.length>=2000 ||
        size.width<=0||size.height<=0)return;
     setState(()=>_activePhotoStroke!.points.add(
-      Offset((position.dx/size.width).clamp(0.0,1.0),
-             (position.dy/size.height).clamp(0.0,1.0))));
+      Offset((position.dx/size.width).clamp(0.0,1.0).toDouble(),
+             (position.dy/size.height).clamp(0.0,1.0).toDouble())));
   }
   void _endInk(){
     if(_activePhotoStroke==null)return;
@@ -1635,9 +1635,9 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
             for(final sticker in _photoStickers)
               Positioned(
                 left:(sticker.position.dx*size.width-32)
-                  .clamp(0.0,math.max(0.0,size.width-64)),
+                  .clamp(0.0,math.max(0.0,size.width-64)).toDouble(),
                 top:(sticker.position.dy*size.height-32)
-                  .clamp(0.0,math.max(0.0,size.height-64)),
+                  .clamp(0.0,math.max(0.0,size.height-64)).toDouble(),
                 child:GestureDetector(
                   key:MomentCameraKeys.sticker(sticker.id.toString()),
                   behavior:HitTestBehavior.translucent,
