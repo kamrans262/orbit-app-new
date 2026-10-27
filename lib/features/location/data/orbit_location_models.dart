@@ -39,8 +39,10 @@ class OrbitLocationShare {
 }
 class OrbitLocationMarker {
   const OrbitLocationMarker({required this.userId,required this.latitude,required this.longitude,
-    required this.precision,required this.observedAt,required this.ageSeconds,required this.state});
+    required this.precision,required this.observedAt,required this.ageSeconds,required this.state,
+    this.displayName,this.avatarMediaId});
   final String userId,precision,state;
+  final String? displayName,avatarMediaId;
   final double latitude,longitude;
   final DateTime observedAt;
   final int ageSeconds;
@@ -55,7 +57,34 @@ class OrbitLocationMarker {
       !['updated','paused'].contains(j['state']))throw const FormatException('Invalid private marker.');
     return OrbitLocationMarker(userId:id,latitude:lat.toDouble(),longitude:lng.toDouble(),
       precision:j['precision'] as String,observedAt:observed.toUtc(),
-      ageSeconds:age.toInt(),state:j['state'] as String);
+      ageSeconds:age.toInt(),state:j['state'] as String,
+      displayName:j['display_name'] is String && (j['display_name'] as String).trim().isNotEmpty
+        ? (j['display_name'] as String).trim():null,
+      avatarMediaId:j['avatar_media_id'] is String &&
+        RegExp(r'^[0-9a-fA-F-]{36}
+  }
+}
+class OrbitLocationMapSnapshot {
+  const OrbitLocationMapSnapshot({required this.markers,required this.serverTime,required this.realtimeAvailable});
+  final List<OrbitLocationMarker> markers;
+  final DateTime serverTime;
+  final bool realtimeAvailable;
+  factory OrbitLocationMapSnapshot.fromJson(Map<String,dynamic> j) {
+    final list=j['markers'],time=DateTime.tryParse(j['server_time'] as String? ?? '');
+    if(list is! List||time==null||j['live_claimed']==true)throw const FormatException('Untrusted map.');
+    final markers=<OrbitLocationMarker>[],seen=<String>{};
+    for(final raw in list) {
+      if(raw is! Map)throw const FormatException('Invalid marker list.');
+      final m=OrbitLocationMarker.fromJson(Map<String,dynamic>.from(raw));
+      if(m.ageSeconds>120||!seen.add(m.userId))continue;
+      markers.add(m);
+    }
+    return OrbitLocationMapSnapshot(markers:List.unmodifiable(markers),
+      serverTime:time.toUtc(),realtimeAvailable:j['realtime_available']==true);
+  }
+}
+).hasMatch(j['avatar_media_id'] as String)
+        ? j['avatar_media_id'] as String:null);
   }
 }
 class OrbitLocationMapSnapshot {
