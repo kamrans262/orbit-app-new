@@ -332,6 +332,8 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
     if(!_foreground||!mounted||!_active||_sending)return;
     final now=DateTime.now();
     if(_lastSent!=null&&now.difference(_lastSent!).inSeconds<24)return;
+    if(_cap?.global.activity=='While moving' &&
+       (!p.speed.isFinite||p.speed<1.0))return;
     if(!p.latitude.isFinite||!p.longitude.isFinite||!p.accuracy.isFinite||
        p.accuracy<0||p.accuracy>500)return;
     if(p.timestamp.isAfter(now.add(const Duration(seconds:15)))||
