@@ -7,33 +7,78 @@
 - Demo people/images are not returned in authenticated Orbits. Only fresh authorization-filtered, server-quantized GPS markers are rendered.
 
 ## Code delivered
-- Interactive native MapLibre map uses Flutter OrbitMapMarker widgets at projected latitude/longitude; nearby pins group in zoomable clusters; shows real permitted account names and verified update/paused text, not fictitious LIVE badges.
+- Interactive native Google Maps SDK map uses Flutter OrbitMapMarker widgets at projected latitude/longitude; nearby pins group in zoomable clusters; shows real permitted account names and verified update/paused text, not fictitious LIVE badges.
 - Real user profile photos: owner-only M6 AES-GCM avatar stays encrypted; optional per-person consent rewraps ONLY the content key to trusted friend's device public keys. No plaintext image upload or public URL. A separate M10 grant linkage requires the same active location share; encrypted media grant revokes on stop, expiry, geofence, unfriend or block. Without explicit consent or without the recipient device envelope, the existing Orbit initials fallback shows instead.
 - Existing Privacy Settings and share sheet control audience, precision, duration, global Ghost and OS permissions. Permission denied, untrusted device, authorization errors, account swap, app background and network failures fail closed. On-device decrypted photo buffers and Flutter image-cache entries are purged at privacy transitions. While-moving uploads require observed speed at least 1 m/s on client AND backend; threshold provisional pending product review.
 - Authenticated M10 REST APIs for viewer-scoped map, own share listing, create, revoke/stop, samples, gated exit geofence.
 - Optional M10 realtime: Laravel viewer-device ticket (TTL 60 sec) and introspection; private Redis viewer-HMAC invalidations with no coordinates; separate loopback-only Node WSS gateway; Flutter client requests a fresh ticket and refetches authorized REST map on each event. Server auth rechecked for every event. The 20-second REST fallback remains explicitly non-live.
 - Direct block/unfriend, Circle remove/leave/restrict/archive/location permission revoke, global Ghost or changed visibility permanently revoke/recheck grants rather than silently restoring old audience access.
-- Latest code includes Android JDK21 MapLibre configuration, iOS when-in-use permissions, geolocator foreground-only. No background location tracking has been authorized.
+- Latest code includes Android JDK21 native-build configuration and Google Maps SDK, iOS when-in-use permissions, geolocator foreground-only. No background location tracking has been authorized.
 - Additional focused Flutter and MariaDB regression tests for actual avatars, encryption consent/revoke, trust, map markers, realtime tickets, Ghost, visibility changes and moving-only samples.
 
-## Local map provider — user supplies restricted key through an UNTRACKED file
-Your provider-specific MapLibre HTTPS style JSON URL must be known. Create
-`.orbit_m10_local.json` on your own machine (path is ignored by Git) with:
+## Google Maps integration — confirmed by user (2026-10-28)
+
+Google Maps Platform is the chosen provider. The native official
+`google_maps_flutter` SDK replaced MapLibre. This is NOT a Google Maps
+JSON style URL; the legacy `ORBIT_M10_MAP_STYLE_URL` and
+`ORBIT_M10_MAP_API_KEY` settings are no longer used.
+
+**Enable billing and Maps SDK for Android / Maps SDK for iOS in the same
+Google Cloud project.** Create two differently restricted API keys if
+you want both Android and iOS:
+- **Android**: Cloud Console application restriction = Android apps,
+  application ID `com.example.orbit_ui` for current debug build or the
+  actual release `ORBIT_ANDROID_APPLICATION_ID`, plus that signing
+  certificate's SHA-1. API restriction = Maps SDK for Android.
+- **iOS**: application restriction = iOS apps using the actual Runner
+  bundle identifier. API restriction = Maps SDK for iOS.
+- A key restricted to Android cannot authenticate the iOS SDK and vice
+  versa. Do not paste keys in GitHub, Flutter source, CI logs, or chat.
+  Mobile keys are extractable from distributed builds; provider-side
+  restrictions and quotas are essential.
+
+### Untracked local Android key
+
+Create `android/secrets.properties` on your development machine:
+```properties
+ORBIT_GOOGLE_MAPS_ANDROID_API_KEY=YOUR_ANDROID_RESTRICTED_GOOGLE_MAPS_KEY
+```
+This path is Git-ignored. Gradle also accepts environment variable
+`ORBIT_GOOGLE_MAPS_ANDROID_API_KEY` for authorized CI/build machines.
+The Android manifest only contains a manifest placeholder, never a key.
+
+### Untracked local iOS key
+
+Create `ios/Flutter/GoogleMapsSecrets.xcconfig` locally:
+```xcconfig
+ORBIT_GOOGLE_MAPS_IOS_API_KEY=YOUR_IOS_RESTRICTED_GOOGLE_MAPS_KEY
+```
+This path is Git-ignored. The existing Debug/Release xcconfigs include
+it optionally. AppDelegate reads the resulting Info.plist entry and
+registers `GMSServices.provideAPIKey` before Flutter plugins start.
+When no key is supplied, startup remains safe and M10 shows a static
+preview because the rollout is off. No key is committed.
+
+### Flutter flag for authorized staging test only
+
+Create the existing ignored `.orbit_m10_local.json` with no secrets:
 ```json
 {
   "ORBIT_M10_LOCATION_ENABLED": "true",
-  "ORBIT_M10_MAP_STYLE_URL": "https://YOUR_APPROVED_PROVIDER/style.json?key={API_KEY}",
-  "ORBIT_M10_MAP_API_KEY": "YOUR_RESTRICTED_MOBILE_MAP_KEY",
+  "ORBIT_M10_GOOGLE_MAPS_CONFIGURED": "true",
   "ORBIT_M10_WSS_URL": ""
 }
 ```
-Then use `flutter run --dart-define-from-file=.orbit_m10_local.json` on an
-approved **staging** installation. Never put this file in GitHub, any screenshot,
-client logs or a support chat. A mobile map key is extractable from an app
-binary or network call; restrict it at the map provider by app/bundle ID, usage
-scope, quota and/or provider-specific mobile credentials. No map provider/URL/key
-was provided in this conversation, so no actual map vendor has been selected or
-verified. The original screen displays a static map preview if style is absent.
+After provisioning the appropriate native key file, use
+`flutter run --dart-define-from-file=.orbit_m10_local.json` for a
+reviewed staging test installation. **The Flutter flag is not sufficient
+without a native key.** Production M10 stays OFF; no real phone or
+Google API call was performed by this integration.
+
+Google Maps widget does not request viewer GPS and does not receive
+plaintext Orbit avatars; existing Flutter OrbitMapMarker widgets are
+rendered over viewer-authorized positions. Do not cover Google's logo,
+legal notices or standard attribution in revised screen layouts.
 
 ## Laravel staging prerequisites (NOT run on Hostinger)
 - Apply additive migrations `2026_10_27_000001_create_m10_location.php`
@@ -62,7 +107,7 @@ verified. The original screen displays a static map preview if style is absent.
 - Run latest commit Android/iOS native compilation and physical Android/iOS
   foreground location, deny/revoke, zoom/clustering, battery, signed app and
   multi-device QA. Automated CI cannot substitute for phone testing.
-- Actual map-key licence, production gateway/TLS/Redis service, API/Realtime
+- Real provider key restrictions, billing, map tiles on real Android/iOS, production gateway/TLS/Redis service, API/Realtime
   Specification product sign-off, DST/geofence/approximate-grid policy approval,
   and staging/prod operational backup/rollback remain EXTERNAL prerequisites.
 - Do not enable production flags, deploy PHP migrations to Hostinger, enable
