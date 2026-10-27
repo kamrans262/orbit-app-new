@@ -51,8 +51,10 @@ void main() {
     await tester.enterText(find.byType(TextField).first, 'Renamed Circle');
     await tester.pump(const Duration(seconds: 2));
     expect(repo.writes, 0);
-    final save = tester.widget<AppPrimaryButton>(
-      find.byType(AppPrimaryButton));
+    final saveButton = find.descendant(
+      of: find.byKey(CircleSettingKeys.saveButton),
+      matching: find.byType(AppPrimaryButton));
+    final save = tester.widget<AppPrimaryButton>(saveButton);
     expect(save.enabled, isTrue);
 
     await tester.ensureVisible(find.byKey(CircleSettingKeys.saveButton));
@@ -60,8 +62,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(repo.writes, 1);
     expect(repo.lastName, 'Renamed Circle');
-    expect(tester.widget<AppPrimaryButton>(find.byType(AppPrimaryButton))
-        .enabled, isFalse);
+    expect(tester.widget<AppPrimaryButton>(saveButton).enabled, isFalse);
     expect(tester.takeException(), isNull);
   });
 }

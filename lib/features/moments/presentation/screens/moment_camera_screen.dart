@@ -1333,7 +1333,9 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     if(captured!=null){
       try {
         editedPhoto=await _photoForPublishing();
-      } catch (_) {
+      } catch (error) {
+        // Debug builds identify a rendering failure without exposing photo bytes.
+        assert(() { debugPrint('Orbit photo editor export: ${error.runtimeType}: $error'); return true; }());
         _showToolHint('Could not save photo edits. Please try again.');
         return;
       }
