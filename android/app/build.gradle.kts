@@ -13,6 +13,17 @@ plugins {
 val orbitAndroidId = System.getenv("ORBIT_ANDROID_APPLICATION_ID")?.trim()
     ?.takeIf { it.matches(Regex("^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*){1,}$")) }
     ?: "com.example.orbit_ui"
+// Platform-key injection. Separate Android-restricted and iOS-restricted keys.
+val orbitGoogleMapsProperties = java.util.Properties()
+val orbitGoogleMapsLocal = rootProject.file("secrets.properties")
+if (orbitGoogleMapsLocal.isFile) {
+    orbitGoogleMapsLocal.inputStream().use { orbitGoogleMapsProperties.load(it) }
+}
+val orbitGoogleMapsAndroidKey = System.getenv("ORBIT_GOOGLE_MAPS_ANDROID_API_KEY")
+    ?.trim()?.takeIf { it.isNotEmpty() }
+    ?: orbitGoogleMapsProperties.getProperty("ORBIT_GOOGLE_MAPS_ANDROID_API_KEY")
+        ?.trim()?.takeIf { it.isNotEmpty() }
+    ?: "NO_GOOGLE_MAPS_ANDROID_KEY_CONFIGURED"
 val orbitStore = System.getenv("ORBIT_ANDROID_KEYSTORE_PATH")
 val orbitStorePass = System.getenv("ORBIT_ANDROID_KEYSTORE_PASSWORD")
 val orbitKeyAlias = System.getenv("ORBIT_ANDROID_KEY_ALIAS")
@@ -33,6 +44,7 @@ android {
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = orbitAndroidId
+        manifestPlaceholders["ORBIT_GOOGLE_MAPS_ANDROID_API_KEY"] = orbitGoogleMapsAndroidKey
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = 24

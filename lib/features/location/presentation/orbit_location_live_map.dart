@@ -5,7 +5,7 @@ import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:maplibre_gl/maplibre_gl.dart' as gl;
+import 'package:google_maps_flutter/google_maps_flutter.dart' as gl;
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_typography.dart';
@@ -44,7 +44,7 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
   OrbitLocationCapabilities? _cap;
   OrbitLocationMapSnapshot? _snapshot;
   List<OrbitLocationShare> _shares=const [];
-  gl.MapLibreMapController? _map;
+  gl.GoogleMapController? _map;
   final Map<String,Uint8List> _avatarBytes={};
   final Map<String,String> _avatarMediaIds={};
   List<_OrbitPinGroup> _pinGroups=const [];
@@ -178,12 +178,12 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
     ++_projectSerial;
     if(mounted)setState(()=>_pinGroups=const []);
   }
-  void _onMapCreated(gl.MapLibreMapController controller) {
+  void _onMapCreated(gl.GoogleMapController controller) {
     _map=controller;
     unawaited(_syncAnnotations());
   }
 
-  // Uses the existing Flutter OrbitMapMarker widgets over MapLibre so real
+  // Uses the existing Flutter OrbitMapMarker widgets over Google Maps so real
   // private M6 photo bytes never enter third-party tile providers.
   Future<void> _syncAnnotations() async {
     final map=_map;
@@ -201,11 +201,13 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
           gl.LatLng(markers.first.latitude,markers.first.longitude),12));
       }
       final points=await Future.wait(markers.map((p)=>
-        map.toScreenLocation(gl.LatLng(p.latitude,p.longitude))));
+        map.getScreenCoordinate(gl.LatLng(p.latitude,p.longitude))));
       if(!mounted||serial!=_projectSerial||!_foreground)return;
+      // Google returns physical screen pixels; Flutter widgets use logical px.
+      final pixelRatio=MediaQuery.devicePixelRatioOf(context);
       final groups=<_OrbitPinGroup>[];
       for(var i=0;i<markers.length;i++){
-        final px=points[i].x.toDouble(),py=points[i].y.toDouble();
+        final px=points[i].x/pixelRatio,py=points[i].y/pixelRatio;
         if(!px.isFinite||!py.isFinite)continue;
         // Cluster after projection, not by world-coordinate distance.
         final existing=groups.indexWhere((group)=>
@@ -432,11 +434,25 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
       Positioned.fill(child:!_foreground
         ?const ColoredBox(color:AppColors.background)
         :configured&&OrbitM10Rollout.enabled
-        ?gl.MapLibreMap(
-          key:const Key('orbit_map'),styleString:OrbitM10Rollout.mapStyleUrl,
-          initialCameraPosition:const gl.CameraPosition(target:gl.LatLng(0,0),zoom:1.7),
-          onMapCreated:_onMapCreated,
-          onStyleLoadedCallback:(){_styleReady=true;unawaited(_syncAnnotations());},
+        ?gl.GoogleMap(
+          key:const Key('orbit_map'),
+          initialCameraPosition:const gl.CameraPosition(
+            target:gl.LatLng(0,0),zoom:1.7),
+          mapType:gl.MapType.normal,
+          myLocationEnabled:false,
+          myLocationButtonEnabled:false,
+          mapToolbarEnabled:false,
+          compassEnabled:false,
+          zoomControlsEnabled:false,
+          onMapCreated:(controller){
+            _onMapCreated(controller);
+            _styleReady=true;
+            unawaited(_syncAnnotations());
+          },
+          onCameraMoveStarted:(){
+            ++_projectSerial;
+            if(mounted)setState(()=>_pinGroups=const []);
+          },
           onCameraIdle:()=>unawaited(_syncAnnotations()),
         )
         :Image.asset('assets/orbit_map.png',fit:BoxFit.cover,

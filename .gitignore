@@ -49,3 +49,7 @@ app.*.map.json
 
 # Local M10 map provider / URL overrides (never commit mobile API credentials).
 /.orbit_m10_local.json
+
+# Platform-specific Google Maps SDK keys, always untracked.
+/android/secrets.properties
+/ios/Flutter/GoogleMapsSecrets.xcconfig

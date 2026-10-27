@@ -9,6 +9,9 @@
         android:label="Orbit"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- Android Maps SDK key is injected from an ignored local config file. -->
+        <meta-data android:name="com.google.android.geo.API_KEY"
+                   android:value="${ORBIT_GOOGLE_MAPS_ANDROID_API_KEY}" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

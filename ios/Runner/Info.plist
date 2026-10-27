@@ -59,6 +59,8 @@
         <string>UIInterfaceOrientationLandscapeLeft</string>
         <string>UIInterfaceOrientationLandscapeRight</string>
     </array>
+    <key>OrbitGoogleMapsApiKey</key>
+    <string>$(ORBIT_GOOGLE_MAPS_IOS_API_KEY)</string>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>Orbit uses your location only after you explicitly share it with trusted people. You can stop sharing at any time.</string>
     <key>NSCameraUsageDescription</key>
