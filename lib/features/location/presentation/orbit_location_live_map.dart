@@ -46,6 +46,7 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
   List<OrbitLocationShare> _shares=const [];
   gl.MapLibreMapController? _map;
   final Map<String,Uint8List> _avatarBytes={};
+  final Map<String,String> _avatarMediaIds={};
   List<_OrbitPinGroup> _pinGroups=const [];
   int _projectSerial=0;
   final OrbitMediaRepository _media=OrbitMediaRepository();
@@ -83,7 +84,7 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
     unawaited(_locations?.cancel());
     _locations=null;
     WidgetsBinding.instance.removeObserver(this);
-    _avatarBytes.clear();_pinGroups=const [];
+    _purgeAvatars(notify:false);_pinGroups=const [];
     super.dispose();
   }
   @override
@@ -97,8 +98,7 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
       _lastSent=null;
       _cap=null;_snapshot=null;_shares=const [];
       unawaited(_clearAnnotations());
-      _avatarBytes.clear();
-      widget.onAvatarsChanged?.call(const {});
+      _purgeAvatars();
       _map=null;_styleReady=false;_didZoom=false;
       if(mounted){widget.onMarkersChanged?.call(const []);setState(() {});}
     } else {
@@ -121,8 +121,7 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
         _locations?.cancel();_locations=null;_lastSent=null;
         _snapshot=null;_shares=const [];_cap=null;
         widget.onMarkersChanged?.call(const []);
-        widget.onAvatarsChanged?.call(const {});
-        _avatarBytes.clear();
+        _purgeAvatars();
         await _clearAnnotations();
         if(mounted)setState((){});
       }
@@ -135,8 +134,15 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
       });
       widget.onMarkersChanged?.call(snapshot.markers);
       // Never carry one viewer's photo or media id into the next authorized snapshot.
-      final allowed=snapshot.markers.map((x)=>x.userId).toSet();
-      _avatarBytes.removeWhere((userId,_)=>!allowed.contains(userId));
+      final mediaIds={for(final m in snapshot.markers)
+        if(m.avatarMediaId!=null)m.userId:m.avatarMediaId!};
+      for(final id in _avatarBytes.keys.toList()){
+        if(_avatarMediaIds[id]!=mediaIds[id]){
+          final old=_avatarBytes.remove(id);
+          _avatarMediaIds.remove(id);
+          if(old!=null)unawaited(MemoryImage(old).evict());
+        }
+      }
       widget.onAvatarsChanged?.call(Map.unmodifiable(_avatarBytes));
       await _syncAnnotations();
       unawaited(_loadAuthorizedAvatars(serial));
@@ -154,10 +160,18 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
           : 'Map access could not be verified. Reconnect and retry.';
       });
       widget.onMarkersChanged?.call(const []);
-      widget.onAvatarsChanged?.call(const {});
-      _avatarBytes.clear();
+      _purgeAvatars();
       await _clearAnnotations();
     }finally{_loading=false;}
+  }
+
+  void _purgeAvatars({bool notify=true}) {
+    for(final bytes in _avatarBytes.values){
+      unawaited(MemoryImage(bytes).evict()); // Flutter decoded-image cache.
+    }
+    _avatarBytes.clear();
+    _avatarMediaIds.clear();
+    if(notify&&mounted)widget.onAvatarsChanged?.call(const {});
   }
 
   Future<void> _clearAnnotations() async {
@@ -226,6 +240,7 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
           if(!(_snapshot?.markers.any((x)=>x.userId==m.userId&&
             x.avatarMediaId==m.avatarMediaId)??false))continue;
           _avatarBytes[m.userId]=image;
+          _avatarMediaIds[m.userId]=m.avatarMediaId!;
           widget.onAvatarsChanged?.call(Map.unmodifiable(_avatarBytes));
           setState((){});
         }catch(_){
@@ -430,12 +445,15 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
         ..._pinGroups.map((group)=>Positioned(
           left:group.x-24,top:group.y-24,
           child:group.members.length==1
-            ?OrbitMapMarker(
-              person:OrbitPersonData(id:group.members.first.userId,
-                name:group.members.first.displayName??'Orbit member',
-                imagePath:null,markerX:0,markerY:0,
-                imageBytes:_avatarBytes[group.members.first.userId]),
-              onTap:()=>widget.onPersonPressed?.call(group.members.first.userId))
+            ?Tooltip(
+              message:(group.members.first.displayName??'Orbit member')+
+                ' · '+group.members.first.freshness,
+              child:OrbitMapMarker(
+                person:OrbitPersonData(id:group.members.first.userId,
+                  name:group.members.first.displayName??'Orbit member',
+                  imagePath:null,markerX:0,markerY:0,
+                  imageBytes:_avatarBytes[group.members.first.userId]),
+                onTap:()=>widget.onPersonPressed?.call(group.members.first.userId)))
             :Semantics(label:'Location cluster of '+group.members.length.toString()+
                 ' people',button:true,
               child:Material(shape:const CircleBorder(),color:AppColors.primaryEnd,
