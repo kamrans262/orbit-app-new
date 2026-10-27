@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:camera/camera.dart';
 import 'package:image_picker/image_picker.dart';
@@ -8,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -19,6 +22,7 @@ import '../../data/moment_photo_processor.dart';
 import '../widgets/moment_publish_sheet.dart';
 import '../../../../core/widgets/app_bottom_navigation_bar.dart';
 import '../../../../core/popups/orbit_popup_variants.dart';
+import '../../../../core/popups/orbit_popup_modal.dart';
 import '../orbit_camera_permission_memory.dart';
 
 abstract final class MomentCameraKeys {
@@ -44,10 +48,29 @@ abstract final class MomentCameraKeys {
   static const resumeDraft = Key('moment_camera_resume_draft');
   static const discardDraft = Key('moment_camera_discard_draft');
   static const retakeButton = Key('moment_camera_retake_button');
+  static const stickerTray = Key('moment_camera_sticker_tray');
+  static const drawButton = Key('moment_camera_draw_button');
+  static const drawPalette = Key('moment_camera_draw_palette');
+  static const photoInk = Key('moment_camera_photo_ink');
+  static const voiceConsent = Key('moment_camera_voice_consent');
+  static Key sticker(String id) => Key('moment_camera_sticker_$id');
   static Key filter(String name) => Key('moment_camera_filter_${name}');
 }
 
 enum _OrbitCaptureMode { photo, video, voice }
+
+class _CameraSticker {
+  _CameraSticker(this.id, this.emoji, this.position);
+  final int id;
+  final String emoji;
+  Offset position;
+}
+
+class _CameraInkStroke {
+  _CameraInkStroke(this.color, this.points);
+  final Color color;
+  final List<Offset> points;
+}
 
 class MomentCameraScreen extends StatefulWidget {
   const MomentCameraScreen({
@@ -131,6 +154,22 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   Duration _captureDelay = Duration.zero;
   MomentFilter _selectedFilter = MomentFilter.natural;
   bool _filterTrayOpen = false;
+  final GlobalKey _photoCompositionKey=GlobalKey();
+  final List<_CameraSticker> _photoStickers=[];
+  final List<_CameraInkStroke> _photoStrokes=[];
+  _CameraInkStroke? _activePhotoStroke;
+  bool _stickerTrayOpen=false;
+  bool _drawMode=false;
+  bool _exportingPhoto=false;
+  int _stickerCounter=0;
+  Color _inkColor=Colors.white;
+  static const List<String> _stickerChoices=<String>[
+    '❤️','😂','😍','🔥','🎉','⭐','🌸','💖','👍','👑','🌈','✨',
+  ];
+  static const List<Color> _inkColors=<Color>[
+    Colors.white,Color(0xFF111827),Color(0xFFF44336),Color(0xFFFFC107),
+    Color(0xFF4CAF50),Color(0xFF2196F3),Color(0xFF9C27B0),
+  ];
   String? _toolHint;
   Timer? _toolHintTimer;
   int? _countdownValue;
@@ -1024,6 +1063,11 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         _capturedDurationMs=null;
         _captureClientId=null;
         _hasSavedDraft=false;
+        _photoStickers.clear();
+        _photoStrokes.clear();
+        _activePhotoStroke=null;
+        _stickerTrayOpen=false;
+        _drawMode=false;
       });
       // A resumed video/voice capture needs a correctly configured camera;
       // a photo only needs its paused preview resumed.
