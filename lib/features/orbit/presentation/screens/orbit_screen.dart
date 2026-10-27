@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -158,6 +159,8 @@ class _OrbitScreenState extends State<OrbitScreen> {
 
   OrbitPersonData? _selectedPerson;
   List<OrbitPersonData> _authorizedPeople=const [];
+  List<OrbitLocationMarker> _authorizedMarkers=const [];
+  Map<String,Uint8List> _authorizedAvatars=const {};
   final Set<String> _authorizedIds={};
   bool _expandedContent = false;
   double _collapsedFraction = 0.30;
@@ -213,6 +216,7 @@ class _OrbitScreenState extends State<OrbitScreen> {
                 if(widget.liveMode)
                   OrbitLocationLiveMap(
                     onMarkersChanged:_receiveAuthorizedMarkers,
+                    onAvatarsChanged:_receiveAuthorizedAvatars,
                     onPersonPressed:(id)=>unawaited(_openLivePerson(id)),
                   )
                 else ...<Widget>[
@@ -259,16 +263,29 @@ class _OrbitScreenState extends State<OrbitScreen> {
     if(!mounted||!widget.liveMode)return;
     final ids=markers.map((m)=>m.userId).toSet();
     setState((){
+      _authorizedMarkers=List.unmodifiable(markers);
+      _authorizedAvatars=Map.fromEntries(_authorizedAvatars.entries.where(
+        (e)=>ids.contains(e.key)));
       _authorizedIds..clear()..addAll(ids);
-      // Backend intentionally returns only opaque IDs; never invent a name,
-      // avatar, presence label or GPS position.
-      _authorizedPeople=markers.map((m)=>OrbitPersonData(
-        id:m.userId,name:'Shared location',imagePath:null,
-        markerX:0,markerY:0)).toList(growable:false);
+      _rebuildAuthorizedPeople();
       if(_selectedPerson!=null&&!ids.contains(_selectedPerson!.id)){
         _selectedPerson=null;_expandedContent=false;
       }
     });
+  }
+  void _receiveAuthorizedAvatars(Map<String,Uint8List> photos){
+    if(!mounted||!widget.liveMode)return;
+    setState((){
+      _authorizedAvatars=Map.fromEntries(photos.entries.where(
+        (e)=>_authorizedIds.contains(e.key)));
+      _rebuildAuthorizedPeople();
+    });
+  }
+  void _rebuildAuthorizedPeople(){
+    _authorizedPeople=_authorizedMarkers.map((m)=>OrbitPersonData(
+      id:m.userId,name:m.displayName??'Orbit member',imagePath:null,
+      imageBytes:_authorizedAvatars[m.userId],markerX:0,markerY:0,
+    )).toList(growable:false);
   }
 
   Future<void> _openLivePerson(String userId) async {
