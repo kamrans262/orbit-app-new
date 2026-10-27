@@ -1547,6 +1547,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         children: <Widget>[
         _CameraToolItem(
           semanticLabel:'Photo mode',
+          selected:_mode==_OrbitCaptureMode.photo,
           assetPath:'assets/icons/flip.svg',
           icon:Icons.photo_camera_outlined,
           label:'Photo',
@@ -1556,6 +1557,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         _CameraToolItem(
           key: MomentCameraKeys.flashButton,
           semanticLabel: flashSemantic,
+          selected:_flashMode!=FlashMode.off,
           assetPath: 'assets/icons/flash.svg',
           label: 'Flash',
           onTap: _toggleFlash,
@@ -1564,6 +1566,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         _CameraToolItem(
           key:MomentCameraKeys.videoMode,
           semanticLabel:'Video recording mode (60 seconds maximum)',
+          selected:_mode==_OrbitCaptureMode.video,
           assetPath:'assets/icons/video.svg',
           label:'Video',
           onTap:()=>unawaited(_selectCaptureMode(_OrbitCaptureMode.video)),
@@ -1572,6 +1575,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         _CameraToolItem(
           key:MomentCameraKeys.voiceMode,
           semanticLabel:'Voice recording mode (60 seconds maximum)',
+          selected:_mode==_OrbitCaptureMode.voice,
           assetPath:'assets/icons/flip.svg',
           icon:Icons.mic_none_outlined,
           label:'Voice',
@@ -1600,6 +1604,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         _CameraToolItem(
           key: MomentCameraKeys.timerButton,
           semanticLabel: timerSemantic,
+          selected:_captureDelay!=Duration.zero,
           assetPath: 'assets/icons/timer.svg',
           label: 'Timer',
           onTap: _cycleTimer,
@@ -1779,12 +1784,14 @@ class _CameraToolItem extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.icon,
+    this.selected=false,
     super.key,
   });
 
   final String semanticLabel;
   final String assetPath;
   final IconData? icon;
+  final bool selected;
   final String label;
   final VoidCallback? onTap;
 
@@ -1804,8 +1811,9 @@ class _CameraToolItem extends StatelessWidget {
               height: 44,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: const Color(0x21000000),
-                border: Border.all(width: 1, color: const Color(0x2EFFFFFF)),
+                gradient:selected ? AppColors.primaryGradient:null,
+                color:selected ? null:const Color(0x99000000),
+                border: Border.all(width: 1, color: const Color(0x66FFFFFF)),
               ),
               child: Center(
                 child: icon != null
