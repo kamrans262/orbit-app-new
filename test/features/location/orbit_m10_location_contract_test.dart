@@ -4,9 +4,10 @@ import 'package:orbit_ui/features/location/data/orbit_location_repository.dart';
 import 'package:orbit_ui/features/location/data/orbit_m10_rollout.dart';
 
 void main(){
-  test('M10 is OFF without explicit build flag',(){
-    expect(OrbitM10Rollout.enabled,false);
-    expect(OrbitM10Rollout.mapConfigured,false);
+  test('M10 foreground map is available in plain flutter run',(){
+    expect(OrbitM10Rollout.enabled,true);
+    expect(OrbitM10Rollout.mapConfigured,true);
+    expect(OrbitM10Rollout.realtimeConfigured,false);
   });
 
   Map<String,dynamic> marker({String state='updated',int age=4,

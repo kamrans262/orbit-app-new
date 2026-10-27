@@ -4,9 +4,10 @@ import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../../../../app/theme/app_colors.dart';
-import '../../../../app/theme/app_typography.dart';
-import '../../../../core/widgets/app_screen_header.dart';
+import '../../../welcome/domain/models/nearby_person.dart';
+import '../../../welcome/presentation/screens/invite_people_screen.dart';
+import '../../../friends/data/orbit_contact_picker.dart';
+import '../../../friends/presentation/widgets/orbit_social_confirmation.dart';
 import '../../../../core/popups/orbit_popup_modal.dart';
 import '../../../auth/data/orbit_identity_client.dart';
 import '../../../friends/data/orbit_social_repository.dart';
@@ -30,6 +31,9 @@ class _OrbitLiveInviteMemberScreenState extends State<OrbitLiveInviteMemberScree
   late final OrbitCircleRepository _circles=widget.repository ?? OrbitCircleRepository();
   late final OrbitSocialRepository _friends=widget.friendsRepository ?? OrbitSocialRepository();
   List<OrbitPerson> _people=const [];
+  final TextEditingController _searchController=TextEditingController();
+  final FocusNode _searchFocus=FocusNode();
+  String _query='';
   bool _loading=true,_sending=false;
   String? _error;
   DateTime? _rateLimitedUntil;
@@ -39,7 +43,12 @@ class _OrbitLiveInviteMemberScreenState extends State<OrbitLiveInviteMemberScree
       DateTime.now().isBefore(_rateLimitedUntil!);
 
   @override
-  void dispose() { _rateLimitTimer?.cancel(); super.dispose(); }
+  void dispose() {
+    _rateLimitTimer?.cancel();
+    _searchController.dispose();
+    _searchFocus.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {super.initState();_load();}
@@ -127,8 +136,7 @@ class _OrbitLiveInviteMemberScreenState extends State<OrbitLiveInviteMemberScree
           ),
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content:Text('Invitation sent. Awaiting acceptance.')));
+        await _notice('Invitation sent. Awaiting acceptance.');
       }
       if(mounted) Navigator.of(context).pop();
     } catch(e) {
@@ -139,72 +147,129 @@ class _OrbitLiveInviteMemberScreenState extends State<OrbitLiveInviteMemberScree
         _rateLimitTimer = Timer(const Duration(seconds: 65), () {
           if (mounted) setState(() => _rateLimitedUntil = null);
         });
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Invitation limit reached. Please try again in about a minute.'),
-        ));
+        if (mounted) _notice(
+          'Invitation limit reached. Please try again in about a minute.');
       } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(e is OrbitIdentityException ? e.message
-              : 'Unable to invite this friend.'),
-        ));
+        _notice(e is OrbitIdentityException ? e.message
+            : 'Unable to invite this friend.');
       }
     } finally {
       if(mounted) setState(()=>_sending=false);
     }
   }
 
+  /// The existing Orbit popup is used instead of native SnackBars or
+  /// a different modal design.
+  Future<void> _notice(String message) async {
+    if (!mounted) return;
+    await showOrbitPopupModal<void>(
+      context: context,
+      builder: (dialog) => OrbitPopupModal(
+        title: 'Circle invitation',
+        description: message,
+        primaryAction: OrbitPopupPrimaryButton(
+          label: 'OK',
+          onPressed: () => Navigator.of(dialog).pop(),
+        ),
+      ),
+    );
+  }
+
+  void _explainRecipientBoundShare(String method) {
+    _notice('Circle invitation $method is private and tied to one '
+        'eligible friend. Tap + beside a friend below to create an '
+        'invitation and see its one-time QR code and shareable code.');
+  }
+
+  void _findUsername() {
+    _searchFocus.requestFocus();
+  }
+
+  Future<void> _pickContact() async {
+    try {
+      final selected = await OrbitContactPicker().pick();
+      if (!mounted) return;
+      if (selected == null) {
+        _notice('No contact selected. You can search by username instead.');
+        return;
+      }
+      final consent = await confirmOrbitSocialAction(
+        context,
+        title: 'Match this contact?',
+        description: 'Only this one selected contact address will be checked '
+            'against people who opted in. Orbit does not upload your address book.',
+        confirmation: 'Find friend',
+        barrierDismissible: true,
+      );
+      if (consent != true || !mounted) return;
+      final matches = await _friends.matchContacts(<Map<String, String>>[
+        <String, String>{'type': selected.type, 'value': selected.value},
+      ]);
+      if (!mounted) return;
+      OrbitPerson? eligible;
+      for (final match in matches) {
+        for (final person in _people) {
+          if (person.id == match.id) {
+            eligible = person;
+            break;
+          }
+        }
+        if (eligible != null) break;
+      }
+      if (eligible != null) {
+        await _invite(eligible);
+      } else {
+        _notice('This contact is not an eligible friend for this Circle. '
+            'Only existing friends can receive Circle invitations.');
+      }
+    } catch (_) {
+      if (mounted) _notice(
+          'Contact matching is unavailable. Search by username instead.');
+    }
+  }
+
   @override
-  Widget build(BuildContext context)=>Scaffold(
-    backgroundColor:AppColors.background,
-    body:SafeArea(child:Column(children:[
-      const Padding(
-        padding:EdgeInsets.fromLTRB(20,20,20,0),
-        child:AppScreenHeader(title:'Invite friends'),
-      ),
-      const SizedBox(height:20),
-      Expanded(child:_loading ? const Center(child:CircularProgressIndicator())
-      : _error!=null ? Center(child:Column(
-          mainAxisSize:MainAxisSize.min,children:[
-            Text(_error!,textAlign:TextAlign.center),
-            TextButton(onPressed:_load,child:const Text('Try again')),
-          ]))
-      : _people.isEmpty ? const Center(child:Text('No eligible friends to invite. Existing members and pending invitations are excluded.'))
-      : ListView.builder(
-        keyboardDismissBehavior:ScrollViewKeyboardDismissBehavior.onDrag,
-        padding:const EdgeInsets.all(20),
-        itemCount:_people.length,
-        itemBuilder:(context,index){
-          final p=_people[index];
-          return Card(color:Colors.white,elevation:0,
-            child:ListTile(
-              title:Text(p.name,style:const TextStyle(
-                fontFamily:AppTypography.fontFamily,fontWeight:FontWeight.w500)),
-              subtitle:Text('@${p.username}'),
-              trailing:TextButton(
-                onPressed:(_sending || _rateLimited) ? null : ()=>_invite(p),
-                child: Opacity(
-                  opacity: (_sending || _rateLimited) ? 0.45 : 1,
-                  child: ShaderMask(
-                    blendMode: BlendMode.srcIn,
-                    shaderCallback: (bounds) => const LinearGradient(
-                      colors: [AppColors.primaryStart, AppColors.primaryEnd],
-                    ).createShader(bounds),
-                    child: const Text(
-                      'Invite',
-                      style: TextStyle(
-                        fontFamily: AppTypography.fontFamily,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ));
-        },
-      ),
-      ),
-    ])),
-  );
+  Widget build(BuildContext context) {
+    final query = _query.trim().toLowerCase();
+    final eligible = _people.where((person) =>
+        query.isEmpty ||
+        person.name.toLowerCase().contains(query) ||
+        person.username.toLowerCase().contains(query)).toList(growable: false);
+    return InvitePeopleScreen(
+      isCircleInvite: true,
+      onBack: () => Navigator.of(context).maybePop(),
+      searchController: _searchController,
+      searchFocusNode: _searchFocus,
+      onSearchChanged: (value) => setState(() => _query=value),
+      peopleHeading: 'Friends',
+      loadingPeople: _loading,
+      peopleError: _error,
+      onRetryPeople: _load,
+      canAddPerson: !_sending && !_rateLimited && !_loading &&
+          _error == null,
+      emptyPeopleMessage: _query.trim().isNotEmpty
+          ? 'No eligible friends match your search.'
+          : null,
+      nearbyPeople: eligible.map((person) => NearbyPerson(
+        id: person.id,
+        name: person.name,
+        distance: person.username.isEmpty
+            ? 'Orbit friend' : '@${person.username}',
+        imageAsset: '',
+      )).toList(growable: false),
+      onInviteByContacts: () { _pickContact(); },
+      onInviteByQrCode: () => _explainRecipientBoundShare('QR code'),
+      onInviteByLink: () => _explainRecipientBoundShare('link'),
+      onInviteByUsername: _findUsername,
+      onAddPerson: (person) {
+        for (final friend in _people) {
+          if (friend.id == person.id) {
+            _invite(friend);
+            return;
+          }
+        }
+      },
+      onOpenLogin: () => Navigator.of(context).maybePop(),
+    );
+  }
 }

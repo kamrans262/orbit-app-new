@@ -54,9 +54,6 @@ class SettingsScreen extends StatelessWidget {
 
   static const Color _pageBackground = Color(0xFFF9F9F9);
   static const double _cardHorizontalInset = 14;
-  static const double _cardHorizontalPadding = 18;
-  static const double _cardVerticalPadding = 20;
-  static const double _itemGap = 10;
 
   static const LinearGradient _fadeToPageBackground = LinearGradient(
     begin: Alignment.topCenter,
@@ -529,41 +526,18 @@ class _SettingsCard extends StatelessWidget {
       ),
     ];
 
-    return DecoratedBox(
+    return SettingsListCard(
       key: SettingsKeys.listCard,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(30),
-        boxShadow: const <BoxShadow>[
-          BoxShadow(
-            color: Color(0x22000000),
-            offset: Offset(0, 2),
-            blurRadius: 7,
+      children: <Widget>[
+        for (final entry in entries)
+          SettingsListItem(
+            key: SettingsKeys.item(entry.id),
+            icon: entry.icon,
+            iconWidget: entry.iconWidget,
+            label: entry.label,
+            onTap: entry.onTap,
           ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: SettingsScreen._cardHorizontalPadding,
-          vertical: SettingsScreen._cardVerticalPadding,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            for (var index = 0; index < entries.length; index++) ...<Widget>[
-              SettingsListItem(
-                key: SettingsKeys.item(entries[index].id),
-                icon: entries[index].icon,
-                iconWidget: entries[index].iconWidget,
-                label: entries[index].label,
-                onTap: entries[index].onTap,
-              ),
-              if (index != entries.length - 1)
-                const SizedBox(height: SettingsScreen._itemGap),
-            ],
-          ],
-        ),
-      ),
+      ],
     );
   }
 }

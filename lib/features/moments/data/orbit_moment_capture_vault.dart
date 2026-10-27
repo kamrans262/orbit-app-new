@@ -139,6 +139,24 @@ class OrbitMomentCaptureVault {
     }
   }
 
+  /// Detect an encrypted M7 draft without decrypting it or changing the camera view.
+  Future<bool> hasRecoverableDraft() async {
+    final owner = await _account();
+    final data = await _metadata(owner);
+    if (data == null) return false;
+    final saved = DateTime.tryParse(data['saved_at'] as String? ?? '');
+    final now = DateTime.now().toUtc();
+    if (saved == null || now.difference(saved.toUtc()) > maxAge ||
+        saved.toUtc().isAfter(now.add(const Duration(minutes: 5)))) {
+      await clear();
+      return false;
+    }
+    final name = data['name'];
+    if (name is! String || !name.endsWith('.cipher') ||
+        name.contains('/') || name.contains('\\')) return false;
+    final root = await _root(owner);
+    return File(root.path + '/' + name).exists();
+  }
   Future<OrbitRecoveredMomentCapture?> restore() async {
     final owner=await _account();
     final data=await _metadata(owner);

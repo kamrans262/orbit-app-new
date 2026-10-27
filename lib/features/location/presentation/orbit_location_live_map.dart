@@ -433,7 +433,7 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
     return Stack(children:[
       Positioned.fill(child:!_foreground
         ?const ColoredBox(color:AppColors.background)
-        :configured&&OrbitM10Rollout.enabled
+        :configured&&OrbitM10Rollout.enabled&&_cap!=null
         ?gl.GoogleMap(
           key:const Key('orbit_map'),
           initialCameraPosition:const gl.CameraPosition(
@@ -455,6 +455,8 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
           },
           onCameraIdle:()=>unawaited(_syncAnnotations()),
         )
+        // Before the server verifies viewer capabilities, never initialize a
+        // native map or request a position. This also keeps widget tests native-free.
         :Image.asset('assets/orbit_map.png',fit:BoxFit.cover,
           semanticLabel:'Map preview, no live location data')),
       // Render the original Orbit avatar component at authorized coordinates.

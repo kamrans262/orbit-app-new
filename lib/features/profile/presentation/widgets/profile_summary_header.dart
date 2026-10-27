@@ -17,6 +17,10 @@ class ProfileSummaryHeader extends StatelessWidget {
     this.horizontalPadding = 28,
     this.topPadding = 20,
     this.showSettingsButton = false,
+    this.showStats = true,
+    this.showBackButton = false,
+    this.showInitialsForMissingAvatar = false,
+    this.onBackPressed,
     this.onSettingsPressed,
     this.avatarKey,
     this.statsKey,
@@ -47,6 +51,10 @@ class ProfileSummaryHeader extends StatelessWidget {
   final double horizontalPadding;
   final double topPadding;
   final bool showSettingsButton;
+  final bool showStats;
+  final bool showBackButton;
+  final bool showInitialsForMissingAvatar;
+  final VoidCallback? onBackPressed;
   final VoidCallback? onSettingsPressed;
   final Key? avatarKey;
   final Key? statsKey;
@@ -67,57 +75,84 @@ class ProfileSummaryHeader extends StatelessWidget {
               horizontalPadding,
               0,
             ),
-            child: Column(
-              children: <Widget>[
-                _ProfileAvatar(key: avatarKey, profile: profile),
-                const SizedBox(height: 10),
-                Text(
-                  profile.name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontFamilyFallback: const <String>[
-                      'Noto Color Emoji',
-                      'Apple Color Emoji',
-                      'Segoe UI Emoji',
-                    ],
-                    fontSize: 18,
-                    height: 1.25,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.white,
+            // In friend mode no statistics row stretches the Stack child.
+            // Fill the available width so the avatar, name and username
+            // share the exact horizontal centre of the profile header.
+            child: SizedBox(
+              width: double.infinity,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: <Widget>[
+                  _ProfileAvatar(
+                    key: avatarKey,
+                    profile: profile,
+                    initialsFallback: showInitialsForMissingAvatar,
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  profile.bio,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontFamilyFallback: const <String>[
-                      'Noto Color Emoji',
-                      'Apple Color Emoji',
-                      'Segoe UI Emoji',
-                    ],
-                    fontSize: 14,
-                    height: 1.4,
-                    fontWeight: FontWeight.w400,
-                    color: Colors.white,
+                  const SizedBox(height: 10),
+                  Text(
+                    profile.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontFamily: AppTypography.fontFamily,
+                      fontFamilyFallback: const <String>[
+                        'Noto Color Emoji',
+                        'Apple Color Emoji',
+                        'Segoe UI Emoji',
+                      ],
+                      fontSize: 18,
+                      height: 1.25,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 30),
-                _ProfileStats(
-                  key: statsKey,
-                  circleCount: profile.circleCount,
-                  friendCount: profile.friendCount,
-                  momentCount: profile.momentCount,
-                ),
-              ],
+                  const SizedBox(height: 4),
+                  Text(
+                    profile.bio,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontFamily: AppTypography.fontFamily,
+                      fontFamilyFallback: const <String>[
+                        'Noto Color Emoji',
+                        'Apple Color Emoji',
+                        'Segoe UI Emoji',
+                      ],
+                      fontSize: 14,
+                      height: 1.4,
+                      fontWeight: FontWeight.w400,
+                      color: Colors.white,
+                    ),
+                  ),
+                  if (showStats) ...<Widget>[
+                    const SizedBox(height: 30),
+                    _ProfileStats(
+                      key: statsKey,
+                      circleCount: profile.circleCount,
+                      friendCount: profile.friendCount,
+                      momentCount: profile.momentCount,
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
+          if (showBackButton)
+            Positioned(
+              top: safeTop + topPadding,
+              left: horizontalPadding,
+              child: AppCircularIconButton(
+                semanticLabel: 'Back',
+                onPressed: onBackPressed ??
+                    () => Navigator.of(context).maybePop(),
+                icon: Icons.chevron_left_rounded,
+                size: 30,
+                iconSize: 24,
+                iconColor: Colors.black,
+              ),
+            ),
           if (showSettingsButton)
             Positioned(
               top: safeTop + topPadding,
@@ -140,24 +175,48 @@ class ProfileSummaryHeader extends StatelessWidget {
 }
 
 class _ProfileAvatar extends StatelessWidget {
-  const _ProfileAvatar({required this.profile, super.key});
+  const _ProfileAvatar({
+    required this.profile,
+    this.initialsFallback = false,
+    super.key,
+  });
 
   final ProfileData profile;
+  final bool initialsFallback;
 
   @override
   Widget build(BuildContext context) {
     return ClipOval(
       child: SizedBox.square(
         dimension: 80,
-        child: ProfileMediaImage(
-          assetPath: profile.imagePath,
-          imageUrl: profile.imageUrl,
-          bytes: profile.imageBytes,
-          width: 80,
-          height: 80,
-          fit: BoxFit.cover,
-          fallbackAspectRatio: 1,
-        ),
+        child: initialsFallback &&
+                profile.imagePath == null &&
+                profile.imageUrl == null &&
+                profile.imageBytes == null
+            ? ColoredBox(
+                color: const Color(0xFFF2EAFE),
+                child: Center(
+                  child: Text(
+                    profile.name.trim().isEmpty
+                        ? '?' : profile.name.trim().substring(0, 1).toUpperCase(),
+                    style: const TextStyle(
+                      fontFamily: AppTypography.fontFamily,
+                      fontSize: 32,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.primaryEnd,
+                    ),
+                  ),
+                ),
+              )
+            : ProfileMediaImage(
+                assetPath: profile.imagePath,
+                imageUrl: profile.imageUrl,
+                bytes: profile.imageBytes,
+                width: 80,
+                height: 80,
+                fit: BoxFit.cover,
+                fallbackAspectRatio: 1,
+              ),
       ),
     );
   }

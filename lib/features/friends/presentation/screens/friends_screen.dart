@@ -159,6 +159,8 @@ class _FriendsScreenState extends State<FriendsScreen> {
                   },
                   onBack: widget.onBack,
                   searchSemanticLabel: widget.liveMode ? 'Find friends' : null,
+                  actionIcon: widget.liveMode
+                      ? Icons.person_add_alt_outlined : Icons.search_rounded,
                   onSearchPressed: widget.liveMode
                       ? (widget.onDiscover ?? () {
                           // Offline snapshots are read-only and never trigger
@@ -174,7 +176,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
                     if (widget.onRequests != null)
                       AppCircularIconButton(
                         semanticLabel: 'Friend requests',
-                        icon: Icons.person_add_alt_outlined,
+                        icon: Icons.mark_email_unread_outlined,
                         iconSize: 24,
                         iconColor: AppColors.primaryEnd,
                         iconGradient: AppColors.primaryGradient,
@@ -254,7 +256,11 @@ class _FriendsScreenState extends State<FriendsScreen> {
                                 onTap: () { if (!widget.offlineStale) _openFriend(friend); },
                                 onFavoritePressed: () =>
                                     _toggleFavorite(friend.id),
-                                showFavoriteAction: !widget.liveMode,
+                                // The Circle detail and Friends lists reuse this same
+                                // original person card. M4 has no persistent favorite
+                                // endpoint, so the heart remains visible but read-only.
+                                showFavoriteAction: true,
+                                favoriteEnabled: !widget.liveMode,
                               ),
                             ),
                           );

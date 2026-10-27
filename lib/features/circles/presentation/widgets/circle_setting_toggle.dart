@@ -5,6 +5,7 @@ class CircleSettingToggle extends StatelessWidget {
     required this.value,
     required this.onChanged,
     this.semanticLabel,
+    this.enabled = true,
     super.key,
   });
 
@@ -15,16 +16,18 @@ class CircleSettingToggle extends StatelessWidget {
   final bool value;
   final ValueChanged<bool> onChanged;
   final String? semanticLabel;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
       button: true,
       toggled: value,
+      enabled: enabled,
       label: semanticLabel,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: () => onChanged(!value),
+        onTap: enabled ? () => onChanged(!value) : null,
         child: SizedBox(
           width: 32,
           height: 28,

@@ -4,8 +4,8 @@ import 'package:orbit_ui/features/presence/data/orbit_presence_repository.dart';
 import 'package:orbit_ui/features/presence/data/orbit_presence_rollout.dart';
 
 void main() {
-  test('M9 disabled by default, no arbitrary socket endpoint', () {
-    expect(OrbitPresenceRollout.enabled,false);
+  test('M9 client enabled for plain flutter run, no arbitrary socket', () {
+    expect(OrbitPresenceRollout.enabled,true);
     expect(OrbitPresenceRollout.secureGateway,isNull);
   });
 

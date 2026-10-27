@@ -5,6 +5,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../../app/theme/app_colors.dart';
+import '../../../../app/theme/app_typography.dart';
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../../../core/widgets/orbit_searchable_header.dart';
 import '../../../../core/widgets/app_circular_icon_button.dart';
@@ -13,6 +14,8 @@ import '../../../../core/popups/orbit_popup_modal.dart';
 import '../widgets/orbit_social_confirmation.dart';
 import '../../../../core/widgets/app_action_row.dart';
 import '../../../home/domain/models/home_models.dart';
+import '../../../welcome/domain/models/nearby_person.dart';
+import '../../../welcome/presentation/widgets/nearby_person_tile.dart';
 import '../../../home/presentation/widgets/favorite_person_tile.dart';
 import '../../data/orbit_social_repository.dart';
 import '../../data/orbit_contact_picker.dart';
@@ -21,9 +24,18 @@ import 'orbit_friend_qr_scan_screen.dart';
 import 'orbit_discovery_preferences_screen.dart';
 
 class OrbitDiscoverFriendsScreen extends StatefulWidget {
-  const OrbitDiscoverFriendsScreen({super.key, this.repository, this.initialInviteCode});
+  const OrbitDiscoverFriendsScreen({
+    super.key,
+    this.repository,
+    this.initialInviteCode,
+    this.nearbyPeople = const <NearbyPerson>[],
+  });
   final OrbitSocialRepository? repository;
   final String? initialInviteCode;
+  /// Only verified, consented discovery records with stable IDs and real
+  /// proximity measurements may be supplied. The current M4 API provides no
+  /// nearby endpoint; production therefore shows an honest empty state.
+  final List<NearbyPerson> nearbyPeople;
   @override
   State<OrbitDiscoverFriendsScreen> createState() => _OrbitDiscoverFriendsScreenState();
 }
@@ -99,6 +111,24 @@ class _OrbitDiscoverFriendsScreenState extends State<OrbitDiscoverFriendsScreen>
       builder: (_) => OrbitPersonScreen(person: person, repository: _repo)));
     if (mounted && _query.length >= 2) _load(++_generation, reset: true);
   }
+
+  Future<void> _openNearbyPerson(NearbyPerson nearby) async {
+    final id = nearby.id;
+    if (id == null || id.isEmpty) return;
+    try {
+      // Revalidate relationship/discoverability on the server before opening.
+      final person = await _repo.preview(id);
+      if (!mounted) return;
+      await _person(person);
+    } catch (_) {
+      if (mounted) _notice('This person is no longer discoverable.');
+    }
+  }
+
+  List<NearbyPerson> get _verifiedNearbyPeople =>
+      widget.nearbyPeople.where((person) =>
+          person.id != null && person.id!.isNotEmpty &&
+          person.distance.trim().isNotEmpty).toList(growable: false);
 
   Future<String?> _ask(String title, String hint) =>
       showOrbitPopupModal<String>(
@@ -300,10 +330,64 @@ class _OrbitDiscoverFriendsScreenState extends State<OrbitDiscoverFriendsScreen>
                 iconBackgroundColor: const Color(0xFFF2EAFE),
                 leadingIconColor: const Color(0xFF7C3AED),
                 title: 'Find by Contact (optional)', onTap: _matchContact),
-              const SizedBox(height:20),
-              const Text('You can search by name without sharing contacts.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize:13,color:Color(0xFF64748B))),
+              const SizedBox(height: 20),
+              // Original Invite People screen's Nearby People section:
+              // same typography, spacing, image rows, divider and add icon.
+              const Text(
+                'Near By People',
+                key: Key('find_friends_nearby_heading'),
+                style: TextStyle(
+                  fontFamily: AppTypography.fontFamily,
+                  fontFamilyFallback: <String>[
+                    'Noto Color Emoji',
+                    'Apple Color Emoji',
+                    'Segoe UI Emoji',
+                  ],
+                  fontSize: 18,
+                  height: 1.2,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF0F1724),
+                ),
+              ),
+              const SizedBox(height: 8),
+              if (_verifiedNearbyPeople.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  child: Text(
+                    'Nearby people are not available yet. '
+                    'No location or distance is being shared.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontFamily: AppTypography.fontFamily,
+                      fontSize: 13,
+                      color: Color(0xFF94A3B8),
+                    ),
+                  ),
+                )
+              else
+                ListView.separated(
+                  key: const Key('find_friends_nearby_list'),
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  padding: EdgeInsets.zero,
+                  itemCount: _verifiedNearbyPeople.length,
+                  itemBuilder: (context, index) {
+                    final nearby = _verifiedNearbyPeople[index];
+                    return NearbyPersonTile(
+                      tileKey: Key('find_friends_nearby_person_${nearby.id}'),
+                      person: nearby,
+                      onAdd: () => _openNearbyPerson(nearby),
+                    );
+                  },
+                  separatorBuilder: (context, index) => const Padding(
+                    padding: EdgeInsets.only(left: 60),
+                    child: Divider(
+                      height: 1,
+                      thickness: 1,
+                      color: Color(0xFFD8D8D8),
+                    ),
+                  ),
+                ),
             ] else if (_query.length < 2)
               const Padding(padding:EdgeInsets.all(16),
                 child: Text('Enter at least two characters.')),

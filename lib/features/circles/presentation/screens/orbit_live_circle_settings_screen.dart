@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
+import '../../../../core/popups/orbit_popup_modal.dart';
 import '../../../auth/data/orbit_identity_client.dart';
 import '../widgets/orbit_circle_confirmation.dart';
 import '../../data/orbit_circle_repository.dart';
@@ -37,12 +38,25 @@ class _OrbitLiveCircleSettingsScreenState extends State<OrbitLiveCircleSettingsS
     pingEnabled:false,sosAlertsEnabled:false,
   );
 
+  void _notice(String message) {
+    if (!mounted) return;
+    showOrbitPopupModal<void>(
+      context: context,
+      builder: (dialog) => OrbitPopupModal(
+        title: 'Circle settings',
+        description: message,
+        primaryAction: OrbitPopupPrimaryButton(
+          label: 'OK',
+          onPressed: () => Navigator.of(dialog).pop(),
+        ),
+      ),
+    );
+  }
+
   void _error(Object e) {
-    if(!mounted)return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content:Text(e is OrbitIdentityException ? e.message :
+    _notice(e is OrbitIdentityException ? e.message :
         e is FormatException ? e.message :
-        'Could not save Circle changes. Reconnect and try again.')));
+        'Could not save Circle changes. Reconnect and try again.');
   }
 
   void _onChanged(CircleSettings next) {
@@ -70,8 +84,7 @@ class _OrbitLiveCircleSettingsScreenState extends State<OrbitLiveCircleSettingsS
         _circle = updated;
         _pending = null;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Circle changes saved.')));
+      _notice('Circle changes saved.');
       return true;
     } catch (error) {
       // Retain the draft so a failed request never silently discards edits.
@@ -154,6 +167,7 @@ class _OrbitLiveCircleSettingsScreenState extends State<OrbitLiveCircleSettingsS
       child: CircleSettingScreen(
       settings:_pending ?? _settings,
       sharingControlsEnabled:false,
+      sharingControlsReadOnly:true,
       archiveInsteadOfDelete:true,
       showDestructiveAction:_circle.can('archive'),
       onBack:_back,

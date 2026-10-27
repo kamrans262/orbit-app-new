@@ -10,6 +10,6 @@ void main(){
     expect(find.byKey(OrbitKeys.sheet),findsOneWidget);
     expect(find.text('LIVE'),findsNothing);
     expect(find.text('Suzie'),findsNothing);
-    expect(find.text('Location is not enabled for this build.'),findsOneWidget);
+    expect(find.text('Location is not enabled for this build.'),findsNothing);
   });
 }

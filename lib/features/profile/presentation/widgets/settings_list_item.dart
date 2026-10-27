@@ -13,6 +13,8 @@ class SettingsListItem extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.iconWidget,
+    this.trailing,
+    this.enabled = true,
     super.key,
   });
 
@@ -21,6 +23,8 @@ class SettingsListItem extends StatelessWidget {
 
   final IconData icon;
   final Widget? iconWidget;
+  final Widget? trailing;
+  final bool enabled;
   final String label;
   final VoidCallback onTap;
 
@@ -28,11 +32,12 @@ class SettingsListItem extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       button: true,
+      enabled: enabled,
       label: label,
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: onTap,
+          onTap: enabled ? onTap : null,
           borderRadius: BorderRadius.circular(21),
           splashColor: Colors.transparent,
           highlightColor: Colors.transparent,
@@ -72,7 +77,7 @@ class SettingsListItem extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                const Icon(
+                trailing ?? const Icon(
                   Icons.chevron_right_rounded,
                   size: 22,
                   color: Color(0xFF94A3B8),
@@ -80,6 +85,45 @@ class SettingsListItem extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+
+/// Identical white rounded/shadowed surface used by Profile → Settings.
+/// Other profile sections (including a friend's Quick Actions) can use the
+/// existing SettingsListItem geometry without inventing another card style.
+class SettingsListCard extends StatelessWidget {
+  const SettingsListCard({required this.children, super.key});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: const <BoxShadow>[
+          BoxShadow(
+            color: Color(0x22000000),
+            offset: Offset(0, 2),
+            blurRadius: 7,
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            for (var index = 0; index < children.length; index++) ...<Widget>[
+              children[index],
+              if (index != children.length - 1) const SizedBox(height: 10),
+            ],
+          ],
         ),
       ),
     );

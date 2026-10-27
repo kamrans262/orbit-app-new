@@ -48,6 +48,7 @@ class CircleSettingScreen extends StatefulWidget {
     this.onDeleteConfirmed,
     this.onInviteManagementPressed,
     this.sharingControlsEnabled = true,
+    this.sharingControlsReadOnly = false,
     this.archiveInsteadOfDelete = false,
     this.showDestructiveAction = true,
     this.onManagePressed,
@@ -94,6 +95,7 @@ class CircleSettingScreen extends StatefulWidget {
   final ValueChanged<CircleSettings>? onDeleteConfirmed;
   final VoidCallback? onInviteManagementPressed;
   final bool sharingControlsEnabled;
+  final bool sharingControlsReadOnly;
   final bool archiveInsteadOfDelete;
   final bool showDestructiveAction;
   final VoidCallback? onManagePressed;
@@ -313,7 +315,7 @@ class _CircleSettingScreenState extends State<CircleSettingScreen> {
           ),
         ),
         const SizedBox(height: _colorToRowsGap),
-        if (widget.sharingControlsEnabled) ...<Widget>[
+        if (widget.sharingControlsEnabled || widget.sharingControlsReadOnly) ...<Widget>[
         _buildSettingRow(
           id: 'live_location',
           title: 'Live Location',
@@ -396,6 +398,7 @@ class _CircleSettingScreenState extends State<CircleSettingScreen> {
         key: CircleSettingKeys.toggle(id),
         value: value,
         semanticLabel: '$title ${value ? 'enabled' : 'disabled'}',
+        enabled: widget.sharingControlsEnabled,
         onChanged: onChanged,
       ),
     );

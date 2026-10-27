@@ -80,6 +80,15 @@ plaintext Orbit avatars; existing Flutter OrbitMapMarker widgets are
 rendered over viewer-authorized positions. Do not cover Google's logo,
 legal notices or standard attribution in revised screen layouts.
 
+## Plain `flutter run` after consolidated Circle UI integration (2026-10-28)
+
+- The restored original Circle UI branch `feature/restore-original-circle-ui-2026-10-27` was merged into the consolidated Flutter branch, including its later friend, profile, invite and Moments camera edits. Its history is preserved as the second parent of the merge commit.
+- M7 Moments, M8 Home, M9 client UI and M10 foreground Google Maps UI default ON in normal builds. Use **`flutter run`**, without `--dart-define`. Existing per-flag `--dart-define=...=false` rollback remains available.
+- The approved Google Maps API key is still a **required native Android/iOS credential** and is read only from untracked `android/secrets.properties` or `ios/Flutter/GoogleMapsSecrets.xcconfig` (or secured native build environment); no provider secrets are committed.
+- GoogleMap is only initialized after the private backend capabilities request confirms authenticated access. Before that, the existing static map preview is displayed. This avoids unauthenticated map activation.
+- Hostinger server `ORBIT_M10_LOCATION_ENABLED` is an independent server-side switch and can remain OFF. A Flutter default does NOT activate the server, GPS uploads, any share, permissions or Ghost Mode. All location audiences require explicit privacy enablement plus reviewed per-audience consent.
+- M9/M10 WSS URLs default empty. Without verified managed gateway + Redis, **realtime remains disabled**; neither status nor location may be called LIVE merely because UI flags are true.
+
 ## Laravel staging prerequisites (NOT run on Hostinger)
 - Apply additive migrations `2026_10_27_000001_create_m10_location.php`
   and `2026_10_27_000002_add_m10_private_avatar_grants.php` to disposable

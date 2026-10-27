@@ -65,6 +65,51 @@ void main() {
     expect(find.byType(CustomScrollView), findsOneWidget);
   });
 
+  testWidgets('live Circle uses original group tabs and header actions',
+      (tester) async {
+    var settingsOpened = 0;
+    var presenceOpened = 0;
+    await tester.pumpWidget(MaterialApp(home: FriendDetailsScreen(
+      circleName: 'Live Friends',
+      members: demoMembers(),
+      groups: const <CircleGroupData>[],
+      onBack: () {},
+      onAddMember: () {},
+      onSettingsPressed: () => settingsOpened++,
+      onPresencePressed: () => presenceOpened++,
+      liveInviteMode: true,
+      favoriteChangesEnabled: false,
+      // Even if an older caller passes a Moments builder, the live Circle
+      // detail must display only the original Circle and Group tabs.
+      momentsTabBuilder: (_) => const Text('Authorized Circle Moments'),
+    )));
+    await tester.pumpAndSettle();
+    expect(find.text('Friend Details'), findsOneWidget);
+    expect(find.byKey(CircleGroupSegmentedControlKeys.circle), findsOneWidget);
+    expect(find.byKey(CircleGroupSegmentedControlKeys.group), findsOneWidget);
+    expect(find.byKey(const Key('circle_detail_members_tab')), findsNothing);
+    expect(find.byKey(const Key('circle_detail_moments_tab')), findsNothing);
+    expect(find.text('Members'), findsNothing);
+    expect(find.text('Moments'), findsNothing);
+    expect(find.text('Authorized Circle Moments'), findsNothing);
+    await tester.tap(find.byWidgetPredicate((widget) =>
+        widget is AppCircularIconButton &&
+        widget.semanticLabel == 'Circle settings'));
+    await tester.tap(find.byWidgetPredicate((widget) =>
+        widget is AppCircularIconButton &&
+        widget.semanticLabel == 'Circle presence'));
+    expect(settingsOpened, 1);
+    expect(presenceOpened, 1);
+    final emma = find.byKey(FriendDetailsKeys.member('emma'));
+    final favorite = tester.widget<IconButton>(find.descendant(
+      of: emma, matching: find.byType(IconButton)));
+    expect(favorite.onPressed, isNull);
+    await tester.tap(find.byKey(CircleGroupSegmentedControlKeys.group));
+    await tester.pumpAndSettle();
+    expect(find.text('No groups in this circle yet.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('circle tab reuses member rows and favorite toggles locally', (
     tester,
   ) async {
