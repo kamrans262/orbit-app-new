@@ -28,6 +28,7 @@ import '../features/welcome/presentation/screens/create_circle_screen.dart';
 import '../features/welcome/presentation/screens/invite_people_screen.dart';
 import '../features/welcome/presentation/screens/notifications_screen.dart';
 import '../features/welcome/presentation/screens/share_location_screen.dart';
+import '../features/location/data/orbit_location_permission_service.dart';
 import '../features/welcome/presentation/screens/share_moments_screen.dart';
 import '../features/welcome/presentation/screens/welcome2_screen.dart';
 import '../features/welcome/presentation/screens/welcome_screen.dart';
@@ -328,11 +329,24 @@ class _OrbitAppState extends State<OrbitApp> {
             return MaterialPageRoute<void>(
               settings: settings,
               builder: (context) => ShareLocationScreen(
-                onAllowAlways: () {
-                  Navigator.of(context).pushNamed(AppRoutes.createCircle);
+                onAllowAlways: () async {
+                  // Approved runtime has foreground-only GPS; do not request
+                  // background permission or imply "Always" is enabled.
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content:Text('Background location is not available yet. You can allow location while using Orbit.')));
                 },
-                onAllowWhileUsing: () {
-                  Navigator.of(context).pushNamed(AppRoutes.createCircle);
+                onAllowWhileUsing: () async {
+                  try {
+                    final allowed=await const OrbitLocationPermissionService()
+                        .granted(request:true);
+                    if(!context.mounted)return;
+                    if(!allowed)ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content:Text('Location permission was not granted. Sharing remains off.')));
+                  }catch(_){
+                    if(context.mounted)ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content:Text('Device location could not be enabled. Sharing remains off.')));
+                  }
+                  if(context.mounted)Navigator.of(context).pushNamed(AppRoutes.createCircle);
                 },
                 onNotNow: () {
                   Navigator.of(context).pushNamed(AppRoutes.createCircle);

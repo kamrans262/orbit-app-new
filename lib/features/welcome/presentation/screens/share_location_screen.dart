@@ -249,7 +249,7 @@ class _LocationPermissionCard extends StatelessWidget {
             child: _PermissionOption(
               key: ShareLocationKeys.allowAlways,
               icon: Icons.location_on_rounded,
-              label: 'Allow Always',
+              label: 'Background location (not yet available)',
               onTap: onAllowAlways,
             ),
           ),
