@@ -1290,11 +1290,13 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     final original=_capturedBytes;
     if(original==null)throw StateError('No captured photo.');
     if(_photoStickers.isEmpty && _photoStrokes.isEmpty)return original;
+    assert(() { debugPrint('M7 export started with graphic overlays'); return true; }());
     // Capture only the image and movable overlays, not camera controls.
     // Compositing remains in memory; no unencrypted file is stored.
     setState(()=>_exportingPhoto=true);
     try {
       await WidgetsBinding.instance.endOfFrame;
+      assert(() { debugPrint('M7 export completed composition frame'); return true; }());
       final boundary=_photoCompositionKey.currentContext
         ?.findRenderObject() as RenderRepaintBoundary?;
       if(boundary==null || !boundary.hasSize){
@@ -1303,6 +1305,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       final size=boundary.size;
       final ratio=(1440/math.max(size.width,size.height))
         .clamp(1.0,3.0).toDouble();
+      assert(() { debugPrint('M7 export calling toImage'); return true; }());
       final output=await boundary.toImage(pixelRatio:ratio);
       try {
         final data=await output.toByteData(format:ui.ImageByteFormat.png);
@@ -1329,6 +1332,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       return;
     }
     if (_publishSheetOpen || !mounted) return;
+    assert(() { debugPrint('M7 send button accepted with capture'); return true; }());
     Uint8List editedPhoto=captured??Uint8List(0);
     if(captured!=null){
       try {
