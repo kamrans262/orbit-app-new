@@ -107,6 +107,8 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   _OrbitCaptureMode _mode=_OrbitCaptureMode.photo;
   final AudioRecorder _audioRecorder=AudioRecorder();
   final OrbitMomentCaptureVault _captureVault=OrbitMomentCaptureVault();
+  bool _hasSavedDraft=false;
+  bool _restoringSavedDraft=false;
   String? _captureClientId;
   File? _capturedClip;
   int? _capturedDurationMs;
@@ -138,16 +140,42 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
 
     if (widget.enableCamera) {
       unawaited(_initializeCamera());
-      unawaited(_restoreEncryptedCapture());
+      unawaited(_checkSavedDraft());
     } else {
       _isInitializing = false;
     }
   }
 
+  Future<void> _checkSavedDraft() async {
+    try {
+      final available=await _captureVault.hasRecoverableDraft();
+      if(mounted)setState(()=>_hasSavedDraft=available);
+    } catch (_) {
+      // Signed-out or revoked accounts must not surface old captures.
+      if(mounted)setState(()=>_hasSavedDraft=false);
+    }
+  }
+
+  Future<void> _discardSavedDraft() async {
+    if(_restoringSavedDraft)return;
+    try {
+      await _captureVault.clear();
+      if(mounted)setState(()=>_hasSavedDraft=false);
+    } catch (_) {
+      _showToolHint('Could not discard saved draft. Try again.');
+    }
+  }
+
   Future<void> _restoreEncryptedCapture() async {
+    if(_restoringSavedDraft || _isCapturing || _recording ||
+       _capturedBytes!=null || _capturedClip!=null)return;
+    setState(()=>_restoringSavedDraft=true);
     try {
       final recovered=await _captureVault.restore();
-      if(recovered==null)return;
+      if(recovered==null){
+        if(mounted)setState(()=>_hasSavedDraft=false);
+        return;
+      }
       if(!mounted || _isCapturing || _recording ||
           _capturedBytes!=null || _capturedClip!=null){
         final clip=recovered.clip;
@@ -168,15 +196,23 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         _capturedClip=recovered.clip;
         _capturedDurationMs=recovered.durationMs;
         _captureClientId=recovered.clientId;
+        _hasSavedDraft=false;
+        _filterTrayOpen=false;
       });
     }catch(_){
       // Corrupt/cross-account drafts never become a public-media fallback.
+      _showToolHint('Saved Moment could not be resumed.');
+    }finally{
+      if(mounted)setState(()=>_restoringSavedDraft=false);
     }
   }
 
   Future<void> _savePhotoDraft(Uint8List bytes) async {
     if(!widget.enableCamera)return;
-    try{_captureClientId=await _captureVault.savePhoto(bytes);}
+    try{
+      _captureClientId=await _captureVault.savePhoto(bytes);
+      if(mounted)setState(()=>_hasSavedDraft=false);
+    }
     catch(_){
       if(mounted)ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content:Text(
@@ -186,8 +222,11 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
 
   Future<void> _saveClipDraft(File clip,String kind,int duration) async {
     if(!widget.enableCamera)return;
-    try{_captureClientId=await _captureVault.saveClip(
-      clip,kind:kind,durationMs:duration);}
+    try{
+      _captureClientId=await _captureVault.saveClip(
+        clip,kind:kind,durationMs:duration);
+      if(mounted)setState(()=>_hasSavedDraft=false);
+    }
     catch(_){
       if(mounted)ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content:Text(
@@ -953,6 +992,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     }
 
     _stopWhenStarted=false;
+    _filterTrayOpen=false;
     final old=_capturedClip;
     if(old!=null)await _deleteClip(old);
     try{await _captureVault.clear();}catch(_){}
@@ -961,6 +1001,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       _capturedClip=null;
       _capturedDurationMs=null;
       _captureClientId=null;
+      _hasSavedDraft=false;
     });
     final controller = _controller;
     if (controller != null && controller.value.isInitialized) {
