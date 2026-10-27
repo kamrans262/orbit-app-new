@@ -205,18 +205,23 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
        p.accuracy<0||p.accuracy>500)return;
     if(p.timestamp.isAfter(now.add(const Duration(seconds:15)))||
        now.difference(p.timestamp)>const Duration(seconds:90))return;
+    final sampleEpoch=_epoch;
     _sending=true;_lastSent=now;
     try {
       // A user switch cannot inherit another account's GPS stream or grants.
       final owner=await OrbitIdentityClient.instance.currentLocalSocialOwner();
+      if(!mounted||!_foreground||sampleEpoch!=_epoch||!_active)return;
       if(owner==null||owner!=_accountOwner){
         _locations?.cancel();_locations=null;
         if(mounted)await _refresh();
         return;
       }
       if(!await _gps.granted()){
-        await _stopAfterPermissionFailure();return;
+        if(mounted&&_foreground)await _stopAfterPermissionFailure();
+        return;
       }
+      // Permission/lifecycle/account changes while awaiting OS APIs are a veto.
+      if(!mounted||!_foreground||sampleEpoch!=_epoch||!_active)return;
       final accepted=await _repo.sample(latitude:p.latitude,longitude:p.longitude,
         accuracy:p.accuracy,observedAt:p.timestamp,heading:p.heading,speed:p.speed);
       if(!accepted&&mounted)await _refresh();
