@@ -167,7 +167,7 @@ void main() {
     await tester.tap(find.text('Save privately'));
     await tester.pumpAndSettle();
     expect(find.text('Private save interrupted'), findsOneWidget);
-    expect(find.textContaining('M6 Media is enabled'), findsOneWidget);
+    expect(find.textContaining('M6 Media is disabled'), findsOneWidget);
     expect(find.text('Photo saved privately'), findsNothing);
     await tester.tap(find.byKey(MomentPublishKeys.retry));
     await tester.pumpAndSettle();
