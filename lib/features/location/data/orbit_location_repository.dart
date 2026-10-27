@@ -43,6 +43,12 @@ class OrbitLocationRepository {
     }
     return d;
   }
+  Future<void> attachAvatar({required String shareId,
+    required String mediaId,required String grantId}) async {
+    await _data('POST','/me/location/shares/'+Uri.encodeComponent(shareId)+
+      '/avatar-grant',body:{'media_id':mediaId,'grant_id':grantId});
+  }
+
   Future<void> stopAll() async {await _data('DELETE','/me/location/shares');}
   Future<void> revoke(String id) async {
     await _data('DELETE','/me/location/shares/'+Uri.encodeComponent(id));
