@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // AGP 9 is explicitly in legacy Kotlin mode (android.builtInKotlin=false).
@@ -14,7 +16,7 @@ val orbitAndroidId = System.getenv("ORBIT_ANDROID_APPLICATION_ID")?.trim()
     ?.takeIf { it.matches(Regex("^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*){1,}$")) }
     ?: "com.example.orbit_ui"
 // Platform-key injection. Separate Android-restricted and iOS-restricted keys.
-val orbitGoogleMapsProperties = java.util.Properties()
+val orbitGoogleMapsProperties = Properties()
 val orbitGoogleMapsLocal = rootProject.file("secrets.properties")
 if (orbitGoogleMapsLocal.isFile) {
     orbitGoogleMapsLocal.inputStream().use { orbitGoogleMapsProperties.load(it) }
