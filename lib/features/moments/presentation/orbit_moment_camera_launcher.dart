@@ -125,7 +125,9 @@ abstract final class OrbitMomentCameraLauncher {
           }
           final saved=await stager.stagePhoto(bytes,
             onProgress:progress,
-            onQueued:(transfer) async=>queuedPrivateTransfer=transfer);
+            onQueued:(transfer) async {
+              queuedPrivateTransfer=transfer;
+            });
           if(!saved.thumbnailVerified || !saved.privateGrantConfirmed){
             throw StateError('Private encrypted storage not confirmed.');
           }
