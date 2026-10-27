@@ -62,6 +62,20 @@ void main(){
     expect(folder.listSync().whereType<File>(),isEmpty);
   });
 
+  test('saved camera draft is discoverable without automatic recovery',() async {
+    final vault=capture();
+    expect(await vault.hasRecoverableDraft(),isFalse);
+    await vault.savePhoto(Uint8List.fromList([1,2,3,4]));
+    expect(await vault.hasRecoverableDraft(),isTrue);
+    // The new camera checks only metadata and must not decrypt the preview.
+    final restored=await vault.restore();
+    expect(restored?.photo,[1,2,3,4]);
+    account='account-b';
+    expect(await capture().hasRecoverableDraft(),isFalse);
+    account='account-a';
+    await vault.clear();
+    expect(await vault.hasRecoverableDraft(),isFalse);
+  });
   test('Encrypted voice draft survives restart without storing a plaintext copy',() async{
     final source=File('${root.path}/voice.m4a');
     final bytes=List<int>.generate(20000,(index)=>(index*19)%256);
