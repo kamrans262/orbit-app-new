@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../../../app/theme/app_colors.dart';
 import '../../../auth/data/orbit_identity_client.dart';
 
 /// Approved Orbit gradient feedback. Server acceptance is never delivery.
@@ -27,21 +26,12 @@ abstract final class OrbitPingFeedback {
     if(!context.mounted)return;
     final messenger=ScaffoldMessenger.of(context);
     messenger.hideCurrentSnackBar();
+    // OrbitApp already wraps every Material SnackBar with its approved
+    // gradient/white-text messenger. Reuse it rather than nesting gradients.
     messenger.showSnackBar(SnackBar(
-      backgroundColor:Colors.transparent,elevation:0,padding:EdgeInsets.zero,
-      behavior:SnackBarBehavior.floating,
-      content:Container(
-        decoration:BoxDecoration(gradient:AppColors.primaryGradient,
-          borderRadius:BorderRadius.circular(14)),
-        padding:const EdgeInsets.symmetric(horizontal:16,vertical:12),
-        child:Row(children:[
-          Expanded(child:Text(message,style:const TextStyle(
-            color:Colors.white,fontSize:13,fontWeight:FontWeight.w500))),
-          if(onRetry!=null)TextButton(onPressed:onRetry,
-            style:TextButton.styleFrom(foregroundColor:Colors.white),
-            child:const Text('Retry')),
-        ]),
-      ),
+      content: Text(message),
+      action: onRetry == null ? null
+        : SnackBarAction(label: 'Retry', onPressed: onRetry),
     ));
   }
 }
