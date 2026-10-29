@@ -15,6 +15,10 @@ import 'friend_details_screen.dart';
 import 'orbit_live_circle_settings_screen.dart';
 import 'orbit_live_invite_member_screen.dart';
 import '../../../presence/data/orbit_presence_rollout.dart';
+import '../../../ping/presentation/navigation/orbit_ping_navigation.dart';
+import '../../../ping/data/orbit_ping_repository.dart';
+import '../../../auth/data/orbit_identity_client.dart';
+import '../widgets/orbit_circle_confirmation.dart';
 import '../../../presence/presentation/orbit_presence_runtime.dart';
 import '../../../presence/presentation/orbit_circle_presence_settings_screen.dart';
 
@@ -30,6 +34,7 @@ class OrbitLiveCircleDetailScreen extends StatefulWidget {
 class _OrbitLiveCircleDetailScreenState extends State<OrbitLiveCircleDetailScreen>
     with WidgetsBindingObserver {
   late final OrbitCircleRepository _repo=widget.repository ?? OrbitCircleRepository();
+  final OrbitPingRepository _pings=OrbitPingRepository();
   OrbitCircle? _circle;
   List<OrbitCircleMember> _members = const [];
   bool _loading = true;
@@ -141,6 +146,13 @@ class _OrbitLiveCircleDetailScreenState extends State<OrbitLiveCircleDetailScree
 
   Future<void> _memberPreview(OrbitCircleMember member) async {
     if (_circle == null) return;
+    final me=await OrbitIdentityClient.instance.currentLocalSocialOwner();
+    if(!mounted)return;
+    bool consent=false;
+    if(member.id==me){
+      try{consent=await _pings.circleConsent(widget.circleId);}catch(_){}
+    }
+    if(!mounted)return;
     await showOrbitCircleSheet<void>(
       context: context,
       title: 'Circle member',
@@ -174,6 +186,51 @@ class _OrbitLiveCircleDetailScreenState extends State<OrbitLiveCircleDetailScree
               ],
             ]),
           ),
+          const SizedBox(height: 10),
+          if(member.id!=me)
+            OrbitCircleSheetAction(
+              title: 'Ping '+member.name,
+              icon: Icons.notifications_active_outlined,
+              onTap: () {
+                Navigator.of(sheet).pop();
+                OrbitPingNavigation.openPerson(context,
+                  recipientId: member.id, recipientName: member.name,
+                  contextType: 'circle', circleId: widget.circleId);
+              },
+            )
+          else
+            OrbitCircleSheetAction(
+              title: consent ? 'Disable Circle Pings' : 'Allow Circle Pings',
+              icon: Icons.notifications_active_outlined,
+              onTap: () async {
+                Navigator.of(sheet).pop();
+                if(!mounted)return;
+                final approved=await showOrbitCircleConfirmation(
+                  context:context,
+                  title:consent?'Disable Circle Pings?':'Allow Pings in this Circle?',
+                  description:consent
+                    ? 'Stop allowing members of this Circle to Ping you.'
+                    : 'Allow members of this Circle to Ping you. '
+                      'Your Privacy Settings must also allow My Circle Pings. '
+                      'You can revoke this permission at any time.',
+                  confirmLabel:consent?'Disable':'Allow Pings',
+                  cancelLabel:'Cancel',
+                );
+                if(!approved||!mounted)return;
+                try {
+                  await _pings.setCircleConsent(widget.circleId,!consent);
+                  if(mounted)ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content:Text(consent
+                      ? 'Circle Ping permission disabled.'
+                      : 'Circle Ping permission enabled.')));
+                }catch(error){
+                  if(mounted)ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content:Text(error is OrbitIdentityException
+                      ? error.message
+                      : 'Could not change Ping permission. Please retry.')));
+                }
+              },
+            ),
           const SizedBox(height: 10),
           AppActionRow(
             leadingIcon: Icons.shield_outlined,

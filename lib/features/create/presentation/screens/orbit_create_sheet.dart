@@ -8,7 +8,7 @@ import '../../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../../../core/widgets/app_bottom_navigation_bar.dart';
 import '../../../../core/widgets/app_circular_icon_button.dart';
 import '../../../moments/presentation/orbit_moment_camera_launcher.dart';
-import '../../../ping/presentation/screens/ping_screen.dart';
+import '../../../ping/presentation/navigation/orbit_ping_navigation.dart';
 import '../../../sos/presentation/screens/sos_alert_screen.dart';
 import 'orbit_write_post_screen.dart';
 
@@ -79,9 +79,7 @@ abstract final class OrbitCreateSheet {
         );
         return;
       case _CreateAction.ping:
-        await navigator.push<void>(
-          AppFadeSlidePageRoute<void>(builder: (_) => PingScreen.demo()),
-        );
+        await OrbitPingNavigation.chooseFriend(context);
         return;
       case _CreateAction.sos:
         await navigator.push<void>(

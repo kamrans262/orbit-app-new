@@ -15,6 +15,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: PingScreen.demo(
+            recipientOrCircleId: '11111111-1111-4111-8111-111111111111',
             onSendPing: (submission) => sent = submission.type,
           ),
         ),
@@ -31,4 +32,13 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('demo Ping without a verified recipient never claims success',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(home: PingScreen.demo()));
+    await tester.tap(find.byKey(PingKeys.option('hello')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Choose an authorized recipient'), findsOneWidget);
+    expect(find.textContaining('ping sent'), findsNothing);
+  });
 }

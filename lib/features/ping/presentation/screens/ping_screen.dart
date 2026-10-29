@@ -7,6 +7,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_circular_icon_button.dart';
 import '../../../../core/widgets/app_primary_button.dart';
 import '../../../../core/widgets/app_text_field.dart';
+import '../../../circles/presentation/widgets/orbit_circle_sheet.dart';
 import '../../domain/models/ping_models.dart';
 import '../widgets/ping_option_card.dart';
 
@@ -29,6 +30,7 @@ class PingScreen extends StatefulWidget {
     this.onSendPing,
     this.onInfoPressed,
     this.recipientOrCircleId,
+    this.recipientName,
     super.key,
   });
 
@@ -36,6 +38,7 @@ class PingScreen extends StatefulWidget {
     PingSender? onSendPing,
     VoidCallback? onInfoPressed,
     String? recipientOrCircleId,
+    String? recipientName,
   }) {
     return PingScreen(
       options: const <PingOption>[
@@ -85,6 +88,7 @@ class PingScreen extends StatefulWidget {
       onSendPing: onSendPing,
       onInfoPressed: onInfoPressed,
       recipientOrCircleId: recipientOrCircleId,
+      recipientName: recipientName,
     );
   }
 
@@ -92,6 +96,7 @@ class PingScreen extends StatefulWidget {
   final PingSender? onSendPing;
   final VoidCallback? onInfoPressed;
   final String? recipientOrCircleId;
+  final String? recipientName;
 
   @override
   State<PingScreen> createState() => _PingScreenState();
@@ -103,27 +108,23 @@ class _PingScreenState extends State<PingScreen> {
 
   Future<void> _send(PingOption option) async {
     if (_sendingId != null) return;
+    if (widget.onSendPing == null || widget.recipientOrCircleId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Choose an authorized recipient before sending a Ping.'),
+      ));
+      return;
+    }
     setState(() => _sendingId = option.id);
-
-    final submission = PingSubmission(
-      type: option.id,
-      message: option.title,
-      sentAt: DateTime.now(),
-      recipientOrCircleId: widget.recipientOrCircleId,
-    );
-
     try {
-      await widget.onSendPing?.call(submission);
-      if (!mounted) return;
-      if (widget.onSendPing == null) {
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(
-            SnackBar(
-              duration: const Duration(milliseconds: 900),
-              content: Text('${option.title} ping sent'),
-            ),
-          );
+      await widget.onSendPing!(PingSubmission(
+        type: option.id, message: option.title, sentAt: DateTime.now(),
+        recipientOrCircleId: widget.recipientOrCircleId,
+      ));
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Ping was not sent. Please try again.'),
+        ));
       }
     } finally {
       if (mounted) setState(() => _sendingId = null);
@@ -135,45 +136,17 @@ class _PingScreenState extends State<PingScreen> {
       widget.onInfoPressed!();
       return;
     }
-
-    showModalBottomSheet<void>(
+    showOrbitCircleSheet<void>(
       context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) => const SafeArea(
-        top: false,
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(24, 8, 24, 28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                'About Ping',
-                style: TextStyle(
-                  fontFamily: AppTypography.fontFamily,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF1A1A2E),
-                ),
-              ),
-              SizedBox(height: 10),
-              Text(
-                'Send a quick predefined message or write your own custom Ping. Recipient and delivery data can be connected to the backend without changing this screen.',
-                style: TextStyle(
-                  fontFamily: AppTypography.fontFamily,
-                  fontSize: 14,
-                  height: 1.45,
-                  fontWeight: FontWeight.w400,
-                  color: Color(0xFF8A85A8),
-                ),
-              ),
-            ],
-          ),
+      title: 'About Ping',
+      builder: (_) => const Text(
+        'Send a quick predefined message or write your own custom Ping. '
+        'Your recipient must allow Pings. A server-accepted request is not '
+        'the same as recipient delivery.',
+        style: TextStyle(
+          fontFamily: AppTypography.fontFamily,
+          fontSize: 14, height: 1.45, fontWeight: FontWeight.w400,
+          color: Color(0xFF8A85A8),
         ),
       ),
     );
@@ -182,81 +155,47 @@ class _PingScreenState extends State<PingScreen> {
   Future<void> _openCustomMessage() async {
     final controller = TextEditingController();
     final formKey = GlobalKey<FormState>();
-
     try {
-      await showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.white,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        builder: (sheetContext) {
-          return Padding(
-            padding: EdgeInsets.only(
-              left: 20,
-              right: 20,
-              top: 20,
-              bottom: MediaQuery.viewInsetsOf(sheetContext).bottom + 20,
-            ),
-            child: SafeArea(
-              top: false,
-              child: Form(
-                key: formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: <Widget>[
-                    const Text(
-                      'Custom Message',
-                      style: TextStyle(
-                        fontFamily: AppTypography.fontFamily,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF1A1A2E),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    AppTextField(
-                      fieldKey: PingKeys.customField,
-                      controller: controller,
-                      hintText: 'Type your Ping...',
-                      textInputAction: TextInputAction.done,
-                      validator: (value) {
-                        if ((value ?? '').trim().isEmpty) {
-                          return 'Enter a message';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    KeyedSubtree(
-                      key: PingKeys.customSend,
-                      child: AppPrimaryButton(
-                        label: 'Send Ping',
-                        onPressed: () async {
-                          if (!(formKey.currentState?.validate() ?? false))
-                            return;
-                          final message = controller.text.trim();
-                          Navigator.of(sheetContext).pop();
-                          await _send(
-                            PingOption(
-                              id: 'custom',
-                              emoji: '',
-                              title: message,
-                              backgroundColor: Colors.transparent,
-                              foregroundColor: Colors.black,
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
+      await showOrbitCircleSheet<void>(
+        context: context, title: 'Custom Message',
+        builder: (sheetContext) => Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              AppTextField(
+                fieldKey: PingKeys.customField,
+                controller: controller,
+                hintText: 'Type your Ping...',
+                textInputAction: TextInputAction.done,
+                validator: (value) {
+                  final message = (value ?? '').trim();
+                  if (message.isEmpty) return 'Enter a message';
+                  if (message.runes.length > 160) return 'Maximum 160 characters';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              KeyedSubtree(
+                key: PingKeys.customSend,
+                child: AppPrimaryButton(
+                  label: 'Send Ping',
+                  onPressed: () async {
+                    if (!(formKey.currentState?.validate() ?? false)) return;
+                    final message = controller.text.trim();
+                    Navigator.of(sheetContext).pop();
+                    await _send(PingOption(
+                      id: 'custom', emoji: '', title: message,
+                      backgroundColor: Colors.transparent,
+                      foregroundColor: Colors.black,
+                    ));
+                  },
                 ),
               ),
-            ),
-          );
-        },
+            ],
+          ),
+        ),
       );
     } finally {
       controller.dispose();
@@ -282,6 +221,15 @@ class _PingScreenState extends State<PingScreen> {
                 ),
                 sliver: SliverToBoxAdapter(child: _buildHeader()),
               ),
+              if (widget.recipientName != null)
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: _horizontalPadding),
+                  sliver: SliverToBoxAdapter(child: Text(
+                    'To: '+widget.recipientName!,
+                    style: AppTypography.body.copyWith(
+                      fontSize: 13, color: const Color(0xFF64748B)),
+                  )),
+                ),
               const SliverToBoxAdapter(child: SizedBox(height: 20)),
               if (widget.options.isEmpty)
                 const SliverPadding(
