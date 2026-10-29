@@ -100,15 +100,24 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
     try {
       if(!await _pings.available())return;
       await _pings.flushPending();
-      final inbox=await _pings.page('inbox');
-      if(!mounted || ModalRoute.of(context)?.isCurrent!=true)return;
-      for(final ping in inbox.items) {
-        if(_shownPings.contains(ping.id) || ping.status=='seen')continue;
-        await _pings.receipt(ping.id,'delivered');
+      String? cursor;
+      // A page may be filled entirely with already Seen Pings. Continue
+      // through a bounded number of authorized pages to avoid starving
+      // older unread messages and limit foreground request volume.
+      for(var pageNumber=0;pageNumber<4;pageNumber++){
+        final inbox=await _pings.page('inbox',cursor:cursor);
         if(!mounted || ModalRoute.of(context)?.isCurrent!=true)return;
-        _shownPings.add(ping.id);
-        await OrbitPingNavigation.showIncoming(context,ping,repository:_pings);
-        break;
+        var displayed=false;
+        for(final ping in inbox.items) {
+          if(_shownPings.contains(ping.id) || ping.status=='seen')continue;
+          // Do not emit a delivery receipt before the bottom sheet renders.
+          _shownPings.add(ping.id);
+          await OrbitPingNavigation.showIncoming(context,ping,repository:_pings);
+          displayed=true;
+          break;
+        }
+        if(displayed || inbox.nextCursor==null)break;
+        cursor=inbox.nextCursor;
       }
     } catch (_) {
       // Missing backend migrations or offline service must not block Home.
@@ -166,6 +175,7 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
     _peopleById.clear();
     _byId.clear();
     _authors.clear();
+    _shownPings.clear();
   }
 
   @override

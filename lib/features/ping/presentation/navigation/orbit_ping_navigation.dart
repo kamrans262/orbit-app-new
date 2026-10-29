@@ -178,31 +178,61 @@ abstract final class OrbitPingNavigation {
   static Future<void> showSent(BuildContext context,
       {OrbitPingRepository? repository}) async {
     final pings=repository??OrbitPingRepository();
-    OrbitPingPage page;
-    try{
+    OrbitPingPage? page;
+    List<OrbitPingPending> pending=const [];
+    try {
+      pending=await pings.pending();
       page=await pings.page('outbox');
-    }catch(_){
-      _notify(context,'Sent Pings could not be loaded. Please reconnect.');
-      return;
+    } catch (_) {
+      // Authenticated local pending intents can still be reviewed offline.
+      try {pending=await pings.pending();}catch(_){}
     }
     if(!context.mounted)return;
     await showOrbitCircleSheet<void>(
       context:context,title:'Sent Pings',
-      builder:(sheet)=>page.items.isEmpty
-        ? const Text('No sent Pings yet.')
-        : Column(mainAxisSize:MainAxisSize.min,
-            children:page.items.map((ping) {
-              final status=ping.status=='seen'?'Seen'
-                : ping.status=='delivered'?'Delivered'
-                : 'Accepted · awaiting delivery';
-              return OrbitCircleSheetAction(
-                title:ping.displayText+' · '+status,
-                icon:ping.status=='seen'?Icons.done_all_rounded
-                  :ping.status=='delivered'?Icons.done_rounded
-                  :Icons.schedule_rounded,
-                onTap:()=>Navigator.of(sheet).pop(),
-              );
-            }).toList()),
+      builder:(sheet)=>Column(
+        mainAxisSize:MainAxisSize.min,
+        crossAxisAlignment:CrossAxisAlignment.stretch,
+        children:[
+          if(pending.isNotEmpty) ...[
+            OrbitCircleSheetAction(
+              title:'Retry pending Pings ('+pending.length.toString()+')',
+              icon:Icons.refresh_rounded,
+              onTap:() async {
+                Navigator.of(sheet).pop();
+                try {await pings.retryPending();}
+                catch (_) {/* Keep pending state unless server denies it. */}
+                if(context.mounted)await showSent(context,repository:pings);
+              },
+            ),
+            const SizedBox(height:10),
+            ...pending.map((intent)=>OrbitCircleSheetAction(
+              title:'Queued · '+(intent.type=='custom'
+                ? (intent.customText??'Custom Ping') : intent.type),
+              icon:Icons.schedule_rounded,
+              onTap:()=>Navigator.of(sheet).pop(),
+            )),
+          ],
+          if(page==null && pending.isEmpty)
+            const Text('Sent Pings cannot be loaded. Reconnect to refresh.'),
+          if(page!=null && page.items.isEmpty && pending.isEmpty)
+            const Text('No sent Pings yet.'),
+          if(page!=null)...page.items.map((ping){
+            final status=ping.respondedAt!=null?'Hey acknowledged'
+              : ping.status=='seen'?'Seen'
+              : ping.status=='delivered'?'Delivered'
+              : 'Accepted · awaiting delivery';
+            return OrbitCircleSheetAction(
+              title:ping.displayText+' · '+status,
+              icon:ping.respondedAt!=null?Icons.waving_hand_outlined
+                :ping.status=='seen'?Icons.done_all_rounded
+                :ping.status=='delivered'?Icons.done_rounded
+                :Icons.schedule_rounded,
+              onTap:()=>Navigator.of(sheet).pop(),
+            );
+          }),
+        ],
+      ),
     );
   }
 
@@ -219,7 +249,7 @@ abstract final class OrbitPingNavigation {
       // Never reveal a blocked or private profile.
     }
     if(!context.mounted)return;
-    final action=await showOrbitCircleSheet<String>(
+    final sheetFuture=showOrbitCircleSheet<String>(
       context:context,title:'Incoming Ping',
       builder:(sheet)=>Column(
         mainAxisSize:MainAxisSize.min,
@@ -244,7 +274,13 @@ abstract final class OrbitPingNavigation {
         ],
       ),
     );
-    // A visible, dismissed sheet is a real Seen event, unlike a fetched row.
+    // A confirmed rendered frame is delivery evidence; a fetched server row
+    // alone is not. Seen is distinct and only follows closing this sheet.
+    await WidgetsBinding.instance.endOfFrame;
+    if(context.mounted) {
+      try{await pings.receipt(ping.id,'delivered');}catch(_){}
+    }
+    final action=await sheetFuture;
     if(context.mounted) {
       try{await pings.receipt(ping.id,'seen');}catch(_){}
     }

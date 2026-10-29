@@ -1,0 +1,36 @@
+name: Orbit Ping focused Flutter verification
+on:
+  push:
+    branches: [integration/m2-m5-flutter-consolidated-2026-10-24]
+    paths:
+      - '.github/workflows/orbit-m11-ping-flutter.yml'
+      - 'lib/features/ping/**'
+      - 'lib/features/home/presentation/screens/orbit_live_home_screen.dart'
+      - 'lib/features/friends/presentation/screens/orbit_person_screen.dart'
+      - 'lib/features/circles/presentation/screens/orbit_live_circle_detail_screen.dart'
+      - 'lib/features/create/presentation/screens/orbit_create_sheet.dart'
+      - 'test/features/ping/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ping-flutter:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Analyze Ping and four existing integration surfaces
+        run: |
+          dart analyze lib/features/ping \
+            lib/features/home/presentation/screens/orbit_live_home_screen.dart \
+            lib/features/friends/presentation/screens/orbit_person_screen.dart \
+            lib/features/circles/presentation/screens/orbit_live_circle_detail_screen.dart \
+            lib/features/create/presentation/screens/orbit_create_sheet.dart
+      - name: Focused Ping tests only
+        run: flutter test test/features/ping

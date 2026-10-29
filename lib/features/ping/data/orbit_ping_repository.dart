@@ -10,9 +10,10 @@ enum OrbitPingSendState { accepted, queued }
 class OrbitPingRecord {
   const OrbitPingRecord({required this.id, required this.senderId,
     required this.recipientId, required this.type, required this.status,
-    this.customText, this.contextType = 'friend', this.contextId});
+    this.customText, this.contextType = 'friend', this.contextId, this.respondedAt});
   final String id, senderId, recipientId, type, status, contextType;
   final String? customText, contextId;
+  final DateTime? respondedAt;
   factory OrbitPingRecord.fromJson(Map<String, dynamic> json) {
     String field(String key) {
       final value = json[key];
@@ -27,7 +28,8 @@ class OrbitPingRecord {
       recipientId: field('recipient_id'), type: field('type'),
       status: field('status'), customText: json['custom_text'] as String?,
       contextType: ctx['type'] as String? ?? 'friend',
-      contextId: ctx['id'] as String?);
+      contextId: ctx['id'] as String?,
+      respondedAt: DateTime.tryParse(json['responded_at'] as String? ?? ''));
   }
   String get displayText => type == 'custom' ? (customText ?? 'Custom Ping') :
     const <String, String>{'hello':'👋 Hello', 'where':'📍 Where are you?',
@@ -100,6 +102,14 @@ class OrbitPingRepository {
       value:jsonEncode(values.map((v)=>v.toJson()).toList()));
   }
   Future<void> purge(String owner) => _storage.delete(key:'$_prefix$owner');
+
+  Future<List<OrbitPingPending>> pending() async {
+    final owner=await _identity.currentLocalSocialOwner();
+    return owner==null ? const [] : List.unmodifiable(await _read(owner));
+  }
+
+  /// Retry is a deliberate foreground action and reuses the saved client UUID.
+  Future<void> retryPending() => flushPending();
   bool _retryable(Object error) => error is OrbitIdentityException &&
       (error.statusCode==null || error.statusCode==408 || error.statusCode==429 || error.statusCode!>=500);
 
