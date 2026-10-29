@@ -155,7 +155,9 @@ class OrbitPingRepository {
   /// Retry is a deliberate foreground action and reuses the saved client UUID.
   Future<void> retryPending() => flushPending();
   bool _retryable(Object error) => error is OrbitIdentityException &&
-      (error.statusCode==null || error.statusCode==408 || error.statusCode==429 || error.statusCode!>=500);
+      (error.statusCode==null || error.statusCode==408 || error.statusCode!>=500);
+  // HTTP 429 is an explicit rate-limit denial, not an offline transport error.
+  // The composer shows Failed / wait, rather than silently queuing spam.
 
   /// Do not signal Delivered on an HTTP 201: only a recipient receipt can do that.
   /// Write a stable client ID to OS secure storage before attempting the POST.
