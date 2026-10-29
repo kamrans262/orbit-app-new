@@ -58,6 +58,10 @@ abstract final class OrbitPingNavigation {
               contextType:contextType,contextId:circleId,
               customText:submission.type=='custom'?submission.message:null);
             if(state==OrbitPingSendState.accepted) {
+              // Cache only a server-accepted recipient for offline chooser.
+              try {await pings.rememberRecipient(OrbitPingRecipient(
+                id:recipientId,name:recipientName,
+                contextType:contextType,contextId:circleId));}catch(_){}
               await HapticFeedback.lightImpact();
             }
             _notify(pageContext,state==OrbitPingSendState.accepted
@@ -83,8 +87,18 @@ abstract final class OrbitPingNavigation {
         if(!result.hasMore)break;
       }
     }catch(_){
-      _notify(context,'Friends could not be loaded. Please reconnect.');
-      return;
+      // Offline chooser is restricted to already accepted recipients. Their
+      // current eligibility is always rechecked on the server at replay.
+      try {
+        final recent=await (repository??OrbitPingRepository()).recentRecipients();
+        members.addAll(recent.where((r)=>r.contextType=='friend')
+          .map((r)=>OrbitPerson(id:r.id,name:r.name,username:'')));
+      }catch(_){}
+      if(members.isEmpty) {
+        _notify(context,'Friends unavailable. Connect once to load an authorized recipient.');
+        return;
+      }
+      _notify(context,'Showing previously contacted friends. Permissions are checked on send.');
     }
     if(!context.mounted)return;
     final choice=await showOrbitCircleSheet<Object>(
@@ -135,7 +149,30 @@ abstract final class OrbitPingNavigation {
         if(!page.hasMore)break;
       }
     }catch(_){
-      _notify(context,'Circles could not be loaded. Please reconnect.');
+      // No arbitrary offline Circle member selection. Only previous accepted
+      // recipients are locally known and every retry rechecks Circle access.
+      List<OrbitPingRecipient> recent=const [];
+      try { recent=await (repository??OrbitPingRepository()).recentRecipients(); }
+      catch (_) {}
+      final known=recent.where((r)=>r.contextType=='circle'&&r.contextId!=null).toList();
+      if(known.isEmpty) {
+        _notify(context,'Circles unavailable. Reconnect to choose a Circle member.');
+        return;
+      }
+      if(!context.mounted)return;
+      _notify(context,'Showing previously contacted Circle members. Access is checked on send.');
+      final person=await showOrbitCircleSheet<OrbitPingRecipient>(
+        context:context,title:'Recent Circle members',
+        builder:(sheet)=>Column(mainAxisSize:MainAxisSize.min,
+          children:known.map((r)=>OrbitCircleSheetAction(
+            title:r.name,icon:Icons.person_outline_rounded,
+            onTap:()=>Navigator.of(sheet).pop(r))).toList()),
+      );
+      if(person!=null&&context.mounted) {
+        await openPerson(context,recipientId:person.id,
+          recipientName:person.name,contextType:'circle',
+          circleId:person.contextId,repository:repository);
+      }
       return;
     }
     if(!context.mounted)return;

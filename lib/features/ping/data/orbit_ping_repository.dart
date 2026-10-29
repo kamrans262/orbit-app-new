@@ -62,6 +62,20 @@ class OrbitPingPending {
   }
 }
 
+/// Previously server-accepted recipient, retained per account in OS secure storage.
+class OrbitPingRecipient {
+  const OrbitPingRecipient({required this.id,required this.name,
+    this.contextType='friend',this.contextId});
+  final String id,name,contextType;
+  final String? contextId;
+  Map<String,Object?> toJson()=>{'id':id,'name':name,'context_type':contextType,
+    if(contextId!=null)'context_id':contextId};
+  factory OrbitPingRecipient.fromJson(Map<String,dynamic> json)=>
+    OrbitPingRecipient(id:json['id'] as String,name:json['name'] as String,
+      contextType:json['context_type'] as String? ?? 'friend',
+      contextId:json['context_id'] as String?);
+}
+
 class OrbitPingRepository {
   OrbitPingRepository({OrbitIdentityClient? identity,FlutterSecureStorage? storage})
       : _identity=identity??OrbitIdentityClient.instance,
@@ -70,6 +84,7 @@ class OrbitPingRepository {
   final FlutterSecureStorage _storage;
   static const _prefix='orbit.ping.pending.v1.';
   static const _replyPrefix='orbit.ping.replykeys.v1.';
+  static const _recipientPrefix='orbit.ping.recentrecipients.v1.';
   static const _uuid=Uuid();
   Future<void>? _replay;
   Future<String> _owner() async {
@@ -105,6 +120,31 @@ class OrbitPingRepository {
   Future<void> purge(String owner) async {
     await _storage.delete(key:'$_prefix$owner');
     await _storage.delete(key:'$_replyPrefix$owner');
+    await _storage.delete(key:'$_recipientPrefix$owner');
+  }
+
+  /// Only prior server-accepted recipients are cached; authorization is
+  /// validated again on every server request (including offline replay).
+  Future<List<OrbitPingRecipient>> recentRecipients() async {
+    final owner=await _owner();
+    try {
+      final json=await _storage.read(key:'$_recipientPrefix$owner');
+      if(json==null)return const [];
+      final value=jsonDecode(json);
+      if(value is! List)return const [];
+      return value.map((entry)=>OrbitPingRecipient.fromJson(
+        Map<String,dynamic>.from(entry as Map))).take(20).toList();
+    }catch(_){return const [];}
+  }
+
+  Future<void> rememberRecipient(OrbitPingRecipient recipient) async {
+    final owner=await _owner();
+    final existing=await recentRecipients();
+    final recent=[recipient,...existing.where((r)=>r.id!=recipient.id||
+      r.contextType!=recipient.contextType||r.contextId!=recipient.contextId)];
+    if(await _identity.currentLocalSocialOwner()!=owner)return;
+    await _storage.write(key:'$_recipientPrefix$owner',
+      value:jsonEncode(recent.take(20).map((r)=>r.toJson()).toList()));
   }
 
   Future<List<OrbitPingPending>> pending() async {
