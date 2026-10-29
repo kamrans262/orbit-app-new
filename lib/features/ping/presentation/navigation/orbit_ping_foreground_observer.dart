@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../../app/routing/app_routes.dart';
 import '../../../auth/data/orbit_identity_client.dart';
 import '../../data/orbit_ping_repository.dart';
+import '../../data/orbit_ping_notification_preferences.dart';
 import 'orbit_ping_navigation.dart';
 import '../widgets/orbit_ping_feedback.dart';
 
@@ -85,6 +86,7 @@ class OrbitPingForegroundObserver extends NavigatorObserver with WidgetsBindingO
       }
       if(!await _repository.available())return;
       await _repository.flushPending();
+      if(!await OrbitPingNotificationPreferences.instance.alertsEnabled())return;
       String? cursor;
       for(var i=0;i<4;i++){
         final page=await _repository.page('inbox',cursor:cursor);

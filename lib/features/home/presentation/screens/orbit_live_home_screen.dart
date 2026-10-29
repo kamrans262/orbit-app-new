@@ -10,6 +10,7 @@ import '../../../friends/presentation/screens/orbit_live_friends_screen.dart';
 import '../../../friends/presentation/screens/orbit_person_screen.dart';
 import '../../../moments/data/orbit_moment_repository.dart';
 import '../../../ping/data/orbit_ping_repository.dart';
+import '../../../ping/data/orbit_ping_notification_preferences.dart';
 import '../../../ping/presentation/navigation/orbit_ping_navigation.dart';
 import '../../../moments/data/orbit_m7_rollout.dart';
 import '../../../moments/data/orbit_moment_push_runtime.dart';
@@ -100,6 +101,9 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
     try {
       if(!await _pings.available())return;
       await _pings.flushPending();
+      // Ping Notifications is an explicit account preference, not a grant
+      // to interrupt a member whenever a Ping exists on the server.
+      if(!await OrbitPingNotificationPreferences.instance.alertsEnabled())return;
       String? cursor;
       // A page may be filled entirely with already Seen Pings. Continue
       // through a bounded number of authorized pages to avoid starving

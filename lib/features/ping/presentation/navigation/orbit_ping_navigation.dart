@@ -12,6 +12,7 @@ import '../../../friends/data/orbit_social_repository.dart';
 import '../../../location/data/orbit_location_repository.dart';
 import '../../../location/presentation/orbit_location_share_sheet.dart';
 import '../../data/orbit_ping_repository.dart';
+import '../../data/orbit_ping_notification_preferences.dart';
 import '../screens/ping_screen.dart';
 
 /// Reuses the already-approved PingScreen and full-width Circle bottom sheet.
@@ -62,7 +63,11 @@ abstract final class OrbitPingNavigation {
               try {await pings.rememberRecipient(OrbitPingRecipient(
                 id:recipientId,name:recipientName,
                 contextType:contextType,contextId:circleId));}catch(_){}
-              try{await HapticFeedback.lightImpact();}catch(_){} // OS controls haptics.
+              try {
+                if(await OrbitPingNotificationPreferences.instance.hapticsEnabled()){
+                  await HapticFeedback.lightImpact();
+                }
+              }catch(_){} // Never fail sending due to an unavailable haptic.
             }
             _notify(pageContext,state==OrbitPingSendState.accepted
               ? 'Ping accepted. Waiting for recipient confirmation.'
@@ -346,7 +351,11 @@ abstract final class OrbitPingNavigation {
     // alone is not. Seen is distinct and only follows closing this sheet.
     await WidgetsBinding.instance.endOfFrame;
     if(context.mounted) {
-      try{await HapticFeedback.mediumImpact();}catch(_){} // Never block receipt.
+      try {
+        if(await OrbitPingNotificationPreferences.instance.hapticsEnabled()){
+          await HapticFeedback.mediumImpact();
+        }
+      }catch(_){} // Never block the recipient receipt.
       try{await pings.receipt(ping.id,'delivered');}catch(_){}
     }
     final action=await sheetFuture;
