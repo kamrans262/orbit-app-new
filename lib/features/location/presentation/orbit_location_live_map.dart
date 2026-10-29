@@ -57,6 +57,7 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
   int _wsSerial=0;
   Timer? _refreshTimer;
   bool _styleReady=false,_loading=false,_sending=false,_foreground=true,_didZoom=false;
+  bool _centeringOnDevice=false;
   DateTime? _lastSent;
   String? _accountOwner;
   int _epoch=0;
@@ -370,6 +371,40 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
     }finally{_sending=false;}
   }
 
+  // Explicitly requested local map positioning. This never creates a share,
+  // sends a GPS sample to Orbit or exposes coordinates to other members.
+  Future<void> _centerOnMyDevice() async {
+    final map=_map;
+    if(!mounted||!_foreground||_cap==null||map==null||_centeringOnDevice)return;
+    final epoch=_epoch;
+    setState(()=>_centeringOnDevice=true);
+    try{
+      if(!await _gps.granted(request:true)) {
+        if(mounted&&epoch==_epoch)setState(()=>_message=
+          'Allow device location to center the map. This does not share your location.');
+        return;
+      }
+      final position=await _gps.current();
+      if(!mounted||!_foreground||epoch!=_epoch||map!=_map)return;
+      if(!position.latitude.isFinite||!position.longitude.isFinite||
+         position.latitude < -90||position.latitude > 90||
+         position.longitude < -180||position.longitude > 180) {
+        throw const FormatException('Invalid device position.');
+      }
+      // This action is purely local; do not call OrbitLocationRepository.sample.
+      _didZoom=true;
+      await map.animateCamera(gl.CameraUpdate.newLatLngZoom(
+        gl.LatLng(position.latitude,position.longitude),14));
+      if(mounted&&epoch==_epoch)setState(()=>_message=
+        'Map centered on your device. Your location has not been shared.');
+    }catch(_){
+      if(mounted&&epoch==_epoch)setState(()=>_message=
+        'Could not locate your device. Check GPS and try again.');
+    }finally{
+      if(mounted)setState(()=>_centeringOnDevice=false);
+    }
+  }
+
   Future<void> _share() async {
     if(!mounted)return;
     var cap=_cap;
@@ -428,7 +463,8 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
     final markers=_snapshot?.markers??const <OrbitLocationMarker>[];
     final subtitle= !OrbitM10Rollout.enabled?'Location is not enabled for this build.'
       :_message??(!configured?'Map tiles awaiting provider configuration.'
-      :markers.isEmpty?'No authorized location updates to show.'
+      :_cap==null?'Checking secure map access…'
+      :markers.isEmpty?'No locations shared with you yet. The map is ready to explore.'
       :'Last confirmed locations · not live');
     return Stack(children:[
       Positioned.fill(child:!_foreground
@@ -504,6 +540,14 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
           iconGradient:AppColors.primaryGradient,semanticLabel:'Share location',
           onPressed:()=>unawaited(_share())),
       ])),
+      // Keep the original top toolbar unchanged. This action is placed below
+      // it and follows Orbit's existing icon button styling.
+      if(_foreground && configured && _cap!=null && _styleReady)
+        Positioned(top:105,left:15,child:AppCircularIconButton(
+          icon:Icons.my_location_outlined,
+          iconGradient:AppColors.primaryGradient,
+          semanticLabel:_centeringOnDevice?'Locating device':'Center map on my device',
+          onPressed:()=>unawaited(_centerOnMyDevice()))),
       if(_active)Positioned(top:105,right:15,child:Row(children:[
         TextButton.icon(onPressed:()=>unawaited(_manage()),
           icon:const Icon(Icons.group_outlined,size:17),
