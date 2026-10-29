@@ -22,7 +22,7 @@ abstract final class OrbitPingFeedback {
     }
     return 'Ping failed. Check your connection and recipient permissions.';
   }
-  static void show(BuildContext context,String message,{VoidCallback? onRetry}) {
+  static void show(BuildContext context,String message,{VoidCallback? onRetry,String actionLabel='Retry'}) {
     if(!context.mounted)return;
     final messenger=ScaffoldMessenger.of(context);
     messenger.hideCurrentSnackBar();
@@ -31,7 +31,7 @@ abstract final class OrbitPingFeedback {
     messenger.showSnackBar(SnackBar(
       content: Text(message),
       action: onRetry == null ? null
-        : SnackBarAction(label: 'Retry', onPressed: onRetry),
+        : SnackBarAction(label: actionLabel, onPressed: onRetry),
     ));
   }
 }

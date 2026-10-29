@@ -9,6 +9,7 @@ import '../features/friends/presentation/screens/orbit_discover_friends_screen.d
 
 import '../core/widgets/app_keyboard_dismiss.dart';
 import '../core/widgets/orbit_gradient_scaffold_messenger.dart';
+import '../features/ping/presentation/navigation/orbit_ping_foreground_observer.dart';
 import '../core/navigation/orbit_invite_link_runtime.dart';
 
 import '../features/auth/presentation/screens/login_screen.dart';
@@ -48,10 +49,17 @@ class OrbitApp extends StatefulWidget {
 }
 
 class _OrbitAppState extends State<OrbitApp> {
+  final OrbitPingForegroundObserver _foregroundPings=OrbitPingForegroundObserver();
   @override
   void initState() {
     super.initState();
     OrbitInviteLinkRuntime.instance.initialize();
+    _foregroundPings.start();
+  }
+  @override
+  void dispose(){
+    _foregroundPings.close();
+    super.dispose();
   }
 
   @override
@@ -62,6 +70,7 @@ class _OrbitAppState extends State<OrbitApp> {
         OrbitInviteLinkRuntime.instance,
         OrbitUpdateNavigatorObserver.instance,
         OrbitConnectivityNavigatorObserver.instance,
+        _foregroundPings,
       ],
       title: 'Orbit',
       debugShowCheckedModeBanner: false,
