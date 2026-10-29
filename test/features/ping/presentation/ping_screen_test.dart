@@ -45,6 +45,8 @@ void main() {
     await tester.tap(find.byKey(PingKeys.option('hello')));
     await tester.pumpAndSettle();
     expect(find.byKey(PingKeys.retry),findsOneWidget);
+    await tester.ensureVisible(find.byKey(PingKeys.retry));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(PingKeys.retry));
     await tester.pumpAndSettle();
     expect(attempts,2);
