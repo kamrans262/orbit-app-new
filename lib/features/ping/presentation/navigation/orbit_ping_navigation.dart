@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../../circles/presentation/widgets/orbit_circle_sheet.dart';
@@ -246,7 +247,20 @@ abstract final class OrbitPingNavigation {
         .timeout(const Duration(seconds:4));
       sender=person.name;
     } catch (_) {
-      // Never reveal a blocked or private profile.
+      // Circle members need not also be friends. Resolve a sender name only
+      // through the recipient's currently authorized Circle roster.
+      if(ping.contextType=='circle' && ping.contextId!=null) {
+        try {
+          final circles=OrbitCircleRepository();
+          for(var pageNumber=1;pageNumber<=10;pageNumber++) {
+            final page=await circles.members(ping.contextId!,page:pageNumber);
+            for(final member in page.items) {
+              if(member.id==ping.senderId){sender=member.name;break;}
+            }
+            if(sender!='Orbit member'||!page.hasMore)break;
+          }
+        }catch(_){/* Never reveal an unauthorized Circle or roster. */}
+      }
     }
     if(!context.mounted)return;
     final sheetFuture=showOrbitCircleSheet<String>(
@@ -299,11 +313,23 @@ abstract final class OrbitPingNavigation {
       }
     }
     if(action=='hey'&&context.mounted){
+      final replyId=const Uuid().v4();
       try{
-        await pings.replyHey(ping.id);
+        await pings.replyHey(ping.id,clientId:replyId);
         _notify(context,'Acknowledgement sent.');
       }catch(_){
-        _notify(context,'Could not send acknowledgement. Please try again.');
+        if(context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content:const Text('Acknowledgement not confirmed.'),
+            action:SnackBarAction(label:'Retry',onPressed:(){
+              pings.replyHey(ping.id,clientId:replyId).then((_) {
+                _notify(context,'Acknowledgement sent.');
+              }).catchError((_){
+                _notify(context,'Acknowledgement could not be confirmed.');
+              });
+            }),
+          ));
+        }
       }
     }
   }

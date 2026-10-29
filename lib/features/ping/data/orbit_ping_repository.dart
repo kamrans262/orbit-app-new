@@ -69,6 +69,7 @@ class OrbitPingRepository {
   final OrbitIdentityClient _identity;
   final FlutterSecureStorage _storage;
   static const _prefix='orbit.ping.pending.v1.';
+  static const _replyPrefix='orbit.ping.replykeys.v1.';
   static const _uuid=Uuid();
   Future<void>? _replay;
   Future<String> _owner() async {
@@ -101,7 +102,10 @@ class OrbitPingRepository {
     await _storage.write(key:'$_prefix$owner',
       value:jsonEncode(values.map((v)=>v.toJson()).toList()));
   }
-  Future<void> purge(String owner) => _storage.delete(key:'$_prefix$owner');
+  Future<void> purge(String owner) async {
+    await _storage.delete(key:'$_prefix$owner');
+    await _storage.delete(key:'$_replyPrefix$owner');
+  }
 
   Future<List<OrbitPingPending>> pending() async {
     final owner=await _identity.currentLocalSocialOwner();
@@ -203,8 +207,29 @@ class OrbitPingRepository {
     if(kind!='delivered'&&kind!='seen')throw ArgumentError.value(kind);
     await _request('POST','/pings/'+Uri.encodeComponent(id)+'/$kind');
   }
+  /// A reply keeps the same idempotency key across connection timeouts.
   Future<void> replyHey(String id,{String? clientId}) async {
-    await _request('POST','/pings/'+Uri.encodeComponent(id)+'/respond',
-      body:{'type':'hey','client_reply_id':clientId??_uuid.v4()});
+    final owner=await _owner();
+    final key='$_replyPrefix$owner';
+    Map<String,dynamic> saved={};
+    try{
+      final content=await _storage.read(key:key);
+      if(content!=null)saved=Map<String,dynamic>.from(jsonDecode(content) as Map);
+    }catch(_){saved={};}
+    final replyId=clientId??(saved[id] as String?)??_uuid.v4();
+    saved[id]=replyId;
+    await _storage.write(key:key,value:jsonEncode(saved));
+    try {
+      await _request('POST','/pings/'+Uri.encodeComponent(id)+'/respond',
+        body:{'type':'hey','client_reply_id':replyId});
+      saved.remove(id);
+      await _storage.write(key:key,value:jsonEncode(saved));
+    }catch(error){
+      if(!_retryable(error)){
+        saved.remove(id);
+        await _storage.write(key:key,value:jsonEncode(saved));
+      }
+      rethrow;
+    }
   }
 }
