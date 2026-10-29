@@ -62,7 +62,7 @@ abstract final class OrbitPingNavigation {
               try {await pings.rememberRecipient(OrbitPingRecipient(
                 id:recipientId,name:recipientName,
                 contextType:contextType,contextId:circleId));}catch(_){}
-              await HapticFeedback.lightImpact();
+              try{await HapticFeedback.lightImpact();}catch(_){} // OS controls haptics.
             }
             _notify(pageContext,state==OrbitPingSendState.accepted
               ? 'Ping accepted. Waiting for recipient confirmation.'
@@ -346,7 +346,7 @@ abstract final class OrbitPingNavigation {
     // alone is not. Seen is distinct and only follows closing this sheet.
     await WidgetsBinding.instance.endOfFrame;
     if(context.mounted) {
-      await HapticFeedback.mediumImpact();
+      try{await HapticFeedback.mediumImpact();}catch(_){} // Never block receipt.
       try{await pings.receipt(ping.id,'delivered');}catch(_){}
     }
     final action=await sheetFuture;

@@ -32,6 +32,9 @@ class OrbitPingForegroundObserver extends NavigatorObserver with WidgetsBindingO
   @override
   void didPush(Route<dynamic> route,Route<dynamic>? previousRoute) {
     _top=route;
+    if(route.settings.name==AppRoutes.login || route.settings.name==AppRoutes.welcome) {
+      _owner=null;_announced.clear();
+    }
     super.didPush(route,previousRoute);
   }
   @override
@@ -49,6 +52,24 @@ class OrbitPingForegroundObserver extends NavigatorObserver with WidgetsBindingO
     if(state==AppLifecycleState.resumed)unawaited(_refresh());
   }
 
+  Future<void> _openAuthorized(OrbitPingRecord announced) async {
+    try {
+      // Revalidate current identity, blocks, privacy and Circle access
+      // before rendering content from an earlier foreground notice.
+      final owner=await OrbitIdentityClient.instance.currentLocalSocialOwner();
+      if(owner==null || owner!=_owner || _top is! PageRoute)return;
+      final current=await _repository.detail(announced.id);
+      final context=navigator?.context;
+      if(context==null || !context.mounted || owner!=_owner)return;
+      await OrbitPingNavigation.showIncoming(context,current,repository:_repository);
+    }catch(_){
+      final context=navigator?.context;
+      if(context!=null && context.mounted) {
+        OrbitPingFeedback.show(context,'This Ping is no longer available.');
+      }
+    }
+  }
+
   Future<void> _refresh() async {
     if(_busy || WidgetsBinding.instance.lifecycleState!=AppLifecycleState.resumed)return;
     // Never interrupt an open dialog, camera overlay, onboarding or Home's
@@ -57,7 +78,7 @@ class OrbitPingForegroundObserver extends NavigatorObserver with WidgetsBindingO
     _busy=true;
     try {
       final owner=await OrbitIdentityClient.instance.currentLocalSocialOwner();
-      if(owner==null)return;
+      if(owner==null){_owner=null;_announced.clear();return;}
       if(_owner!=owner) {
         _owner=owner;
         _announced.clear();
@@ -76,11 +97,7 @@ class OrbitPingForegroundObserver extends NavigatorObserver with WidgetsBindingO
           // The notification itself does not count as Delivered or Seen.
           OrbitPingFeedback.show(context,'You have a new Ping.',actionLabel:'View',
             onRetry:(){
-              final visible=navigator?.context;
-              if(visible!=null && visible.mounted) {
-                unawaited(OrbitPingNavigation.showIncoming(visible,ping,
-                  repository:_repository));
-              }
+              unawaited(_openAuthorized(ping));
             });
           return;
         }

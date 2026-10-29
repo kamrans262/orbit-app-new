@@ -243,6 +243,10 @@ class OrbitPingRepository {
       Map<String,dynamic>.from(e as Map))).toList(growable:false),
       data['next_cursor'] as String?);
   }
+  Future<OrbitPingRecord> detail(String id) async {
+    final data=await _request('GET','/pings/'+Uri.encodeComponent(id));
+    return OrbitPingRecord.fromJson(data);
+  }
   Future<void> receipt(String id,String kind) async {
     if(kind!='delivered'&&kind!='seen')throw ArgumentError.value(kind);
     await _request('POST','/pings/'+Uri.encodeComponent(id)+'/$kind');
