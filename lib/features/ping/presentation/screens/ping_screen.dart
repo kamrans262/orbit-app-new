@@ -257,8 +257,8 @@ class _PingScreenState extends State<PingScreen> {
                   ),
                 ),
               if(_sendingId!=null)
-                const SliverPadding(
-                  padding: EdgeInsets.symmetric(horizontal: _horizontalPadding,vertical: 8),
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: _horizontalPadding,vertical: 8),
                   sliver: SliverToBoxAdapter(child: Semantics(
                     liveRegion:true,child:Text('Sending Ping…',textAlign:TextAlign.center))),
                 ),
