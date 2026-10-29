@@ -33,6 +33,24 @@ void main() {
     },
   );
 
+  testWidgets('Failed Ping offers retry and clears failed state on success',(tester) async {
+    var attempts=0;
+    await tester.pumpWidget(MaterialApp(home:PingScreen.demo(
+      recipientOrCircleId:'11111111-1111-4111-8111-111111111111',
+      onSendPing:(_) async {
+        attempts++;
+        if(attempts==1)throw StateError('service');
+      },
+    )));
+    await tester.tap(find.byKey(PingKeys.option('hello')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(PingKeys.retry),findsOneWidget);
+    await tester.tap(find.byKey(PingKeys.retry));
+    await tester.pumpAndSettle();
+    expect(attempts,2);
+    expect(find.byKey(PingKeys.retry),findsNothing);
+  });
+
   testWidgets('demo Ping without a verified recipient never claims success',
       (tester) async {
     await tester.pumpWidget(MaterialApp(home: PingScreen.demo()));

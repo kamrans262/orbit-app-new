@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../../../../app/theme/app_colors.dart';
+import '../widgets/orbit_ping_feedback.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
@@ -16,9 +19,7 @@ import '../screens/ping_screen.dart';
 abstract final class OrbitPingNavigation {
   static void _notify(BuildContext context,String message) {
     if(!context.mounted)return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content:Text(message)));
+    OrbitPingFeedback.show(context,message);
   }
 
   static Future<void> openPerson(BuildContext context,{
@@ -56,11 +57,14 @@ abstract final class OrbitPingNavigation {
               recipientId:recipientId,type:submission.type,
               contextType:contextType,contextId:circleId,
               customText:submission.type=='custom'?submission.message:null);
+            if(state==OrbitPingSendState.accepted) {
+              await HapticFeedback.lightImpact();
+            }
             _notify(pageContext,state==OrbitPingSendState.accepted
               ? 'Ping accepted. Waiting for recipient confirmation.'
-              : 'Ping saved securely. It will retry when you reconnect.');
-          }catch(_){
-            _notify(pageContext,'Ping could not be sent. Check recipient permissions.');
+              : 'Ping queued. Retry from Sent Pings when connected.');
+          }catch(error){
+            rethrow; // Composer displays a Failed state and retry.
           }
         },
       ),
@@ -270,7 +274,20 @@ abstract final class OrbitPingNavigation {
         crossAxisAlignment:CrossAxisAlignment.stretch,
         children:[
           Padding(padding:const EdgeInsets.only(bottom:14),
-            child:Text('From: '+sender+'\n'+ping.displayText)),
+            child:Row(children:[
+              CircleAvatar(radius:24,backgroundColor:const Color(0xFFEFECFF),
+                child:Text(sender.trim().split(RegExp(r'\s+')).where(
+                  (part)=>part.isNotEmpty).take(2)
+                  .map((part)=>part.substring(0,1).toUpperCase()).join(),
+                  style:const TextStyle(color:AppColors.primaryEnd,fontWeight:FontWeight.w700))),
+              const SizedBox(width:12),
+              Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,
+                children:[
+                  Text(sender,maxLines:2,overflow:TextOverflow.ellipsis,
+                    style:const TextStyle(fontWeight:FontWeight.w600)),
+                  const SizedBox(height:4),Text(ping.displayText),
+                ])),
+            ])),
           OrbitCircleSheetAction(
             title:'👋 Hey',icon:Icons.waving_hand_outlined,
             onTap:()=>Navigator.of(sheet).pop('hey'),
@@ -292,6 +309,7 @@ abstract final class OrbitPingNavigation {
     // alone is not. Seen is distinct and only follows closing this sheet.
     await WidgetsBinding.instance.endOfFrame;
     if(context.mounted) {
+      await HapticFeedback.mediumImpact();
       try{await pings.receipt(ping.id,'delivered');}catch(_){}
     }
     final action=await sheetFuture;
@@ -319,16 +337,14 @@ abstract final class OrbitPingNavigation {
         _notify(context,'Acknowledgement sent.');
       }catch(_){
         if(context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content:const Text('Acknowledgement not confirmed.'),
-            action:SnackBarAction(label:'Retry',onPressed:(){
-              pings.replyHey(ping.id,clientId:replyId).then((_) {
+          OrbitPingFeedback.show(context,'Acknowledgement not confirmed.',
+            onRetry:(){
+              pings.replyHey(ping.id,clientId:replyId).then((_){
                 _notify(context,'Acknowledgement sent.');
               }).catchError((_){
                 _notify(context,'Acknowledgement could not be confirmed.');
               });
-            }),
-          ));
+            });
         }
       }
     }

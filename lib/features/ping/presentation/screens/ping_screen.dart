@@ -10,6 +10,7 @@ import '../../../../core/widgets/app_text_field.dart';
 import '../../../circles/presentation/widgets/orbit_circle_sheet.dart';
 import '../../domain/models/ping_models.dart';
 import '../widgets/ping_option_card.dart';
+import '../widgets/orbit_ping_feedback.dart';
 
 abstract final class PingKeys {
   static const scroll = Key('ping_scroll');
@@ -18,6 +19,7 @@ abstract final class PingKeys {
   static const customMessage = Key('ping_custom_message');
   static const customField = Key('ping_custom_field');
   static const customSend = Key('ping_custom_send');
+  static const retry = Key('ping_failed_retry');
 
   static Key option(String id) => Key('ping_option_$id');
 }
@@ -105,26 +107,26 @@ class PingScreen extends StatefulWidget {
 class _PingScreenState extends State<PingScreen> {
   static const double _horizontalPadding = 20;
   String? _sendingId;
+  PingOption? _failedOption;
+  String? _failure;
 
   Future<void> _send(PingOption option) async {
     if (_sendingId != null) return;
     if (widget.onSendPing == null || widget.recipientOrCircleId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Choose an authorized recipient before sending a Ping.'),
-      ));
+      OrbitPingFeedback.show(context,'Choose an authorized recipient before sending a Ping.');
       return;
     }
-    setState(() => _sendingId = option.id);
+    setState(() { _sendingId = option.id; _failure = null; _failedOption = null; });
     try {
       await widget.onSendPing!(PingSubmission(
         type: option.id, message: option.title, sentAt: DateTime.now(),
         recipientOrCircleId: widget.recipientOrCircleId,
       ));
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Ping was not sent. Please try again.'),
-        ));
+        final message=OrbitPingFeedback.errorText(error);
+        setState(() { _failedOption=option; _failure=message; });
+        OrbitPingFeedback.show(context,message);
       }
     } finally {
       if (mounted) setState(() => _sendingId = null);
@@ -253,6 +255,22 @@ class _PingScreenState extends State<PingScreen> {
                       );
                     }, childCount: widget.options.length * 2 - 1),
                   ),
+                ),
+              if(_sendingId!=null)
+                const SliverPadding(
+                  padding: EdgeInsets.symmetric(horizontal: _horizontalPadding,vertical: 8),
+                  sliver: SliverToBoxAdapter(child: Semantics(
+                    liveRegion:true,child:Text('Sending Ping…',textAlign:TextAlign.center))),
+                ),
+              if(_failure!=null&&_failedOption!=null)
+                SliverPadding(
+                  padding:const EdgeInsets.symmetric(horizontal:_horizontalPadding,vertical:8),
+                  sliver:SliverToBoxAdapter(child:Column(children:[
+                    Text('Failed · '+_failure!,textAlign:TextAlign.center),
+                    TextButton.icon(key:PingKeys.retry,
+                      onPressed:_sendingId==null?()=>_send(_failedOption!):null,
+                      icon:const Icon(Icons.refresh_rounded),label:const Text('Retry Ping')),
+                  ])),
                 ),
               const SliverToBoxAdapter(child: SizedBox(height: 16)),
               SliverPadding(
