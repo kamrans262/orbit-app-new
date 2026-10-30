@@ -23,6 +23,7 @@ class GroupChatHeader extends StatelessWidget {
     required this.isOnline,
     required this.onBack,
     required this.onVideoCall,
+    this.onMore,
     super.key,
   });
 
@@ -32,6 +33,7 @@ class GroupChatHeader extends StatelessWidget {
   final bool isOnline;
   final VoidCallback onBack;
   final VoidCallback onVideoCall;
+  final VoidCallback? onMore;
 
   static const LinearGradient _gradient = LinearGradient(
     begin: Alignment.centerLeft,
@@ -80,7 +82,7 @@ class GroupChatHeader extends StatelessWidget {
                       ),
                     ),
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 52),
+                      padding: EdgeInsets.symmetric(horizontal:onMore==null?52:100),
                       child: Text(
                         title.trim().isEmpty ? 'Group chat' : title,
                         key: GroupChatHeaderKeys.title,
@@ -98,7 +100,10 @@ class GroupChatHeader extends StatelessWidget {
                     ),
                     Align(
                       alignment: Alignment.centerRight,
-                      child: _HeaderCircleButton(
+                      child: Row(
+                        mainAxisSize:MainAxisSize.min,
+                        children:[
+                        _HeaderCircleButton(
                         key: GroupChatHeaderKeys.videoButton,
                         semanticLabel: 'Start video call',
                         onPressed: onVideoCall,
@@ -111,7 +116,16 @@ class GroupChatHeader extends StatelessWidget {
                             BlendMode.srcIn,
                           ),
                         ),
-                      ),
+                        if(onMore!=null)...[
+                          const SizedBox(width:8),
+                          _HeaderCircleButton(
+                            semanticLabel:'Circle chat options',
+                            onPressed:onMore!,
+                            child:const Icon(Icons.more_horiz_rounded,
+                              size:24,color:Colors.white)),
+                        ],
+                      ],
+                    ),
                     ),
                   ],
                 ),

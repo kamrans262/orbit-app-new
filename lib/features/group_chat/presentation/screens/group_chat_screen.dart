@@ -61,6 +61,7 @@ class GroupChatScreen extends StatefulWidget {
     this.hasMoreOlder = false,
     this.onReactionChanged,
     this.onMessageReactionChanged,
+    this.onMorePressed,
     this.liveMode = false,
     this.encryptedTransportReady = false,
     super.key,
@@ -166,6 +167,7 @@ class GroupChatScreen extends StatefulWidget {
   final bool hasMoreOlder;
   final ReactionChangedCallback? onReactionChanged;
   final GroupMessageReactionChangedCallback? onMessageReactionChanged;
+  final VoidCallback? onMorePressed;
   final bool liveMode;
   final bool encryptedTransportReady;
 
@@ -542,6 +544,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
               isOnline: widget.isOnline,
               onBack: widget.onBack,
               onVideoCall: widget.onVideoCall,
+              onMore:widget.onMorePressed,
             ),
             Expanded(child: _buildBody()),
             if(widget.liveMode && !widget.encryptedTransportReady)

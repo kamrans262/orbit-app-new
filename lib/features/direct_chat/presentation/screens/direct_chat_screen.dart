@@ -57,6 +57,7 @@ class DirectChatScreen extends StatefulWidget {
     this.onLoadOlder,
     this.onReactionChanged,
     this.onViewMap,
+    this.onMorePressed,
     this.liveMode = false,
     this.encryptedTransportReady = false,
     super.key,
@@ -196,6 +197,7 @@ class DirectChatScreen extends StatefulWidget {
   final DirectLoadOlderCallback? onLoadOlder;
   final DirectReactionCallback? onReactionChanged;
   final VoidCallback? onViewMap;
+  final VoidCallback? onMorePressed;
   final bool liveMode;
   final bool encryptedTransportReady;
 
@@ -787,6 +789,15 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
               color: Color(0xFF333333),
             ),
           ),
+          if(widget.onMorePressed!=null)
+            Align(
+              alignment:Alignment.centerRight,
+              child:AppCircularIconButton(
+                semanticLabel:'Conversation options',
+                size:40,iconSize:24,icon:Icons.more_horiz_rounded,
+                onPressed:widget.onMorePressed!,
+              ),
+            ),
         ],
       ),
     );
