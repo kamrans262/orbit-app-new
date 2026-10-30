@@ -223,6 +223,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
 
   late List<DirectChatMessage> _messages;
   bool _loadingOlder = false;
+  bool _sendingLiveText=false;
   Timer? _typingTimer;
   bool _typingActive=false;
 
@@ -352,30 +353,45 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     final message=_newMine(type:DirectChatMessageType.sentText,
       text:text,replyToId:_replyTo?.id);
     if(widget.liveMode){
+      if(_sendingLiveText)return;
+      _sendingLiveText=true;
+      final reply=_replyTo;
+      // Show Sending immediately, before an HTTPS round trip. This is
+      // deliberately NOT a delivered or server-accepted acknowledgment.
+      setState(()=>_messages.add(message));
+      _scrollToLatest();
       try{
-        // Do not fabricate a sent bubble: encryption, durable ratchet write
-        // and server acknowledgement must all happen first.
         await widget.onSendMessage!(message);
         if(!mounted)return;
-        setState(()=>_messages.add(message.copyWith(
-          deliveryStatus:DirectChatDeliveryStatus.sent)));
-        _messageController.clear();
+        final index=_messages.indexWhere((m)=>m.id==message.id);
+        if(index>=0)setState(()=>_messages[index]=message.copyWith(
+          deliveryStatus:DirectChatDeliveryStatus.sent));
+        if(_messageController.text.trim()==text)_messageController.clear();
         setState(()=>_replyTo=null);
-        _scrollToLatest();
       }on OrbitQueuedMessageException catch(queued){
         if(!mounted)return;
-        // Ciphertext and this preview already committed to the encrypted
-        // account vault; the server has NOT acknowledged delivery.
+        final index=_messages.indexWhere((m)=>m.id==message.id);
+        final waiting=message.copyWith(
+          id:'local-'+queued.clientId,
+          deliveryStatus:DirectChatDeliveryStatus.waiting);
         setState((){
-          _messages.add(message.copyWith(
-            id:'local-'+queued.clientId,
-            deliveryStatus:DirectChatDeliveryStatus.sending));
+          if(index>=0){_messages[index]=waiting;}
+          else{_messages.add(waiting);}
           _replyTo=null;
         });
-        _messageController.clear();
+        if(_messageController.text.trim()==text)_messageController.clear();
         _scrollToLatest();
       }catch(_){
-        if(mounted)_showError('Encrypted send failed. No delivery was confirmed.');
+        if(!mounted)return;
+        // No server ACK and no encrypted retry receipt: retain the text
+        // in the composer and remove the in-flight placeholder.
+        setState((){
+          _messages.removeWhere((m)=>m.id==message.id);
+          _replyTo=reply;
+        });
+        _showError('Encrypted send failed. No delivery was confirmed.');
+      }finally{
+        _sendingLiveText=false;
       }
       return;
     }
