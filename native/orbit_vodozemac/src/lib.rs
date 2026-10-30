@@ -287,10 +287,11 @@ mod tests {
         // Must create an entirely unrelated sender ratchet on roster change.
         let mut rotated=GroupSession::new(GroupConfig::version_1());
         assert_ne!(previous.session_id(),rotated.session_id());
+        let receiverKey=rotated.session_key();
         let newMessage=rotated.encrypt(b"after member removal");
         assert!(oldRecipient.decrypt(&newMessage).is_err());
         let mut remaining=InboundGroupSession::new(
-            &rotated.session_key(),GroupConfig::version_1());
+            &receiverKey,GroupConfig::version_1());
         assert_eq!(remaining.decrypt(&newMessage)
             .expect("remaining member has new key").plaintext,
             b"after member removal");
