@@ -86,6 +86,11 @@ class OrbitUnconfiguredMessagingCipher implements OrbitMessagingCipher {
     required OrbitMailboxEnvelope envelope,required String conversationId,
   }) async=>_notReady();
   @override
+  Future<void> prepareGroupEpoch({
+    required String conversationId,required int groupEpoch,
+    required Map<String,OrbitMessagingKeyDirectory> recipients,
+  }) async => _notReady();
+  @override
   Future<void> purgeForOwner(String owner) async {}
 }
 
