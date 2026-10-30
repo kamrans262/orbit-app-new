@@ -343,6 +343,10 @@ class OrbitMessagingCoordinator {
     for(final encrypted in page.items.reversed){
       if(await api.owner!=owner)throw OrbitMessagingSecurityException(
         'Account changed while decrypting.',401);
+      // A late/replayed envelope must not resurrect a message already
+      // removed by an authenticated device-specific deletion receipt.
+      if(_redactedByConversation[_pageKey(owner,thread.id)]
+          ?.contains(encrypted.messageId)==true)continue;
       if(await vault.hasMessage(thread.id,encrypted.messageId))continue;
       try{
         final decrypted=await cipher.decrypt(
