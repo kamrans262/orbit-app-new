@@ -91,7 +91,18 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
     if(_lastOutboxRetry!=null &&
         now.difference(_lastOutboxRetry!)<const Duration(minutes:1))return;
     _lastOutboxRetry=now;
-    final outcome=await _messenger.retryPending();
+    OrbitMessagingRetryResult outcome;
+    try{
+      outcome=await _messenger.retryPending();
+    }on OrbitIdentityException catch(error){
+      if(error.statusCode==null||error.statusCode==408||
+          error.statusCode==429||
+          (error.statusCode!=null&&error.statusCode!>=500)){
+        // The encrypted queue is retained on transient network failures.
+        return;
+      }
+      rethrow;
+    }
     if(outcome.needsReview>0 && mounted &&
         ModalRoute.of(context)?.isCurrent==true){
       // Keep failed ciphertext in the encrypted local queue. Never mark it
