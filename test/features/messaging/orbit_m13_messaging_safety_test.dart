@@ -60,7 +60,7 @@ void main(){
     final field=tester.widget<TextField>(
       find.byKey(DirectChatInputKeys.field));
     expect(field.enabled,isFalse);
-    expect(find.textContaining('verified encryption'),findsOneWidget);
+    expect(find.textContaining('Verified encryption'),findsOneWidget);
     expect(find.text('South Beach'),findsNothing);
   });
 

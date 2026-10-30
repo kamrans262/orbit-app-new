@@ -22,10 +22,10 @@ void main() {
 
     await tester.longPress(find.byKey(const Key('message')));
     await tester.pumpAndSettle();
-    expect(find.byIcon(Icons.favorite_rounded), findsOneWidget);
+    expect(find.text(ChatReactionKind.heart.backendValue), findsOneWidget);
 
-    await tester.tap(find.byIcon(Icons.favorite_rounded));
+    await tester.tap(find.text(ChatReactionKind.heart.backendValue));
     await tester.pumpAndSettle();
-    expect(find.byIcon(Icons.favorite_rounded), findsOneWidget);
+    expect(find.text(ChatReactionKind.heart.backendValue), findsOneWidget);
   });
 }
