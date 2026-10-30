@@ -17,6 +17,8 @@ on:
       - 'lib/features/home/presentation/screens/orbit_live_home_screen.dart'
       - 'lib/features/auth/data/orbit_identity_client.dart'
       - 'pubspec.yaml'
+      - 'native/orbit_vodozemac/**'
+      - 'lib/main.dart'
       - 'test/features/messaging/**'
   workflow_dispatch:
 permissions:
@@ -52,3 +54,24 @@ jobs:
             test/features/direct_chat \
             test/features/group_chat \
             test/core/chat
+
+  native-ratchet:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Pin dependency graph for focused pre-release validation
+        working-directory: native/orbit_vodozemac
+        run: cargo generate-lockfile
+      - name: Check audited-core bridge and run unit tests
+        working-directory: native/orbit_vodozemac
+        run: |
+          cargo fmt --check
+          cargo test --locked
+          cargo build --release --locked
+      - name: No-production-enablement assertion
+        shell: bash
+        run: |
+          grep -q "releaseCertified=false" lib/features/messaging/data/orbit_messaging_vodozemac_cipher.dart
+          echo "Cryptographic integration remains review-gated."
