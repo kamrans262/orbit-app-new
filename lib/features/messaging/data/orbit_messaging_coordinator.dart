@@ -229,7 +229,14 @@ class OrbitMessagingCoordinator {
     );
     // The ratchet provider MUST have committed before encrypt returned.
     // Outbox stores only already-encrypted envelopes, never plaintext.
-    await vault.queue(outgoing);
+    // Only app-private encrypted SQLite may keep a pending preview. This
+    // preserves the owner's message through a network timeout or app restart
+    // without uploading plaintext or falsely showing a delivered receipt.
+    final preview=kind=='reaction'?null:OrbitLocalDecryptedMessage(
+      id:'local-${outgoing.clientId}',conversationId:thread.id,
+      senderId:account,kind:kind,text:utf8.decode(data),
+      createdAt:DateTime.now().toUtc());
+    await vault.queue(outgoing,preview:preview);
     try{
       final accepted=await api.publish(thread.id,
         clientId:outgoing.clientId,kind:outgoing.kind,
@@ -243,7 +250,8 @@ class OrbitMessagingCoordinator {
       if(error.statusCode==null || error.statusCode==408 ||
           error.statusCode==502 || error.statusCode==503 ||
           error.statusCode==504){
-        return const OrbitMessagingSendResult(accepted:false,queued:true);
+        return OrbitMessagingSendResult(
+          accepted:false,queued:true,clientId:outgoing.clientId);
       }
       // Keep the ciphertext intent for explicit review. A 403/409 can mean
       // revoked consent or a changed device/group epoch: never auto-rekey.
@@ -406,8 +414,12 @@ class OrbitMessagingCoordinator {
   }
 }
 class OrbitMessagingSendResult {
-  const OrbitMessagingSendResult({required this.accepted,required this.queued});
+  const OrbitMessagingSendResult({
+    required this.accepted,required this.queued,this.clientId,
+  });
   final bool accepted,queued;
+  // Stable queue ID so a waiting bubble can be reconciled after restart.
+  final String? clientId;
 }
 class OrbitMessagingRetryResult {
   const OrbitMessagingRetryResult({required this.sent,required this.needsReview});
