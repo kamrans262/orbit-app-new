@@ -42,6 +42,30 @@ class OrbitMessagingApi {
     OrbitMessagingKeyDirectory.fromJson(await request('GET',
       '/messaging/keys/'+segment(user)+
       (consumeOneTimePrekey?'':'?claim_one_time_prekey=0')));
+  /// Opaque, device-scoped sender-key material for the CURRENT Circle epoch.
+  /// Consumers must authenticate each sender, verify key fingerprints and
+  /// commit ratchet/sender-key state before acknowledging anything.
+  Future<OrbitSenderKeyPage> circleSenderKeys(String conversation,{
+    String? cursor,int limit=50}) async {
+    final query=Uri(queryParameters:{
+      'limit':'${limit.clamp(1,100)}',
+      if(cursor!=null)'cursor':cursor,
+    }).query;
+    return OrbitSenderKeyPage.fromJson(await request('GET',
+      '/conversations/'+segment(conversation)+'/sender-keys?'+query));
+  }
+
+  Future<OrbitSenderKeySaved> distributeCircleSenderKey(
+      String conversation,{
+      required String clientId,required int groupEpoch,
+      required String protocol,required List<OrbitCipherEnvelope> envelopes,
+  }) async=>OrbitSenderKeySaved.fromJson(await request('POST',
+      '/conversations/'+segment(conversation)+'/sender-keys',body:{
+        'client_id':clientId,'group_epoch':groupEpoch,
+        'protocol':protocol,
+        'envelopes':envelopes.map((e)=>e.toJson()).toList(),
+      }));
+
   Future<OrbitEnvelopePage> envelopes(String conversation,{
     String? cursor,int limit=50}) async {
     final params=Uri(queryParameters:{
