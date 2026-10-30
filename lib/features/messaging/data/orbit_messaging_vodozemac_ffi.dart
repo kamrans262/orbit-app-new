@@ -30,6 +30,10 @@ class OrbitVodozemacNative {
         lib=DynamicLibrary.process();
       }else if(Platform.isAndroid){
         lib=DynamicLibrary.open('liborbit_vodozemac.so');
+      }else if(Platform.isLinux){
+        // Linux CI validates real Dart<->Rust ABI with the same audited
+        // native bridge. Mobile builds still load their platform binaries.
+        lib=DynamicLibrary.open('liborbit_vodozemac.so');
       }else if(Platform.isMacOS){
         lib=DynamicLibrary.open('liborbit_vodozemac.dylib');
       }else if(Platform.isWindows){
