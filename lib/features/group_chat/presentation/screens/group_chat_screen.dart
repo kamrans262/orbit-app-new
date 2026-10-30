@@ -617,12 +617,18 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       case GroupChatMessageType.sentText:
         return SentTextMessage(message: message);
       case GroupChatMessageType.sentVoice:
+      case GroupChatMessageType.receivedVoice:
         if(message.audioBytes!=null){
           return ChatAudioMessage(audioSource:'',audioBytes:message.audioBytes,
             duration:message.audioDuration??const Duration(seconds:1),
             timestamp:message.timestamp,isMine:message.isMine);
         }
-        return SentVoiceMessage(message: message);
+        if(message.type==GroupChatMessageType.sentVoice){
+          return SentVoiceMessage(message:message);
+        }
+        return ChatAudioMessage(audioSource:'',
+          duration:message.audioDuration??const Duration(seconds:1),
+          timestamp:message.timestamp,isMine:false);
       case GroupChatMessageType.receivedImage:
         return ReceivedImageMessage(
           message: message,
