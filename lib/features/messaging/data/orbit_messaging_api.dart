@@ -42,6 +42,19 @@ class OrbitMessagingApi {
     OrbitMessagingKeyDirectory.fromJson(await request('GET',
       '/messaging/keys/'+segment(user)+
       (consumeOneTimePrekey?'':'?claim_one_time_prekey=0')));
+  /// Claims one single device's available prekey when a NEW authenticated
+  /// Olm session is needed. Other trusted devices remain unclaimed. Ordinary
+  /// roster queries are always read-only and must not burn one-time keys.
+  Future<OrbitMessagingKeyDirectory> claimDeviceKey(
+      String user,String deviceId) async {
+    final query=Uri(queryParameters:{
+      'claim_one_time_prekey':'1',
+      'device_id':deviceId,
+    }).query;
+    return OrbitMessagingKeyDirectory.fromJson(await request('GET',
+      '/messaging/keys/'+segment(user)+'?'+query));
+  }
+
   /// Opaque, device-scoped sender-key material for the CURRENT Circle epoch.
   /// Consumers must authenticate each sender, verify key fingerprints and
   /// commit ratchet/sender-key state before acknowledging anything.
