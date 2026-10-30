@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'dart:typed_data';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -9,6 +11,7 @@ import '../../group_chat/presentation/screens/group_chat_screen.dart';
 import '../data/orbit_messaging_api.dart';
 import '../data/orbit_messaging_coordinator.dart';
 import '../data/orbit_messaging_models.dart';
+import '../data/orbit_messaging_media_bridge.dart';
 
 /// Wraps the APPROVED GroupChatScreen with live M5 Circle roles and M13
 /// ciphertext mailbox. No generated participants or fake media messages.
@@ -29,6 +32,7 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
   late final OrbitMessagingCoordinator _messenger=widget.coordinator??
     OrbitMessagingCoordinator(api:_api);
   late final OrbitCircleRepository _circles=widget.circles??OrbitCircleRepository();
+  final OrbitMessagingMediaBridge _media=OrbitMessagingMediaBridge();
   List<GroupChatMessage> _messages=const [];
   List<GroupParticipant> _participants=const [];
   OrbitConversation? _thread;
@@ -82,16 +86,45 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
       List<GroupChatMessage> next=const [];
       if(ready){
         final history=await _messenger.refresh(conversation);
-        next=history.map((entry)=>GroupChatMessage(
-          id:entry.id,
-          type:entry.senderId==owner
-            ?GroupChatMessageType.sentText:GroupChatMessageType.receivedText,
-          senderId:entry.senderId,senderName:entry.senderId==owner
-            ?'You':names[entry.senderId]??'Circle member',
-          isMine:entry.senderId==owner,
-          text:entry.text,
-          timestamp:_time(entry.createdAt),createdAt:entry.createdAt,
-        )).toList(growable:false);
+        final loaded=<GroupChatMessage>[];
+        for(final entry in history){
+          final manifest=OrbitEncryptedChatMedia.tryParse(entry.text);
+          var type=entry.senderId==owner
+            ?GroupChatMessageType.sentText:GroupChatMessageType.receivedText;
+          String? text=entry.text;
+          Uint8List? bytes;
+          Duration? audioLength;
+          if(manifest!=null){
+            try {
+              bytes=await _media.open(manifest);
+              if(manifest.kind=='image'){
+                type=entry.senderId==owner
+                  ?GroupChatMessageType.sentImage:GroupChatMessageType.receivedImage;
+              }else if(manifest.kind=='voice'){
+                type=entry.senderId==owner
+                  ?GroupChatMessageType.sentVoice:GroupChatMessageType.receivedVoice;
+                audioLength=Duration(milliseconds:manifest.durationMs??1000);
+              }else{
+                type=GroupChatMessageType.futureVideo;
+              }
+              text=null;
+            }catch(_){
+              text='Encrypted media is no longer available.';
+              type=entry.senderId==owner
+                ?GroupChatMessageType.sentText:GroupChatMessageType.receivedText;
+            }
+          }
+          loaded.add(GroupChatMessage(
+            id:entry.id,type:type,senderId:entry.senderId,
+            senderName:entry.senderId==owner
+              ?'You':names[entry.senderId]??'Circle member',
+            isMine:entry.senderId==owner,text:text,
+            imageBytes:manifest?.kind=='image'?bytes:null,
+            audioBytes:manifest?.kind=='voice'?bytes:null,
+            audioDuration:audioLength,
+            timestamp:_time(entry.createdAt),createdAt:entry.createdAt));
+        }
+        next=loaded;
       }
       if(!mounted||epoch!=_epoch)return;
       setState((){
@@ -122,6 +155,17 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
       throw OrbitIdentityException('Queued, not acknowledged.',503);
     }
   }
+  Future<void> _sendAttachment(File file,String kind,int? duration) async {
+    final thread=_thread;
+    if(thread==null||!_cryptoReady)throw OrbitIdentityException(
+      'Verified encryption required before encrypted media upload.',503);
+    final manifest=await _media.stage(conversation:thread,original:file,
+      kind:kind,durationMs:duration);
+    final outcome=await _messenger.sendMedia(thread,manifest);
+    if(outcome.queued)throw OrbitIdentityException(
+      'Encrypted media is pending delivery, not yet acknowledged.',503);
+  }
+
   void _videoUnavailable(){
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
       content:Text('Encrypted video calls are not provisioned.')));
@@ -138,6 +182,7 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
     onRetry:_load,onBack:()=>Navigator.of(context).maybePop(),
     onVideoCall:_videoUnavailable,
     onSendMessage:_send,
+    onSendMedia:_sendAttachment,
     liveMode:true,encryptedTransportReady:_cryptoReady,
   );
 }
