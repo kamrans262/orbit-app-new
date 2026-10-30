@@ -55,6 +55,7 @@ class GroupChatMessage {
     this.readEnvelopeId,
     this.readRecipientNames=const <String>[],
     this.deliveredDevices=0,
+    this.isQueued=false,
   });
 
   final String id;
@@ -81,11 +82,13 @@ class GroupChatMessage {
   // locally from the currently authorized Circle roster.
   final List<String> readRecipientNames;
   final int deliveredDevices;
+  final bool isQueued;
   final DateTime createdAt;
 
-  GroupChatMessage copyWith({ChatReactionState? reactionState, String? text}) {
+  GroupChatMessage copyWith({
+    String? id,ChatReactionState? reactionState,String? text,bool? isQueued}) {
     return GroupChatMessage(
-      id: id,
+      id: id ?? this.id,
       type: type,
       senderId: senderId,
       senderName: senderName,
@@ -106,6 +109,7 @@ class GroupChatMessage {
       readEnvelopeId:readEnvelopeId,
       readRecipientNames:readRecipientNames,
       deliveredDevices:deliveredDevices,
+      isQueued:isQueued??this.isQueued,
       createdAt: createdAt,
     );
   }
