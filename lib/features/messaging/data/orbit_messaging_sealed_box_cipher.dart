@@ -31,6 +31,17 @@ class OrbitMessagingSealedBoxCipher implements OrbitMessagingCipher {
   final Map<String,OrbitMessagingRemoteDevice> _verified={};
 
   @override
+  Future<void> prepareGroupEpoch({
+    required String conversationId,required int groupEpoch,
+    required Map<String,OrbitMessagingKeyDirectory> recipients,
+  }) async {
+    // Ephemeral sealed boxes alone are NOT a sender-key ratchet. A server
+    // epoch number does not rotate keys or provide group forward secrecy.
+    throw OrbitMessagingSecurityException(
+      'Circle sender keys require an audited ratchet provider.',503);
+  }
+
+  @override
   bool get independentlyVerified=>false; // external protocol review pending
   @override
   String get protocol=>suite;
