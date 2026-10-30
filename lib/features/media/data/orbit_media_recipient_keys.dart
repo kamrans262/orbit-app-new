@@ -29,10 +29,11 @@ class OrbitMediaRecipientKeys {
 
   Future<List<OrbitMediaRecipient>> discover({
     required String audienceKind, required List<String> recipientIds,
-    String? circleId,
+    String? circleId, String purpose='moment',
   }) async {
     if(!['only_me','selected_friends','selected_circles'].contains(audienceKind)
         || recipientIds.isEmpty || recipientIds.length>100
+        || !['moment','message'].contains(purpose)
         || (audienceKind=='selected_circles' && circleId==null)) {
       throw ArgumentError('Invalid private media audience.');
     }
@@ -41,6 +42,7 @@ class OrbitMediaRecipientKeys {
         'audience_kind':audienceKind,
         'recipient_ids':recipientIds,
         if(circleId!=null)'circle_id':circleId,
+        'purpose':purpose,
       });
     final data=response['data'];
     if(data is! Map || data['recipients'] is! List) {
