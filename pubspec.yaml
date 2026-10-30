@@ -47,6 +47,8 @@ dependencies:
   # M13: encrypted, owner-scoped on-device message/outbox database.
   sqflite: ^2.4.2
   cryptography: ^2.7.0
+  # FFI ABI for first-party Apache vodozemac native ratchet bridge.
+  ffi: ^2.1.3
   crypto: ^3.0.7
   image: ^4.10.1
   path_provider: ^2.1.6
