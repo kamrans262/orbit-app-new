@@ -14,6 +14,7 @@ import '../data/orbit_messaging_media_bridge.dart';
 import '../data/orbit_messaging_reactions.dart';
 import '../data/orbit_messaging_replies.dart';
 import '../../../core/navigation/app_fade_slide_page_route.dart';
+import 'orbit_chat_voice_recorder.dart';
 import 'orbit_private_chat_video_viewer.dart';
 import 'orbit_messaging_conversation_actions.dart';
 
@@ -265,10 +266,15 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
       final path=message.audioUrl;
       if(path==null)throw OrbitIdentityException(
         'Voice recording is unavailable.',422);
-      final manifest=await _media.stage(conversation:thread,
-        original:File(path),kind:'voice',
-        durationMs:message.audioDuration?.inMilliseconds);
-      result=await _messenger.sendMedia(thread,manifest);
+      final recording=File(path);
+      try{
+        final manifest=await _media.stage(conversation:thread,
+          original:recording,kind:'voice',
+          durationMs:message.audioDuration?.inMilliseconds);
+        result=await _messenger.sendMedia(thread,manifest);
+      }finally{
+        await OrbitChatVoiceRecorder.discardTemporaryCapture(recording);
+      }
     }else if(message.replyToId!=null){
       result=await _messenger.sendReply(thread,
         targetId:message.replyToId!,text:message.text??'');
