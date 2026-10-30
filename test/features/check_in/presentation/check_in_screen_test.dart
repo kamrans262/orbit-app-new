@@ -77,4 +77,43 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Open'), findsOneWidget);
   });
+
+  testWidgets('More uses the Orbit custom Check-In sheet and heart submits text',
+      (tester) async {
+    CheckInSubmission? sent;
+    await pumpAtSize(tester,const Size(390,844),onSent:(value)=>sent=value);
+    await tester.tap(find.text('More'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('orbit_circle_sheet_surface')),findsOneWidget);
+    await tester.enterText(find.byKey(const Key('check_in_custom_field')),
+      'Working on the garden');
+    await tester.tap(find.text('Use this update'));
+    await tester.pumpAndSettle();
+    expect(find.text('Working on the garden'),findsOneWidget);
+    await tester.tap(find.byKey(CheckInKeys.heart));
+    await tester.pump(const Duration(milliseconds:2400));
+    expect(sent?.activityId,'custom');
+    expect(sent?.customText,'Working on the garden');
+    expect(tester.takeException(),isNull);
+  });
+
+  testWidgets('history links remain optional and do not change the approved layout',
+      (tester) async {
+    tester.view.physicalSize=const Size(390,844);
+    tester.view.devicePixelRatio=1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    var viewed=0;
+    await tester.pumpWidget(MaterialApp(home:CheckInScreen.demo(
+      onViewHistory:()=>viewed++,onViewFeed:()=>viewed+=10)));
+    await tester.pumpAndSettle();
+    expect(find.text('How are you?'),findsOneWidget);
+    expect(find.text('Tap or hold to send'),findsOneWidget);
+    await tester.ensureVisible(find.text('My Check-Ins'));
+    await tester.tap(find.text('My Check-Ins'));
+    expect(viewed,1);
+    await tester.ensureVisible(find.text('Friends’ Check-Ins'));
+    await tester.tap(find.text('Friends’ Check-Ins'));
+    expect(viewed,11);
+  });
 }
