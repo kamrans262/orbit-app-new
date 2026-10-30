@@ -144,6 +144,16 @@ abstract final class OrbitCheckInNavigation {
     }catch(_){
       note='Unable to load people and Circle choices. Only Me is available.';
     }
+    final friendChoices=choices.where((choice)=>choice.$2.length==1 &&
+      choice.$2.first.type=='selected_friend').toList();
+    final circleChoices=choices.where((choice)=>choice.$2.length==1 &&
+      choice.$2.first.type=='circle').toList();
+    if(friendChoices.length>1){
+      choices.insert(2,('Choose multiple friends',const []));
+    }
+    if(circleChoices.length>1){
+      choices.add(('Choose multiple Circles',const []));
+    }
     if(!context.mounted)return null;
     final selected=await showOrbitCircleSheet<int>(
       context:context,title:'Choose Check-In audience',
@@ -155,16 +165,25 @@ abstract final class OrbitCheckInNavigation {
           ],
           for(var i=0;i<choices.length;i++)
             OrbitCircleSheetAction(title:choices[i].$1,
-              icon:choices[i].$2.first.type=='only_me'
+              icon:choices[i].$2.isNotEmpty && choices[i].$2.first.type=='only_me'
                 ? Icons.lock_outline:Icons.people_outline,
               onTap:()=>Navigator.of(sheet).pop(i)),
         ]),
     );
     if(selected==null || !context.mounted)return null;
-    final scope=choices[selected];
-    if(scope.$2.first.type=='circle'){
+    var scope=choices[selected];
+    if(scope.$2.isEmpty){
+      final isCircle=scope.$1.contains('Circles');
+      final available=isCircle?circleChoices:friendChoices;
+      final multi=await _chooseMultiple(context,available);
+      if(multi==null||multi.isEmpty)return null;
+      scope=(isCircle?'Selected Circles ('+multi.length.toString()+')'
+        :'Selected friends ('+multi.length.toString()+')',multi);
+    }
+    for(final entry in scope.$2.where((value)=>value.type=='circle')){
+
       try{
-        if(!await repo.circleConsent(scope.$2.first.id!)){
+        if(!await repo.circleConsent(entry.id!)){
           if(!context.mounted)return null;
           final consent=await showOrbitCircleSheet<bool>(
             context:context,title:'Circle Check-In permission',
@@ -178,7 +197,7 @@ abstract final class OrbitCheckInNavigation {
             ]),
           );
           if(consent!=true)return null;
-          await repo.setCircleConsent(scope.$2.first.id!,true);
+          await repo.setCircleConsent(entry.id!,true);
         }
       }catch(e){
         message(context,e is OrbitIdentityException?e.message:
@@ -187,6 +206,39 @@ abstract final class OrbitCheckInNavigation {
       }
     }
     return scope;
+  }
+
+  static Future<List<OrbitCheckInScope>?> _chooseMultiple(
+      BuildContext context,
+      List<(String,List<OrbitCheckInScope>)> available) async {
+    final selected=<int>{};
+    return showOrbitCircleSheet<List<OrbitCheckInScope>>(
+      context:context,title:'Select recipients',
+      builder:(sheet)=>StatefulBuilder(builder:(sheet,update)=>Column(
+        mainAxisSize:MainAxisSize.min,
+        crossAxisAlignment:CrossAxisAlignment.stretch,
+        children:[
+          const Text('Select up to 25. Only eligible people or Circles '
+            'can view your Check-In after the server verifies consent.'),
+          const SizedBox(height:12),
+          for(var i=0;i<available.length;i++)
+            OrbitCircleSheetAction(
+              title:(selected.contains(i)?'✓ ':'')+available[i].$1,
+              icon:selected.contains(i)?Icons.check_circle_outline:
+                Icons.person_outline,
+              onTap:()=>update((){
+                if(selected.contains(i)){selected.remove(i);}
+                else if(selected.length<25){selected.add(i);}
+              })),
+          const SizedBox(height:12),
+          AppPrimaryButton(label:'Use selected ('+selected.length.toString()+')',
+            enabled:selected.isNotEmpty,
+            onPressed:()=>Navigator.of(sheet).pop(
+              selected.toList()..sort()
+            .map((index)=>available[index].$2.first).toList())),
+        ],
+      )),
+    );
   }
 
   static Future<void> showMine(BuildContext context,
