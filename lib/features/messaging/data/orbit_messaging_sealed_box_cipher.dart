@@ -200,7 +200,8 @@ class OrbitMessagingSealedBoxCipher implements OrbitMessagingCipher {
       throw OrbitMessagingSecurityException(
         'Authenticated conversation scope mismatch.',409);
     }
-    final directory=await _api.discoverKeys(envelope.senderId);
+    final directory=await _api.discoverKeys(envelope.senderId,
+      consumeOneTimePrekey:false);
     await verifyPeerIdentity(directory);
     final remote=_verified[envelope.senderId+'|'+envelope.senderDeviceId];
     if(remote==null||remote.identity!=header['sender_identity']){

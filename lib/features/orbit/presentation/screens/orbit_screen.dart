@@ -19,6 +19,7 @@ import '../widgets/orbit_person_strip_item.dart';
 
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../../direct_chat/presentation/screens/direct_chat_screen.dart';
+import '../../../messaging/presentation/orbit_messaging_navigation.dart';
 
 import '../../../check_in/presentation/screens/check_in_screen.dart';
 import '../../../check_in/presentation/navigation/orbit_check_in_navigation.dart';
@@ -442,6 +443,13 @@ class _OrbitScreenState extends State<OrbitScreen> {
     }
 
     final initialMessage = _messageController.text.trim();
+    if(widget.liveMode){
+      // Authenticated Orbits must never open a fictional demo conversation.
+      // Any typed draft remains unsent until verified encryption is ready.
+      unawaited(OrbitMessagingNavigation.openDirect(context,
+        peerId:person.id,peerName:person.name));
+      return;
+    }
     widget.onSendPressed(person, initialMessage);
     _messageController.clear();
     FocusManager.instance.primaryFocus?.unfocus();

@@ -603,6 +603,11 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
           duration:message.audioDuration??const Duration(seconds:1),
           timestamp:message.timestamp,isMine:false);
       case GroupChatMessageType.receivedImage:
+        if(message.imageBytes!=null){
+          return SingleImageMessage(
+            source:'',bytes:message.imageBytes,
+            timestamp:message.timestamp,isMine:false);
+        }
         return ReceivedImageMessage(
           message: message,
           onReactionChanged: (reaction) => _changeReaction(message, reaction),

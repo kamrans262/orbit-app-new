@@ -35,9 +35,13 @@ class OrbitMessagingApi {
   Future<Map<String,dynamic>> myDevices()=>request('GET','/me/messaging/devices');
   Future<Map<String,dynamic>> registerKeys(OrbitMessagingPublicKeyBundle bundle)=>
     request('POST','/me/messaging/keys',body:bundle.toJson());
-  Future<OrbitMessagingKeyDirectory> discoverKeys(String user) async =>
+  /// Lookups used to authenticate an already-received ciphertext never
+  /// consume an X3DH one-time prekey. Only session initiation may claim one.
+  Future<OrbitMessagingKeyDirectory> discoverKeys(String user,
+      {bool consumeOneTimePrekey=true}) async =>
     OrbitMessagingKeyDirectory.fromJson(await request('GET',
-      '/messaging/keys/'+segment(user)));
+      '/messaging/keys/'+segment(user)+
+      (consumeOneTimePrekey?'':'?claim_one_time_prekey=0')));
   Future<OrbitEnvelopePage> envelopes(String conversation,{
     String? cursor,int limit=50}) async {
     final params=Uri(queryParameters:{

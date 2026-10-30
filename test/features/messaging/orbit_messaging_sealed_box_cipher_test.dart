@@ -41,8 +41,8 @@ class _Directory extends OrbitMessagingApi {
   _Directory(this.items);
   final Map<String,OrbitMessagingKeyDirectory> items;
   @override
-  Future<OrbitMessagingKeyDirectory> discoverKeys(String user) async =>
-    items[user]!;
+  Future<OrbitMessagingKeyDirectory> discoverKeys(String user,
+      {bool consumeOneTimePrekey=true}) async => items[user]!;
 }
 OrbitMessagingKeyDirectory _directory(String user,String device,
     OrbitMessagingPublicKeyBundle b)=>OrbitMessagingKeyDirectory(user,[
