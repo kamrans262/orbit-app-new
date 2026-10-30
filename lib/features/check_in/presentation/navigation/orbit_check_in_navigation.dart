@@ -257,6 +257,10 @@ abstract final class OrbitCheckInNavigation {
             OrbitCircleSheetAction(title:'Change audience',
               icon:Icons.people_outline,
               onTap:()=>Navigator.of(sheet).pop('audience')),
+          if(fresh.status=='accepted')
+            OrbitCircleSheetAction(title:'Set expiration',
+              icon:Icons.event_outlined,
+              onTap:()=>Navigator.of(sheet).pop('expiry')),
           OrbitCircleSheetAction(title:'Withdraw Check-In',
             icon:Icons.delete_outline,destructive:true,
             onTap:()=>Navigator.of(sheet).pop('withdraw')),
@@ -269,6 +273,8 @@ abstract final class OrbitCheckInNavigation {
           await repo.changeAudience(id,fresh.revision,choice.$2);
           message(context,'Audience updated. Previous access revoked.');
         }
+      }else if(selection=='expiry'){
+        await _setExpiration(context,repo,fresh.id);
       }else if(selection=='withdraw'){
         final yes=await showOrbitCircleSheet<bool>(
           context:context,title:'Withdraw Check-In?',
@@ -287,6 +293,63 @@ abstract final class OrbitCheckInNavigation {
     }catch(e){
       message(context,e is OrbitIdentityException?e.message:
         'Check-In is no longer available.');
+    }
+  }
+
+  /// Inline date and time selectors in the approved full-width Orbit sheet.
+  /// No fixed expiry is assumed. Backend rejects any policy-violating date.
+  static Future<void> _setExpiration(BuildContext context,
+      OrbitCheckInRepository repo,String id) async {
+    final now=DateTime.now();
+    final today=DateTime(now.year,now.month,now.day);
+    DateTime day=today.add(const Duration(days:1));
+    var hour=12;
+    var minute=0;
+    final selected=await showOrbitCircleSheet<DateTime>(
+      context:context,title:'Set Check-In expiration',
+      builder:(sheet)=>StatefulBuilder(builder:(sheet,refresh)=>Column(
+        mainAxisSize:MainAxisSize.min,children:[
+          const Text('Choose when this Check-In should stop being visible. '
+            'No expiration is set unless you save one.'),
+          CalendarDatePicker(
+            initialDate:day,firstDate:today,
+            lastDate:today.add(const Duration(days:29)),
+            onDateChanged:(value)=>refresh(()=>day=value)),
+          Row(children:[
+            const Text('Time  '),
+            Expanded(child:DropdownButton<int>(
+              isExpanded:true,value:hour,
+              items:List.generate(24,(n)=>DropdownMenuItem<int>(
+                value:n,child:Text(n.toString().padLeft(2,'0')))),
+              onChanged:(value){if(value!=null)refresh(()=>hour=value);},
+            )),
+            const Text(' : '),
+            Expanded(child:DropdownButton<int>(
+              isExpanded:true,value:minute,
+              items:List.generate(60,(n)=>DropdownMenuItem<int>(
+                value:n,child:Text(n.toString().padLeft(2,'0')))),
+              onChanged:(value){if(value!=null)refresh(()=>minute=value);},
+            )),
+          ]),
+          const SizedBox(height:18),
+          AppPrimaryButton(label:'Save expiration',onPressed:(){
+            final chosen=DateTime(day.year,day.month,day.day,hour,minute);
+            if(!chosen.isAfter(DateTime.now()))return;
+            Navigator.of(sheet).pop(chosen);
+          }),
+          TextButton(onPressed:()=>Navigator.of(sheet).pop(
+            DateTime.fromMillisecondsSinceEpoch(0)),
+            child:const Text('No expiration')),
+        ]),
+      )),
+    );
+    if(!context.mounted || selected==null)return;
+    try{
+      await repo.changeExpiry(id,selected.millisecondsSinceEpoch==0?null:selected);
+      message(context,'Check-In expiration updated.');
+    }catch(e){
+      message(context,e is OrbitIdentityException?e.message:
+        'Could not update expiration.');
     }
   }
 
