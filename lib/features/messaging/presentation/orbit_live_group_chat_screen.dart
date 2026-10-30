@@ -132,7 +132,7 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
       if(ready){
         await _retryQueuedCiphertext();
         final history=await _messenger.refresh(conversation);
-        next=await _renderHistory(history,owner,names);
+        next=await _renderHistory(history,conversation,owner,names);
         final redacted=_messenger.redactedMessageIds(owner,conversation.id);
         _olderMessages=_olderMessages.where(
           (item)=>!redacted.contains(item.id)).toList(growable:false);
@@ -171,8 +171,29 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
   }
   Future<List<GroupChatMessage>> _renderHistory(
       List<OrbitLocalDecryptedMessage> history,
-      String owner,Map<String,String> names) async {
+      OrbitConversation thread,String owner,Map<String,String> names) async {
     final reactionState=OrbitReactionReducer.fold(history,localUser:owner);
+    final readNames=<String,List<String>>{};
+    final deliveredDevices=<String,int>{};
+    // Read metadata is filtered on the server against each recipient's
+    // current consent, privacy choice, and Circle membership.
+    final recent=history.where((entry)=>
+      entry.senderId==owner && entry.kind!='reaction').toList()
+      ..sort((a,b)=>b.createdAt.compareTo(a.createdAt));
+    for(final entry in recent.take(5)){
+      try{
+        final receipt=await _api.receipts(thread.id,entry.id);
+        final ids=receipt['read_recipient_ids'];
+        readNames[entry.id]=ids is List
+          ?ids.whereType<String>().map((id)=>
+            names[id]??'Circle member').toList(growable:false)
+          :const <String>[];
+        deliveredDevices[entry.id]=
+          (receipt['delivered_devices'] as num?)?.toInt()??0;
+      }catch(_){
+        // An unavailable receipt never proves delivery or reading.
+      }
+    }
     final loaded=<GroupChatMessage>[];
     for(final entry in history){
       if(entry.kind=='reaction')continue;
@@ -224,6 +245,8 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
         audioDuration:audioLength,
         reactions:reactionState[entry.id]?.counts??const <String,int>{},
         selectedReaction:reactionState[entry.id]?.selected,
+        readRecipientNames:readNames[entry.id]??const <String>[],
+        deliveredDevices:deliveredDevices[entry.id]??0,
         timestamp:_time(entry.createdAt),createdAt:entry.createdAt));
     }
     return loaded;
@@ -238,7 +261,7 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
     final raw=await _messenger.loadOlder(thread);
     if(!mounted||raw.isEmpty)return const <GroupChatMessage>[];
     final names={for(final member in _participants)member.id:member.name};
-    final rendered=await _renderHistory(raw,owner,names);
+    final rendered=await _renderHistory(raw,thread,owner,names);
     final known={..._olderMessages.map((item)=>item.id),
       ..._messages.map((item)=>item.id)};
     _olderMessages=[...rendered.where((item)=>!known.contains(item.id)),
