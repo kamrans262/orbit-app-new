@@ -73,7 +73,11 @@ class OrbitMessagingCoordinator {
     final resolved=<String,OrbitMessagingKeyDirectory>{};
     for(final id in users){
       try {
-        final result=await api.discoverKeys(id);
+        // Enumerating the recipient device roster is read-only. A reviewed
+        // ratchet provider must claim a one-time prekey only when establishing
+        // an actual new authenticated session; ordinary sends cannot burn it.
+        final result=await api.discoverKeys(
+          id,consumeOneTimePrekey:false);
         if(result.devices.isEmpty)throw OrbitMessagingSecurityException(
             'Recipient messaging keys are not registered.',409);
         await cipher.verifyPeerIdentity(result);
