@@ -167,6 +167,18 @@ class OrbitMessagingCoordinator {
       throw OrbitMessagingSecurityException('Unsupported encrypted payload.',422);
     }
     await requireSecure();
+    final account=await api.owner;
+    // A single owner-wide lock is conservative but ensures two concurrent
+    // chats cannot encrypt against the same recipient device ratchet state.
+    // Only ciphertext and state durably committed by the reviewed provider
+    // may leave this critical section.
+    return _serialMailbox(account,'__outbound__',
+      ()=>_sendEncryptedLocked(thread,kind,data,account));
+  }
+
+  Future<OrbitMessagingSendResult> _sendEncryptedLocked(
+      OrbitConversation thread,String kind,Uint8List data,
+      String account) async {
     // Server epoch changes on Circle membership/consent/approved-device
     // changes. Requery before every group send; an old epoch is never reused.
     if(thread.kind=='circle'){
@@ -178,7 +190,6 @@ class OrbitMessagingCoordinator {
           'Circle recipients changed. Refresh keys before sending.',409);
       }
     }
-    final account=await api.owner;
     final devices=await _recipients(thread);
     if(thread.kind=='circle'){
       // A server epoch is an access-control fence, not an encryption key.
