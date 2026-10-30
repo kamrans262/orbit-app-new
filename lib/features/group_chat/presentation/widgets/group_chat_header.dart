@@ -116,6 +116,7 @@ class GroupChatHeader extends StatelessWidget {
                             BlendMode.srcIn,
                           ),
                         ),
+                        ),
                         if(onMore!=null)...[
                           const SizedBox(width:8),
                           _HeaderCircleButton(
