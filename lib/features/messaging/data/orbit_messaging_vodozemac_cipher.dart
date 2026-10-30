@@ -383,6 +383,20 @@ class OrbitMessagingVodozemacCipher implements OrbitMessagingCipher {
       final group=_native.invoke({
         'op':'group_create','pickle_key_b64':s.key,
       });
+      // This sending device owns the new Megolm session. Provision a local
+      // authenticated inbound copy so its own delivered envelope can also
+      // be decrypted. Other devices still require Olm-wrapped distribution.
+      final selfKey='${s.device}|${group['session_id']}';
+      final imported=_native.invoke({
+        'op':'group_import','pickle_key_b64':s.key,
+        'session_key':group['session_key'],
+      });
+      final inbox=s.bucket('groups_in');
+      inbox[selfKey]={
+        'conversation':conversationId,'epoch':groupEpoch,
+        'pickle':imported['inbound_pickle'],
+      };
+      s.put('groups_in',inbox);
       final wrappedPayload={
         't':'sender_key','cid':conversationId,'epoch':groupEpoch,
         'kind':'sender_key','sender':s.owner,'sender_device':s.device,
@@ -507,6 +521,16 @@ class OrbitMessagingVodozemacCipher implements OrbitMessagingCipher {
       for(final distribution in page.items.reversed){
         if(distribution.groupEpoch!=groupEpoch ||
            distribution.protocol!=protocol)continue;
+        final processed=s.bucket('processed_sender_keys');
+        if(processed.containsKey(distribution.id))continue;
+        if(distribution.senderDeviceId==s.device){
+          // The sender's own inbound Megolm copy was saved atomically when
+          // the outbound group chain was created.
+          processed[distribution.id]=groupEpoch;
+          s.put('processed_sender_keys',processed);
+          await _save(s);
+          continue;
+        }
         final env=OrbitMailboxEnvelope(
           id:distribution.id,messageId:distribution.id,
           senderId:distribution.senderId,
@@ -537,6 +561,13 @@ class OrbitMessagingVodozemacCipher implements OrbitMessagingCipher {
           };
           s.put('groups_in',received);
         }
+        final processed=s.bucket('processed_sender_keys');
+        processed[distribution.id]=groupEpoch;
+        if(processed.length>1000){
+          throw OrbitMessagingSecurityException(
+            'Circle key history requires safe archival before continuing.',503);
+        }
+        s.put('processed_sender_keys',processed);
         await _save(s);
       }
       cursor=page.nextCursor;
