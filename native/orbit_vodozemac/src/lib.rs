@@ -65,7 +65,7 @@ fn handle(v: &Value) -> CryptoResult<Value> {
             a.generate_one_time_keys(24);
             let identity = a.identity_keys();
             let curve_bytes = identity.curve25519.to_bytes();
-            let ed_bytes = identity.ed25519.to_bytes();
+            let ed_bytes = identity.ed25519.as_bytes();
             let mut sign_bytes = format!(
                 "orbit-m13-signed-prekey-v1|{}|1|", device
             ).into_bytes();
@@ -300,7 +300,7 @@ mod tests {
             b"reply from receiver");
         let mut altered=reply.to_parts().1;
         if altered.len()>8 { altered[8]^=0x40; }
-        let forged=OlmMessage::from_parts(reply.message_type() as usize,&altered);
+        let forged=OlmMessage::from_parts(reply.to_parts().0,&altered);
         if let Ok(m)=forged {
             assert!(outgoing.decrypt(&m).is_err());
         }
@@ -335,6 +335,7 @@ mod tests {
         assert!(!response.is_null());
         let text=unsafe {CStr::from_ptr(response)}.to_str().unwrap().to_owned();
         unsafe {orbit_vodozemac_free(response)};
-        assert!(text.contains("\\"ok\\":false"));
+        let parsed: Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(parsed["ok"], false);
     }
 }
