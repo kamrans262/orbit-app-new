@@ -255,9 +255,12 @@ class OrbitMessagingCoordinator {
       }catch(error){
         if(error is OrbitMessagingSecurityException ||
             error is FormatException) {
-          // Unauthenticated or malformed bytes must not change ratchet state
-          // or trigger session reset/read receipts.
-          continue;
+          // Never silently skip an undecryptable ciphertext. Leave it on
+          // the server without marking delivery/read or resetting any ratchet.
+          // The existing Orbit error state offers an explicit retry.
+          throw OrbitMessagingSecurityException(
+            'An encrypted message could not be authenticated. '
+            'It remains pending and was not acknowledged.',409);
         }
         rethrow;
       }
