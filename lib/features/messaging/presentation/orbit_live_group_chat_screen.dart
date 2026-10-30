@@ -13,6 +13,7 @@ import '../data/orbit_messaging_coordinator.dart';
 import '../data/orbit_messaging_models.dart';
 import '../data/orbit_messaging_media_bridge.dart';
 import '../data/orbit_messaging_reactions.dart';
+import '../data/orbit_messaging_replies.dart';
 
 /// Wraps the APPROVED GroupChatScreen with live M5 Circle roles and M13
 /// ciphertext mailbox. No generated participants or fake media messages.
@@ -91,10 +92,18 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
         final loaded=<GroupChatMessage>[];
         for(final entry in history){
           if(entry.kind=='reaction')continue;
+          final reply=entry.kind=='reply'
+            ?OrbitEncryptedReply.fromText(entry.text):null;
           final manifest=OrbitEncryptedChatMedia.tryParse(entry.text);
           var type=entry.senderId==owner
             ?GroupChatMessageType.sentText:GroupChatMessageType.receivedText;
           String? text=entry.text;
+          if(reply!=null){
+            final original=history.where((e)=>e.id==reply.targetId).toList();
+            final quote=original.isEmpty?'Original message':original.first.text;
+            text='↪ '+(quote.length>60?quote.substring(0,60)+'…':quote)+
+              '\n'+reply.text;
+          }
           Uint8List? bytes;
           Duration? audioLength;
           if(manifest!=null){
@@ -160,6 +169,16 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
       throw OrbitIdentityException('Queued, not acknowledged.',503);
     }
   }
+  Future<void> _sendReply(String targetId,String text) async {
+    final thread=_thread;
+    if(thread==null||!_cryptoReady)throw OrbitIdentityException(
+      'Verified encryption required before replying.',503);
+    final outcome=await _messenger.sendReply(
+      thread,targetId:targetId,text:text);
+    if(!outcome.accepted||outcome.queued)throw OrbitIdentityException(
+      'Encrypted reply is queued but not acknowledged.',503);
+  }
+
   Future<void> _sendAttachment(File file,String kind,int? duration) async {
     final thread=_thread;
     if(thread==null||!_cryptoReady)throw OrbitIdentityException(
@@ -198,6 +217,7 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
     onRetry:_load,onBack:()=>Navigator.of(context).maybePop(),
     onVideoCall:_videoUnavailable,
     onSendMessage:_send,
+    onSendReply:_sendReply,
     onSendMedia:_sendAttachment,
     onMessageReactionChanged:_react,
     liveMode:true,encryptedTransportReady:_cryptoReady,

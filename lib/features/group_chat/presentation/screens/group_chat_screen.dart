@@ -29,6 +29,7 @@ abstract final class GroupChatScreenKeys {
 
 typedef SendGroupMessageCallback = FutureOr<void> Function(String text);
 typedef SendGroupMediaCallback = FutureOr<void> Function(File file,String kind,int? durationMs);
+typedef SendGroupReplyCallback = FutureOr<void> Function(String targetId,String text);
 typedef LoadOlderMessagesCallback = FutureOr<List<GroupChatMessage>> Function();
 typedef ReactionChangedCallback = FutureOr<void> Function(
   GroupChatMessage message,
@@ -54,6 +55,7 @@ class GroupChatScreen extends StatefulWidget {
     this.errorMessage = 'Unable to load this group chat.',
     this.onRetry,
     this.onSendMessage,
+    this.onSendReply,
     this.onSendMedia,
     this.onLoadOlder,
     this.hasMoreOlder = false,
@@ -158,6 +160,7 @@ class GroupChatScreen extends StatefulWidget {
   final VoidCallback onBack;
   final VoidCallback onVideoCall;
   final SendGroupMessageCallback? onSendMessage;
+  final SendGroupReplyCallback? onSendReply;
   final SendGroupMediaCallback? onSendMedia;
   final LoadOlderMessagesCallback? onLoadOlder;
   final bool hasMoreOlder;
@@ -181,6 +184,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
   late List<GroupChatMessage> _messages;
   bool _loadingOlder = false;
+  GroupChatMessage? _replyTo;
+
   bool _initialScrollScheduled = false;
 
   @override
@@ -260,26 +265,61 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     }
   }
 
+  void _chooseReply(GroupChatMessage message){
+    if(widget.liveMode && !widget.encryptedTransportReady)return;
+    setState(()=>_replyTo=message);
+    _messageFocusNode.requestFocus();
+  }
+
+  Widget _replyBanner(){
+    final target=_replyTo!;
+    return Container(
+      padding:const EdgeInsets.symmetric(horizontal:20,vertical:8),
+      color:const Color(0xFFF0EEEB),
+      child:Row(children:[
+        const Icon(Icons.reply_rounded,size:20,color:Color(0xFF7C5CFC)),
+        const SizedBox(width:10),
+        Expanded(child:Text(target.text??'Encrypted attachment',
+          maxLines:1,overflow:TextOverflow.ellipsis,
+          style:const TextStyle(fontFamily:AppTypography.fontFamily,
+            fontSize:12,color:Color(0xFF64748B)))),
+        IconButton(tooltip:'Cancel reply',
+          icon:const Icon(Icons.close_rounded,size:19),
+          onPressed:()=>setState(()=>_replyTo=null)),
+      ]),
+    );
+  }
+
   Future<void> _sendCurrentMessage() async {
     final text=_messageController.text.trim();
     if(text.isEmpty)return;
+    final reply=_replyTo;
     if(widget.liveMode && (!widget.encryptedTransportReady ||
-        widget.onSendMessage==null)) {
+        (reply==null?widget.onSendMessage==null:widget.onSendReply==null))) {
       _sendError('Verified encryption is required before sending.');
       return;
     }
     final now=DateTime.now();
+    final display=reply==null?text:
+      '↪ '+(reply.text??'Encrypted attachment')+'\n'+text;
     final message=GroupChatMessage(
       id:'local-'+now.microsecondsSinceEpoch.toString(),
       type:GroupChatMessageType.sentText,senderId:widget.currentUserId,
-      senderName:'You',isMine:true,text:text,
+      senderName:'You',isMine:true,text:display,
       timestamp:_formatTime(now),createdAt:now,
     );
     if(widget.liveMode){
       try{
-        await widget.onSendMessage!(text);
+        if(reply!=null){
+          await widget.onSendReply!(reply.id,text);
+        }else{
+          await widget.onSendMessage!(text);
+        }
         if(!mounted)return;
-        setState(()=>_messages.add(message));
+        setState((){
+          _messages.add(message);
+          _replyTo=null;
+        });
         _messageController.clear();
         _scheduleScrollToBottom();
       }catch(_){
@@ -287,7 +327,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       }
       return;
     }
-    setState(()=>_messages.add(message));
+    setState((){
+      _messages.add(message);
+      _replyTo=null;
+    });
     _messageController.clear();
     _scheduleScrollToBottom();
     try{
@@ -509,6 +552,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                   style:TextStyle(fontFamily:AppTypography.fontFamily,
                     fontSize:12,color:Color(0xFF64748B))),
               ),
+            if(_replyTo!=null)_replyBanner(),
             SafeArea(
               top: false,
               child: ChatInputBar(
@@ -568,7 +612,14 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
             final message = _messages[adjustedIndex];
             return KeyedSubtree(
               key: GroupChatScreenKeys.message(message.id),
-              child: MessageReactionRegion(
+              child: GestureDetector(
+                behavior:HitTestBehavior.translucent,
+                onHorizontalDragEnd:(velocity){
+                  if((velocity.primaryVelocity??0)>250){
+                    _chooseReply(message);
+                  }
+                },
+                child: MessageReactionRegion(
                 messageId: message.id,
                 isMine: message.isMine,
                 initialSelected:_reactionFromValue(message.selectedReaction),
@@ -576,6 +627,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                 onChanged: (id, selected, counts) =>
                     _changeMessageReaction(message, selected, counts),
                 child: _buildMessage(message),
+                ),
               ),
             );
           },
