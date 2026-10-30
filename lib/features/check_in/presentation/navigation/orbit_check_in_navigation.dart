@@ -150,7 +150,7 @@ abstract final class OrbitCheckInNavigation {
       builder:(sheet)=>Column(mainAxisSize:MainAxisSize.min,
         crossAxisAlignment:CrossAxisAlignment.stretch,children:[
           if(note!=null) ...[
-            Text(note!,style:const TextStyle(color:AppColors.textMuted)),
+            Text(note,style:const TextStyle(color:AppColors.textMuted)),
             const SizedBox(height:12),
           ],
           for(var i=0;i<choices.length;i++)
