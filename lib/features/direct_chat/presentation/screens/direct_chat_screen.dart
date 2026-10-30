@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'dart:typed_data';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -18,6 +20,7 @@ import '../widgets/direct_location_message.dart';
 import '../widgets/direct_text_messages.dart';
 import '../widgets/live_location_card.dart';
 import '../../../welcome/presentation/screens/share_location_screen.dart';
+import '../../../messaging/presentation/orbit_chat_voice_recorder.dart';
 
 abstract final class DirectChatScreenKeys {
   static const title = Key('direct_chat_title');
@@ -309,8 +312,9 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
   }
 
   Future<void> _openAttachments() async {
-    if(widget.liveMode){
-      _showError('Encrypted media attachments are not yet verified for chat.');
+    if(widget.liveMode && (!widget.encryptedTransportReady ||
+        widget.onSendMessage==null)){
+      _showError('Verified encryption is required before attachments.');
       return;
     }
     FocusScope.of(context).unfocus();
@@ -347,6 +351,10 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                 onTap: () =>
                     Navigator.pop(sheetContext, _AttachmentChoice.sticker),
               ),
+              _AttachmentTile(
+                icon:Icons.mic_none_rounded,label:'Voice message',
+                onTap:()=>Navigator.pop(sheetContext,_AttachmentChoice.voice),
+              ),
               const _AttachmentTile(
                 icon: Icons.attach_file_rounded,
                 label: 'Files (coming next)',
@@ -367,6 +375,9 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
       case _AttachmentChoice.sticker:
         await _pickSticker();
         break;
+      case _AttachmentChoice.voice:
+        await _recordVoice();
+        break;
     }
   }
 
@@ -381,11 +392,18 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
         type: DirectChatMessageType.sentImage,
         imageUrl: image.path,
       );
-      setState(() => _messages.add(message));
+      if(widget.liveMode){
+        await widget.onSendMessage!(message);
+        if(!mounted)return;
+        setState(()=>_messages.add(message.copyWith(
+          deliveryStatus:DirectChatDeliveryStatus.sent)));
+      }else{
+        setState(() => _messages.add(message));
+        await widget.onSendMessage?.call(message);
+      }
       _scrollToLatest();
-      await widget.onSendMessage?.call(message);
     } catch (_) {
-      if (mounted) _showError('Unable to open the image picker.');
+      if (mounted) _showError('Encrypted image could not be sent.');
     }
   }
 
@@ -401,11 +419,24 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
         imageUrl: paths.length == 1 ? paths.first : null,
         images: paths,
       );
-      setState(() => _messages.add(message));
+      if(widget.liveMode){
+        // Each photo becomes an independently authorized encrypted M6
+        // upload and a signed M13 message, never one unencrypted batch.
+        for(final path in paths){
+          final each=_newMine(type:DirectChatMessageType.sentImage,
+            imageUrl:path);
+          await widget.onSendMessage!(each);
+          if(!mounted)return;
+          setState(()=>_messages.add(each.copyWith(
+            deliveryStatus:DirectChatDeliveryStatus.sent)));
+        }
+      }else{
+        setState(() => _messages.add(message));
+        await widget.onSendMessage?.call(message);
+      }
       _scrollToLatest();
-      await widget.onSendMessage?.call(message);
     } catch (_) {
-      if (mounted) _showError('Unable to open the image picker.');
+      if (mounted) _showError('One or more encrypted images were not sent.');
     }
   }
 
@@ -449,9 +480,50 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
       type: DirectChatMessageType.sentText,
       text: sticker,
     );
-    setState(() => _messages.add(message));
-    _scrollToLatest();
-    await widget.onSendMessage?.call(message);
+    try{
+      if(widget.liveMode){
+        if(!widget.encryptedTransportReady||widget.onSendMessage==null){
+          throw StateError('Encryption unavailable');
+        }
+        await widget.onSendMessage!(message);
+      }else{
+        await widget.onSendMessage?.call(message);
+      }
+      if(!mounted)return;
+      setState(()=>_messages.add(message));
+      _scrollToLatest();
+    }catch(_){
+      if(mounted)_showError('Encrypted sticker was not confirmed.');
+    }
+  }
+
+  Future<void> _recordVoice() async {
+    if(widget.liveMode &&
+        (!widget.encryptedTransportReady||widget.onSendMessage==null)){
+      _showError('Verified encryption is required for voice messages.');
+      return;
+    }
+    final capture=await OrbitChatVoiceRecorder.open(context);
+    if(capture==null||!mounted)return;
+    try{
+      final data=Uint8List.fromList(await capture.file.readAsBytes());
+      final message=_newMine(type:DirectChatMessageType.sentAudio,
+        audioUrl:capture.file.path,audioBytes:data,
+        audioDuration:Duration(milliseconds:capture.durationMs));
+      if(widget.liveMode){
+        await widget.onSendMessage!(message);
+      }else{
+        await widget.onSendMessage?.call(message);
+      }
+      if(!mounted)return;
+      setState(()=>_messages.add(message.copyWith(
+        deliveryStatus:DirectChatDeliveryStatus.sent)));
+      _scrollToLatest();
+    }catch(_){
+      if(mounted)_showError('Encrypted voice message was not confirmed.');
+    }finally{
+      try{if(await capture.file.exists())await capture.file.delete();}catch(_){}
+    }
   }
 
   Future<void> _shareLocation() async {
@@ -523,6 +595,9 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     required DirectChatMessageType type,
     String? text,
     String? imageUrl,
+    String? audioUrl,
+    Uint8List? audioBytes,
+    Duration? audioDuration,
     List<String> images = const <String>[],
     double? latitude,
     double? longitude,
@@ -539,6 +614,9 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
       isMine: true,
       text: text,
       imageUrl: imageUrl,
+      audioUrl:audioUrl,
+      audioBytes:audioBytes,
+      audioDuration:audioDuration,
       images: images,
       latitude: latitude,
       longitude: longitude,
@@ -921,7 +999,7 @@ class _StickerChoice extends StatelessWidget {
   }
 }
 
-enum _AttachmentChoice { singleImage, multipleImages, sticker }
+enum _AttachmentChoice { singleImage, multipleImages, sticker, voice }
 
 class _FutureDirectMessage extends StatelessWidget {
   const _FutureDirectMessage({required this.message});
