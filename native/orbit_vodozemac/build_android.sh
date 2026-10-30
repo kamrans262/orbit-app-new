@@ -15,6 +15,9 @@ fi
   echo "Set ANDROID_NDK_HOME to your Android SDK NDK directory"; exit 2;
 }
 rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+# The native Cargo.lock is generated only once on the first checked build;
+# include it in the security review before enabling production messaging.
+if [[ ! -f Cargo.lock ]]; then cargo generate-lockfile; fi
 cargo test --locked
 cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 \
   -o "$ROOT/android/app/src/main/jniLibs" build --release --locked
