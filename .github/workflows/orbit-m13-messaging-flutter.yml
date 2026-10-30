@@ -81,7 +81,8 @@ jobs:
           LD_LIBRARY_PATH: ${{ github.workspace }}/native/orbit_vodozemac/target/release
           ORBIT_M13_NATIVE_REQUIRED: '1'
         run: |
-          flutter test test/features/messaging/orbit_vodozemac_native_roundtrip_test.dart
+          flutter test test/features/messaging/orbit_vodozemac_native_roundtrip_test.dart \
+            test/features/messaging/orbit_vodozemac_provider_integration_test.dart
       - name: No-production-enablement assertion
         shell: bash
         run: |
