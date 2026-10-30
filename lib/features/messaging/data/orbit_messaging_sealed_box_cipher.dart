@@ -146,6 +146,7 @@ class OrbitMessagingSealedBoxCipher implements OrbitMessagingCipher {
           'sender_id':m.owner,'sender_device':m.device,
           'sender_identity':m.identityPublic,
           'recipient_device':d.id,'recipient_spk':d.signedPrekeyId,
+          'recipient_key_version':d.keyVersion,
           'ephemeral':base64Encode(epk.bytes),
           'salt':base64Encode(salt),'nonce':base64Encode(nonce),
           'conversation_id':conversationId,'epoch':groupEpoch,'kind':kind,
@@ -192,6 +193,7 @@ class OrbitMessagingSealedBoxCipher implements OrbitMessagingCipher {
        header['sender_device']!=envelope.senderDeviceId||
        header['recipient_device']!=m.device||
        header['recipient_spk']!=m.prekeyId||
+       header['recipient_key_version']!=envelope.keyVersion||
        header['conversation_id']!=conversationId||
        header['epoch']!=envelope.groupEpoch||
        header['kind']!=envelope.kind||envelope.protocol!=suite){
