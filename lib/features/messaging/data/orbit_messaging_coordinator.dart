@@ -248,8 +248,8 @@ class OrbitMessagingCoordinator {
       return OrbitMessagingSendResult(accepted:true,queued:false);
     }on OrbitIdentityException catch(error){
       if(error.statusCode==null || error.statusCode==408 ||
-          error.statusCode==502 || error.statusCode==503 ||
-          error.statusCode==504){
+          error.statusCode==429 || error.statusCode==502 ||
+          error.statusCode==503 || error.statusCode==504){
         return OrbitMessagingSendResult(
           accepted:false,queued:true,clientId:outgoing.clientId);
       }
@@ -280,9 +280,12 @@ class OrbitMessagingCoordinator {
         }
       }on OrbitIdentityException catch(error){
         if(error.statusCode==null || error.statusCode==408 ||
-            error.statusCode==502 || error.statusCode==503 ||
-            error.statusCode==504)break;
+            error.statusCode==429 || error.statusCode==502 ||
+            error.statusCode==503 || error.statusCode==504)break;
         needsReview++;
+        // Preserve send order when the oldest ciphertext needs re-approval;
+        // do not deliver later messages ahead of a revoked-key envelope.
+        break;
       }
     }
       return OrbitMessagingRetryResult(sent:sent,needsReview:needsReview);
