@@ -88,13 +88,13 @@ class _Routing {
 }
 
 class _UserApi extends OrbitMessagingApi {
-  _UserApi(this.routing,this.owner);
+  _UserApi(this.routing,this.localUser);
   final _Routing routing;
-  final String owner;
+  final String localUser;
 
   @override
   Future<Map<String,dynamic>> myDevices() async => {'devices':[{
-    'id':'$owner-device','trusted':true,
+    'id':'$localUser-device','trusted':true,
     'messaging_keys_registered':true,'available_one_time_prekeys':20,
   }]};
 
@@ -113,8 +113,8 @@ class _UserApi extends OrbitMessagingApi {
       routing.senderKeys.putIfAbsent(envelope.deviceId,()=>[]);
       routing.senderKeys[envelope.deviceId]!.add(OrbitSenderKeyEnvelope(
         id:'key-${++routing.nextId}',
-        senderId:owner,
-        senderDeviceId:'$owner-device',
+        senderId:localUser,
+        senderDeviceId:'$localUser-device',
         recipientKeyVersion:1,
         groupEpoch:groupEpoch,protocol:protocol,
         ciphertextB64:envelope.ciphertextB64,
@@ -128,7 +128,7 @@ class _UserApi extends OrbitMessagingApi {
   Future<OrbitSenderKeyPage> circleSenderKeys(String conversation,{
     String? cursor,int limit=50}) async {
     // Current-epoch filtering is enforced by Laravel in production.
-    final rows=routing.senderKeys['$owner-device']??[];
+    final rows=routing.senderKeys['$localUser-device']??[];
     return OrbitSenderKeyPage(rows.toList(growable:false),null,
       rows.isEmpty?1:rows.last.groupEpoch);
   }
