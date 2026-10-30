@@ -53,3 +53,9 @@ app.*.map.json
 # Platform-specific Google Maps SDK keys, always untracked.
 /android/secrets.properties
 /ios/Flutter/GoogleMapsSecrets.xcconfig
+
+# Generated native audit-core binaries are built locally and must be signed.
+/native/orbit_vodozemac/target/
+/ios/Runner/NativeCrypto/
+/ios/Flutter/OrbitVodozemac.xcconfig
+**/liborbit_vodozemac.so
