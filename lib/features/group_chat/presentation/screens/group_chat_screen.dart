@@ -4,6 +4,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:video_player/video_player.dart';
 
 import '../../../../core/chat/message_reactions.dart';
 import '../../../../core/chat/chat_audio_message.dart';
@@ -62,6 +63,7 @@ class GroupChatScreen extends StatefulWidget {
     this.onReactionChanged,
     this.onMessageReactionChanged,
     this.onMorePressed,
+    this.onOpenVideo,
     this.liveMode = false,
     this.encryptedTransportReady = false,
     super.key,
@@ -168,6 +170,7 @@ class GroupChatScreen extends StatefulWidget {
   final ReactionChangedCallback? onReactionChanged;
   final GroupMessageReactionChangedCallback? onMessageReactionChanged;
   final VoidCallback? onMorePressed;
+  final ValueChanged<Uint8List>? onOpenVideo;
   final bool liveMode;
   final bool encryptedTransportReady;
 
@@ -424,6 +427,44 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     }
   }
 
+  Future<void> _pickVideo() async {
+    if(widget.liveMode && (!widget.encryptedTransportReady ||
+        widget.onSendMedia==null)){
+      _sendError('Verified encryption is required for group videos.');
+      return;
+    }
+    VideoPlayerController? inspector;
+    try{
+      final item=await _imagePicker.pickVideo(source:ImageSource.gallery);
+      if(!mounted||item==null)return;
+      final file=File(item.path);
+      if(await file.length()>250*1024*1024){
+        throw StateError('Video exceeds the 250 MB limit.');
+      }
+      inspector=VideoPlayerController.file(file);
+      await inspector.initialize();
+      final duration=inspector.value.duration;
+      if(duration<=Duration.zero||duration>const Duration(seconds:60)){
+        throw StateError('Video must be 60 seconds or shorter.');
+      }
+      if(widget.liveMode){
+        await widget.onSendMedia!(file,'video',duration.inMilliseconds);
+      }
+      if(!mounted)return;
+      final now=DateTime.now();
+      setState(()=>_messages.add(GroupChatMessage(
+        id:'local-'+now.microsecondsSinceEpoch.toString(),
+        type:GroupChatMessageType.futureVideo,
+        senderId:widget.currentUserId,senderName:'You',
+        isMine:true,timestamp:_formatTime(now),createdAt:now)));
+      _scheduleScrollToBottom();
+    }catch(_){
+      if(mounted)_sendError('Encrypted video was not confirmed as sent.');
+    }finally{
+      await inspector?.dispose();
+    }
+  }
+
   Future<void> _recordVoice() async {
     if(widget.liveMode && (!widget.encryptedTransportReady ||
         widget.onSendMedia==null)){
@@ -574,6 +615,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                 onPickMultipleImages: _pickMultipleImages,
                 onPickSticker: _pickSticker,
                 onRecordVoice:_recordVoice,
+                onPickVideo:_pickVideo,
                 enabled: !widget.liveMode || widget.encryptedTransportReady,
               ),
             ),
@@ -693,7 +735,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       case GroupChatMessageType.futureVideo:
       case GroupChatMessageType.futureFile:
       case GroupChatMessageType.futureSystemMessage:
-        return _FutureMessagePlaceholder(message: message);
+        return _FutureMessagePlaceholder(message: message,
+          onTap:message.videoBytes!=null && widget.onOpenVideo!=null
+            ?()=>widget.onOpenVideo!(message.videoBytes!):null);
     }
   }
 
@@ -808,9 +852,10 @@ class _ErrorState extends StatelessWidget {
 }
 
 class _FutureMessagePlaceholder extends StatelessWidget {
-  const _FutureMessagePlaceholder({required this.message});
+  const _FutureMessagePlaceholder({required this.message,this.onTap});
 
   final GroupChatMessage message;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -825,7 +870,9 @@ class _FutureMessagePlaceholder extends StatelessWidget {
 
     return Align(
       alignment: message.isMine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
+      child: InkWell(onTap:onTap,
+        borderRadius:BorderRadius.circular(16),
+        child:Container(
         constraints: BoxConstraints(
           maxWidth: MediaQuery.sizeOf(context).width * 0.72,
         ),
@@ -835,12 +882,13 @@ class _FutureMessagePlaceholder extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
         ),
         child: Text(
-          label.isEmpty ? 'Group update' : label,
+          onTap!=null?'▶ '+label:(label.isEmpty ? 'Group update' : label),
           style: const TextStyle(
             fontFamily: AppTypography.fontFamily,
             fontSize: 13,
             color: Color(0xFF64748B),
           ),
+        ),
         ),
       ),
     );

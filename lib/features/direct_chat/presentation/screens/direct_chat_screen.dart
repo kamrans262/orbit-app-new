@@ -3,6 +3,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:video_player/video_player.dart';
+import 'dart:io';
 
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/chat/chat_audio_message.dart';
@@ -58,6 +60,7 @@ class DirectChatScreen extends StatefulWidget {
     this.onReactionChanged,
     this.onViewMap,
     this.onMorePressed,
+    this.onOpenVideo,
     this.liveMode = false,
     this.encryptedTransportReady = false,
     super.key,
@@ -198,6 +201,7 @@ class DirectChatScreen extends StatefulWidget {
   final DirectReactionCallback? onReactionChanged;
   final VoidCallback? onViewMap;
   final VoidCallback? onMorePressed;
+  final ValueChanged<Uint8List>? onOpenVideo;
   final bool liveMode;
   final bool encryptedTransportReady;
 
@@ -387,6 +391,10 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                     Navigator.pop(sheetContext, _AttachmentChoice.sticker),
               ),
               _AttachmentTile(
+                icon:Icons.videocam_outlined,label:'Video message',
+                onTap:()=>Navigator.pop(sheetContext,_AttachmentChoice.video),
+              ),
+              _AttachmentTile(
                 icon:Icons.mic_none_rounded,label:'Voice message',
                 onTap:()=>Navigator.pop(sheetContext,_AttachmentChoice.voice),
               ),
@@ -412,6 +420,9 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
         break;
       case _AttachmentChoice.voice:
         await _recordVoice();
+        break;
+      case _AttachmentChoice.video:
+        await _pickVideo();
         break;
     }
   }
@@ -532,6 +543,45 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     }
   }
 
+  Future<void> _pickVideo() async {
+    if(widget.liveMode && (!widget.encryptedTransportReady ||
+        widget.onSendMessage==null)){
+      _showError('Verified encryption is required for video messages.');
+      return;
+    }
+    VideoPlayerController? inspector;
+    try{
+      final item=await _imagePicker.pickVideo(source:ImageSource.gallery);
+      if(!mounted||item==null)return;
+      final file=File(item.path);
+      if(await file.length()>250*1024*1024){
+        throw StateError('Video is larger than 250 MB.');
+      }
+      inspector=VideoPlayerController.file(file);
+      await inspector.initialize();
+      final length=inspector.value.duration;
+      if(length<=Duration.zero||length>const Duration(seconds:60)){
+        throw StateError('Video must be 60 seconds or shorter.');
+      }
+      final message=_newMine(type:DirectChatMessageType.futureVideo,
+        videoUrl:item.path,videoDuration:length);
+      if(widget.liveMode){
+        await widget.onSendMessage!(message);
+        if(!mounted)return;
+        setState(()=>_messages.add(message.copyWith(
+          deliveryStatus:DirectChatDeliveryStatus.sent)));
+      }else{
+        setState(()=>_messages.add(message));
+        await widget.onSendMessage?.call(message);
+      }
+      _scrollToLatest();
+    }catch(_){
+      if(mounted)_showError('Video was not confirmed as encrypted and sent.');
+    }finally{
+      await inspector?.dispose();
+    }
+  }
+
   Future<void> _recordVoice() async {
     if(widget.liveMode &&
         (!widget.encryptedTransportReady||widget.onSendMessage==null)){
@@ -639,6 +689,8 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     String? locationName,
     String? mapImagePath,
     String? replyToId,
+    String? videoUrl,
+    Duration? videoDuration,
   }) {
     final now = DateTime.now();
     return DirectChatMessage(
@@ -650,6 +702,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
       isMine: true,
       text: text,
       replyToId:replyToId,
+      videoUrl:videoUrl,videoDuration:videoDuration,
       imageUrl: imageUrl,
       audioUrl:audioUrl,
       audioBytes:audioBytes,
@@ -968,7 +1021,9 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
         );
       case DirectChatMessageType.futureVideo:
       case DirectChatMessageType.futureFile:
-        return _FutureDirectMessage(message: message);
+        return _FutureDirectMessage(message: message,
+          onTap:message.videoBytes!=null && widget.onOpenVideo!=null
+            ?()=>widget.onOpenVideo!(message.videoBytes!):null);
     }
   }
 
@@ -1058,12 +1113,13 @@ class _StickerChoice extends StatelessWidget {
   }
 }
 
-enum _AttachmentChoice { singleImage, multipleImages, sticker, voice }
+enum _AttachmentChoice { singleImage, multipleImages, sticker, voice, video }
 
 class _FutureDirectMessage extends StatelessWidget {
-  const _FutureDirectMessage({required this.message});
+  const _FutureDirectMessage({required this.message,this.onTap});
 
   final DirectChatMessage message;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1072,19 +1128,23 @@ class _FutureDirectMessage extends StatelessWidget {
         : 'File attachment';
     return Align(
       alignment: message.isMine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
+      child: InkWell(
+        onTap:onTap,
+        borderRadius:BorderRadius.circular(16),
+        child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
         ),
         child: Text(
-          label,
+          onTap!=null?'▶ '+label:label,
           style: const TextStyle(
             fontFamily: AppTypography.fontFamily,
             fontSize: 13,
             color: Color(0xFF64748B),
           ),
+        ),
         ),
       ),
     );

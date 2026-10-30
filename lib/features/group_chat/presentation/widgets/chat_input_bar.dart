@@ -18,6 +18,7 @@ class ChatInputBar extends StatefulWidget {
     this.onPickMultipleImages,
     this.onPickSticker,
     this.onRecordVoice,
+    this.onPickVideo,
     this.enabled = true,
     super.key,
   });
@@ -29,6 +30,7 @@ class ChatInputBar extends StatefulWidget {
   final VoidCallback? onPickMultipleImages;
   final VoidCallback? onPickSticker;
   final VoidCallback? onRecordVoice;
+  final VoidCallback? onPickVideo;
   final bool enabled;
 
   @override
@@ -112,6 +114,11 @@ class _ChatInputBarState extends State<ChatInputBar> {
                       ),
               ),
               _AttachmentTile(
+                icon:Icons.videocam_outlined,label:'Video message',
+                onTap:widget.onPickVideo==null?null:()=>
+                  Navigator.pop(sheetContext,_GroupAttachmentChoice.video),
+              ),
+              _AttachmentTile(
                 icon:Icons.mic_none_rounded,
                 label:'Voice message',
                 onTap:widget.onRecordVoice==null?null:()=>
@@ -139,6 +146,9 @@ class _ChatInputBarState extends State<ChatInputBar> {
         break;
       case _GroupAttachmentChoice.voice:
         widget.onRecordVoice?.call();
+        break;
+      case _GroupAttachmentChoice.video:
+        widget.onPickVideo?.call();
         break;
     }
   }
@@ -260,7 +270,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
   }
 }
 
-enum _GroupAttachmentChoice { singleImage, multipleImages, sticker, voice }
+enum _GroupAttachmentChoice { singleImage, multipleImages, sticker, voice, video }
 
 class _AttachmentTile extends StatelessWidget {
   const _AttachmentTile({required this.icon, required this.label, this.onTap});

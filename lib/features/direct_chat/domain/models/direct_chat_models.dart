@@ -50,6 +50,9 @@ class DirectChatMessage {
     this.audioDuration,
     this.imageUrl,
     this.imageBytes,
+    this.videoUrl,
+    this.videoBytes,
+    this.videoDuration,
     this.images = const <String>[],
     this.latitude,
     this.longitude,
@@ -74,6 +77,9 @@ class DirectChatMessage {
   final Duration? audioDuration;
   final String? imageUrl;
   final Uint8List? imageBytes;
+  final String? videoUrl;
+  final Uint8List? videoBytes;
+  final Duration? videoDuration;
   final List<String> images;
   final double? latitude;
   final double? longitude;
@@ -107,6 +113,9 @@ class DirectChatMessage {
       audioDuration: audioDuration,
       imageUrl: imageUrl,
       imageBytes:imageBytes,
+      videoUrl:videoUrl,
+      videoBytes:videoBytes,
+      videoDuration:videoDuration,
       images: images,
       latitude: latitude,
       longitude: longitude,
