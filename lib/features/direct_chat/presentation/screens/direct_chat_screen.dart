@@ -23,6 +23,7 @@ import '../widgets/live_location_card.dart';
 import '../../../welcome/presentation/screens/share_location_screen.dart';
 import '../../../messaging/presentation/orbit_chat_voice_recorder.dart';
 import '../../../messaging/presentation/orbit_message_visibility_observer.dart';
+import '../../../messaging/data/orbit_messaging_models.dart';
 
 abstract final class DirectChatScreenKeys {
   static const title = Key('direct_chat_title');
@@ -360,6 +361,18 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
           deliveryStatus:DirectChatDeliveryStatus.sent)));
         _messageController.clear();
         setState(()=>_replyTo=null);
+        _scrollToLatest();
+      }on OrbitQueuedMessageException catch(queued){
+        if(!mounted)return;
+        // Ciphertext and this preview already committed to the encrypted
+        // account vault; the server has NOT acknowledged delivery.
+        setState((){
+          _messages.add(message.copyWith(
+            id:'local-'+queued.clientId,
+            deliveryStatus:DirectChatDeliveryStatus.sending));
+          _replyTo=null;
+        });
+        _messageController.clear();
         _scrollToLatest();
       }catch(_){
         if(mounted)_showError('Encrypted send failed. No delivery was confirmed.');
