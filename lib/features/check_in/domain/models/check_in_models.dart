@@ -28,10 +28,12 @@ class CheckInSubmission {
     required this.activityName,
     required this.sentAt,
     required this.interactionType,
+    this.customText,
   });
 
   final String activityId;
   final String activityName;
   final DateTime sentAt;
   final CheckInInteractionType interactionType;
+  final String? customText;
 }
