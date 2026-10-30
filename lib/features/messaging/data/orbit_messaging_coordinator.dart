@@ -251,6 +251,16 @@ class OrbitMessagingCoordinator {
     return vault.history(thread.id,limit:limit);
   }
 
+  Future<void> redactOwn(OrbitConversation thread,String messageId) async {
+    await requireSecure();
+    if(messageId.startsWith('local-')){
+      throw OrbitMessagingSecurityException(
+        'Message has not been acknowledged by the server.',409);
+    }
+    await api.redact(thread.id,messageId);
+    await vault.deleteMessage(thread.id,messageId);
+  }
+
   Future<void> viewed(OrbitConversation thread,String envelopeId,
       Duration visible) async {
     await requireSecure();

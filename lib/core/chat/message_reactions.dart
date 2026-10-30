@@ -234,6 +234,7 @@ class MessageReactionRegion extends StatefulWidget {
     this.initialSelected,
     this.initialCounts = const <ChatReactionKind, int>{},
     this.onChanged,
+    this.onMessageOptions,
     super.key,
   });
 
@@ -243,6 +244,7 @@ class MessageReactionRegion extends StatefulWidget {
   final ChatReactionKind? initialSelected;
   final Map<ChatReactionKind, int> initialCounts;
   final MessageReactionChanged? onChanged;
+  final VoidCallback? onMessageOptions;
 
   @override
   State<MessageReactionRegion> createState() => _MessageReactionRegionState();
@@ -324,6 +326,7 @@ class _MessageReactionRegionState extends State<MessageReactionRegion> {
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onLongPressStart: _handleLongPress,
+      onDoubleTap:widget.onMessageOptions,
       child: Column(
         crossAxisAlignment: widget.isMine
             ? CrossAxisAlignment.end

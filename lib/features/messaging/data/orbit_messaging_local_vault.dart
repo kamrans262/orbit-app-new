@@ -268,6 +268,20 @@ class OrbitMessagingLocalVault {
     });
   }
 
+  /// Delete only the current owner's local encrypted message record once
+  /// Laravel confirms redaction. This never asserts deletion from devices
+  /// that have already decrypted their own copies.
+  Future<void> deleteMessage(String conversation,String messageId) async {
+    final owner=await _owner();
+    final messageIndex=await _index(owner,messageId);
+    final conversationIndex=await _index(owner,conversation);
+    await _db(owner,(db) async {
+      await db.delete('history',
+        where:'message_id = ? AND conversation_id = ?',
+        whereArgs:[messageIndex,conversationIndex]);
+    });
+  }
+
   /// Wipes the owner's encryption key AND disk DB on logout/account change.
   Future<void> purge(String owner) async {
     if(owner.isEmpty)return;
