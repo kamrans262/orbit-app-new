@@ -51,6 +51,7 @@ class OrbitVodozemacStateStore {
     'groups_out':<String,dynamic>{},
     'groups_in':<String,dynamic>{},
     'group_pending':<String,dynamic>{},
+    'processed_sender_keys':<String,dynamic>{},
     'identity_pins':<String,dynamic>{},
     'decryption_pending':<String,dynamic>{},
   };
@@ -72,7 +73,8 @@ class OrbitVodozemacStateStore {
       final parsed=Map<String,dynamic>.from(jsonDecode(utf8.decode(clear)) as Map);
       if(parsed['v']!=1)throw const FormatException('Unsupported protocol state.');
       for(final k in ['sessions_out','sessions_in','groups_out','groups_in',
-          'group_pending','identity_pins','decryption_pending']){
+          'group_pending','identity_pins','decryption_pending',
+          'processed_sender_keys']){
         if(parsed[k] is! Map)throw const FormatException('Missing ratchet state.');
       }
       return parsed;
