@@ -44,6 +44,8 @@ dependencies:
   web_socket_channel: ^3.0.3
   http: ^1.5.0
   flutter_secure_storage: ^9.2.4
+  # M13: encrypted, owner-scoped on-device message/outbox database.
+  sqflite: ^2.4.2
   cryptography: ^2.7.0
   crypto: ^3.0.7
   image: ^4.10.1
