@@ -18,6 +18,7 @@ class DirectChatInputBar extends StatefulWidget {
     required this.onAttachment,
     required this.onLocation,
     required this.onSend,
+    this.enabled = true,
     super.key,
   });
 
@@ -27,6 +28,7 @@ class DirectChatInputBar extends StatefulWidget {
   final VoidCallback onAttachment;
   final VoidCallback onLocation;
   final VoidCallback onSend;
+  final bool enabled;
 
   @override
   State<DirectChatInputBar> createState() => _DirectChatInputBarState();
@@ -99,6 +101,7 @@ class _DirectChatInputBarState extends State<DirectChatInputBar> {
                 key: DirectChatInputKeys.field,
                 controller: widget.controller,
                 focusNode: widget.focusNode,
+                enabled: widget.enabled,
                 minLines: 1,
                 maxLines: 3,
                 keyboardType: TextInputType.multiline,
@@ -110,7 +113,9 @@ class _DirectChatInputBarState extends State<DirectChatInputBar> {
                   color: Color(0xFF0F1724),
                 ),
                 decoration: InputDecoration(
-                  hintText: 'Message ${widget.personName}...',
+                  hintText: widget.enabled
+                    ? 'Message ${widget.personName}...'
+                    : 'Encryption setup required',
                   hintStyle: const TextStyle(
                     fontFamily: AppTypography.fontFamily,
                     fontSize: 14,
@@ -145,7 +150,7 @@ class _DirectChatInputBarState extends State<DirectChatInputBar> {
           const SizedBox(width: 6),
           AnimatedOpacity(
             duration: const Duration(milliseconds: 160),
-            opacity: _hasText ? 1 : 0.55,
+            opacity: _hasText && widget.enabled ? 1 : 0.55,
             child: DecoratedBox(
               decoration: const BoxDecoration(
                 shape: BoxShape.circle,
@@ -159,7 +164,7 @@ class _DirectChatInputBarState extends State<DirectChatInputBar> {
                 clipBehavior: Clip.antiAlias,
                 child: InkWell(
                   key: DirectChatInputKeys.send,
-                  onTap: _hasText ? widget.onSend : null,
+                  onTap: _hasText && widget.enabled ? widget.onSend : null,
                   customBorder: const CircleBorder(),
                   child: SizedBox.square(
                     dimension: 46,
