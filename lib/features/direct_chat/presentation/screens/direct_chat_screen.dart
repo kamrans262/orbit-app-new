@@ -211,6 +211,8 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
 
   late List<DirectChatMessage> _messages;
   bool _loadingOlder = false;
+  DirectChatMessage? _replyTo;
+
 
   @override
   void initState() {
@@ -275,6 +277,31 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     });
   }
 
+  void _chooseReply(DirectChatMessage message){
+    if(!widget.encryptedTransportReady && widget.liveMode)return;
+    setState(()=>_replyTo=message);
+    _messageFocusNode.requestFocus();
+  }
+
+  Widget _replyBanner(){
+    final target=_replyTo!;
+    return Container(
+      padding:const EdgeInsets.symmetric(horizontal:20,vertical:8),
+      color:const Color(0xFFF0EEEB),
+      child:Row(children:[
+        const Icon(Icons.reply_rounded,color:Color(0xFF7C5CFC),size:20),
+        const SizedBox(width:10),
+        Expanded(child:Text(target.text??'Encrypted attachment',
+          maxLines:1,overflow:TextOverflow.ellipsis,
+          style:const TextStyle(fontFamily:AppTypography.fontFamily,
+            fontSize:12,color:Color(0xFF64748B)))),
+        IconButton(tooltip:'Cancel reply',
+          icon:const Icon(Icons.close_rounded,size:19),
+          onPressed:()=>setState(()=>_replyTo=null)),
+      ]),
+    );
+  }
+
   Future<void> _sendText() async {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
@@ -283,7 +310,8 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
       _showError('Verified end-to-end encryption is required before sending.');
       return;
     }
-    final message=_newMine(type:DirectChatMessageType.sentText,text:text);
+    final message=_newMine(type:DirectChatMessageType.sentText,
+      text:text,replyToId:_replyTo?.id);
     if(widget.liveMode){
       try{
         // Do not fabricate a sent bubble: encryption, durable ratchet write
@@ -293,6 +321,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
         setState(()=>_messages.add(message.copyWith(
           deliveryStatus:DirectChatDeliveryStatus.sent)));
         _messageController.clear();
+        setState(()=>_replyTo=null);
         _scrollToLatest();
       }catch(_){
         if(mounted)_showError('Encrypted send failed. No delivery was confirmed.');
@@ -301,6 +330,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     }
     setState(() => _messages.add(message));
     _messageController.clear();
+    setState(()=>_replyTo=null);
     _scrollToLatest();
     try {
       await widget.onSendMessage?.call(message);
@@ -602,6 +632,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     double? longitude,
     String? locationName,
     String? mapImagePath,
+    String? replyToId,
   }) {
     final now = DateTime.now();
     return DirectChatMessage(
@@ -612,6 +643,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
       senderName: 'You',
       isMine: true,
       text: text,
+      replyToId:replyToId,
       imageUrl: imageUrl,
       audioUrl:audioUrl,
       audioBytes:audioBytes,
@@ -708,6 +740,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                   style:TextStyle(fontFamily:AppTypography.fontFamily,
                     fontSize:12,color:Color(0xFF64748B))),
               ),
+            if(_replyTo!=null)_replyBanner(),
             SafeArea(
               top: false,
               child: DirectChatInputBar(
@@ -852,7 +885,14 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                 final message = _messages[index ~/ 2];
                 return KeyedSubtree(
                   key: DirectChatScreenKeys.message(message.id),
-                  child: MessageReactionRegion(
+                  child: GestureDetector(
+                    behavior:HitTestBehavior.translucent,
+                    onHorizontalDragEnd:(velocity){
+                      if((velocity.primaryVelocity??0)>250){
+                        _chooseReply(message);
+                      }
+                    },
+                    child: MessageReactionRegion(
                     messageId: message.id,
                     isMine: message.isMine,
                     initialSelected: _reactionFromBackend(
@@ -862,6 +902,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                     onChanged: (id, selected, counts) =>
                         _changeReaction(message, selected, counts),
                     child: _buildMessage(message),
+                    ),
                   ),
                 );
               }, childCount: (_messages.length * 2) - 1),

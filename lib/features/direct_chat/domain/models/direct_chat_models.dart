@@ -57,6 +57,7 @@ class DirectChatMessage {
     this.mapImagePath,
     this.reactions = const <String, int>{},
     this.selectedReaction,
+    this.replyToId,
     this.deliveryStatus = DirectChatDeliveryStatus.sent,
   });
 
@@ -80,6 +81,7 @@ class DirectChatMessage {
   final String? mapImagePath;
   final Map<String, int> reactions;
   final String? selectedReaction;
+  final String? replyToId;
   final String timestamp;
   final DirectChatDeliveryStatus deliveryStatus;
   final DateTime createdAt;
@@ -111,6 +113,7 @@ class DirectChatMessage {
       locationName: locationName,
       mapImagePath: mapImagePath,
       reactions: reactions ?? this.reactions,
+      replyToId:replyToId,
       selectedReaction: clearSelectedReaction
           ? null
           : (selectedReaction ?? this.selectedReaction),

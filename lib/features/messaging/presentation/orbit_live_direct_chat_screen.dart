@@ -12,6 +12,7 @@ import '../data/orbit_messaging_coordinator.dart';
 import '../data/orbit_messaging_models.dart';
 import '../data/orbit_messaging_media_bridge.dart';
 import '../data/orbit_messaging_reactions.dart';
+import '../data/orbit_messaging_replies.dart';
 
 /// The original direct-chat widget, not a competing screen. Never constructs
 /// demo Miami messages or shows a fabricated live-location card.
@@ -79,10 +80,19 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
         final loaded=<DirectChatMessage>[];
         for(final entry in history){
           if(entry.kind=='reaction')continue;
+          final reply=entry.kind=='reply'
+            ?OrbitEncryptedReply.fromText(entry.text):null;
           final manifest=OrbitEncryptedChatMedia.tryParse(entry.text);
           var type=entry.senderId==owner
             ?DirectChatMessageType.sentText:DirectChatMessageType.receivedText;
           String? text=entry.text;
+          if(reply!=null){
+            final original=history.where((e)=>e.id==reply.targetId).toList();
+            final quote=original.isEmpty?'Original message'
+              :original.first.text;
+            text='↪ '+(quote.length>60?quote.substring(0,60)+'…':quote)+
+              '\n'+reply.text;
+          }
           Uint8List? bytes;
           Duration? audioLength;
           if(manifest!=null){
@@ -160,6 +170,9 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
         original:File(path),kind:'voice',
         durationMs:message.audioDuration?.inMilliseconds);
       result=await _messenger.sendMedia(thread,manifest);
+    }else if(message.replyToId!=null){
+      result=await _messenger.sendReply(thread,
+        targetId:message.replyToId!,text:message.text??'');
     }else{
       result=await _messenger.sendText(thread,message.text??'');
     }

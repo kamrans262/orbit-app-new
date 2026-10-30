@@ -11,6 +11,7 @@ import 'orbit_messaging_local_vault.dart';
 import 'orbit_messaging_models.dart';
 import 'orbit_messaging_media_bridge.dart';
 import 'orbit_messaging_reactions.dart';
+import 'orbit_messaging_replies.dart';
 
 /// Authenticated account-bound messaging orchestration.
 /// No E2EE fallback, no optimistic "sent", no plaintext HTTPS requests.
@@ -113,6 +114,13 @@ class OrbitMessagingCoordinator {
     if(targetId.isEmpty)throw const FormatException('Target message required.');
     return sendEncrypted(thread,kind:'reaction',
       data:OrbitEncryptedReaction(targetId:targetId,selected:selected).encode());
+  }
+
+  Future<OrbitMessagingSendResult> sendReply(
+      OrbitConversation thread,{required String targetId,
+      required String text}) async {
+    return sendEncrypted(thread,kind:'reply',
+      data:OrbitEncryptedReply(targetId:targetId,text:text).encode());
   }
 
   Future<OrbitMessagingSendResult> sendEncrypted(
