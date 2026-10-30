@@ -743,6 +743,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
       timestamp: _formatTime(now),
       createdAt: now,
       deliveryStatus: DirectChatDeliveryStatus.sending,
+      showDeliveryStatus:widget.liveMode,
     );
   }
 

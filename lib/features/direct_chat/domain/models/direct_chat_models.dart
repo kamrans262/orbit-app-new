@@ -64,6 +64,7 @@ class DirectChatMessage {
     this.replyToId,
     this.readEnvelopeId,
     this.deliveryStatus = DirectChatDeliveryStatus.sent,
+    this.showDeliveryStatus=false,
   });
 
   final String id;
@@ -94,6 +95,7 @@ class DirectChatMessage {
   final String? readEnvelopeId;
   final String timestamp;
   final DirectChatDeliveryStatus deliveryStatus;
+  final bool showDeliveryStatus;
   final DateTime createdAt;
 
   DirectChatMessage copyWith({
@@ -134,6 +136,7 @@ class DirectChatMessage {
           : (selectedReaction ?? this.selectedReaction),
       timestamp: timestamp,
       deliveryStatus: deliveryStatus ?? this.deliveryStatus,
+      showDeliveryStatus:showDeliveryStatus,
       createdAt: createdAt,
     );
   }

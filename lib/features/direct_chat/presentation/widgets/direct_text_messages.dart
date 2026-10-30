@@ -128,14 +128,22 @@ class DirectSentTextMessage extends StatelessWidget {
         children: <Widget>[
           Padding(
             padding: const EdgeInsets.only(bottom: 3),
-            child: Text(
-              message.timestamp,
-              style: const TextStyle(
-                fontFamily: AppTypography.fontFamily,
-                fontSize: 10,
-                color: Color(0xFF8B95A1),
-              ),
-            ),
+            child:Row(mainAxisSize:MainAxisSize.min,children:[
+              Text(message.timestamp,style:const TextStyle(
+                fontFamily:AppTypography.fontFamily,fontSize:10,
+                color:Color(0xFF8B95A1))),
+              if(message.showDeliveryStatus)...[
+                const SizedBox(width:3),
+                Icon(switch(message.deliveryStatus){
+                  DirectChatDeliveryStatus.sending=>Icons.schedule_rounded,
+                  DirectChatDeliveryStatus.sent=>Icons.done_rounded,
+                  DirectChatDeliveryStatus.delivered=>Icons.done_all_rounded,
+                  DirectChatDeliveryStatus.read=>Icons.done_all_rounded,
+                  DirectChatDeliveryStatus.failed=>Icons.error_outline_rounded,
+                },size:12,color:message.deliveryStatus==DirectChatDeliveryStatus.read
+                  ?const Color(0xFF7C5CFC):const Color(0xFF8B95A1)),
+              ],
+            ]),
           ),
           const SizedBox(width: 8),
           Flexible(

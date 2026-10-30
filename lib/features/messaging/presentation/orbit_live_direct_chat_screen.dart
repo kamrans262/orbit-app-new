@@ -89,6 +89,22 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
       if(ready){
         final history=await _messenger.refresh(thread);
         final reactionState=OrbitReactionReducer.fold(history,localUser:owner);
+        // Only the newest few sent messages need receipt polling on shared
+        // hosting. Sender acknowledgements remain different from device
+        // delivered and explicit recipient-opt-in read acknowledgements.
+        final status=<String,DirectChatDeliveryStatus>{};
+        final newest=history.where((e)=>e.senderId==owner &&
+          (e.kind=='text'||e.kind=='reply')).toList().reversed.take(5);
+        for(final entry in newest){
+          try{
+            final r=await _api.receipts(thread.id,entry.id);
+            final reads=(r['read_users'] as num?)?.toInt()??0;
+            final delivered=(r['delivered_devices'] as num?)?.toInt()??0;
+            status[entry.id]=reads>0?DirectChatDeliveryStatus.read:
+              delivered>0?DirectChatDeliveryStatus.delivered:
+                DirectChatDeliveryStatus.sent;
+          }catch(_){status[entry.id]=DirectChatDeliveryStatus.sent;}
+        }
         final loaded=<DirectChatMessage>[];
         for(final entry in history){
           if(entry.kind=='reaction')continue;
@@ -144,9 +160,9 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
             reactions:reactionState[entry.id]?.counts??const <String,int>{},
             selectedReaction:reactionState[entry.id]?.selected,
             timestamp:_time(entry.createdAt),createdAt:entry.createdAt,
-            // Server accepted does not mean a recipient device decrypted it.
+            showDeliveryStatus:entry.senderId==owner,
             deliveryStatus:entry.senderId==owner
-              ?DirectChatDeliveryStatus.sent
+              ?status[entry.id]??DirectChatDeliveryStatus.sent
               :DirectChatDeliveryStatus.delivered));
         }
         next=loaded;
