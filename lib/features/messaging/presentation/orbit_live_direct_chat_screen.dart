@@ -235,7 +235,7 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
         showDeliveryStatus:entry.senderId==owner,
         deliveryStatus:entry.senderId==owner
           ?entry.id.startsWith('local-')
-            ?DirectChatDeliveryStatus.sending
+            ?DirectChatDeliveryStatus.waiting
             :status[entry.id]??DirectChatDeliveryStatus.sent
           :DirectChatDeliveryStatus.delivered));
     }
