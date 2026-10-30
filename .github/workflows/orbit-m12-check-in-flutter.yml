@@ -1,0 +1,37 @@
+name: Orbit Check-In focused Flutter verification
+on:
+  push:
+    branches: [integration/m2-m5-flutter-consolidated-2026-10-24]
+    paths:
+      - '.github/workflows/orbit-m12-check-in-flutter.yml'
+      - 'lib/features/check_in/**'
+      - 'lib/features/orbit/presentation/screens/orbit_screen.dart'
+      - 'lib/features/home/presentation/screens/orbit_live_home_screen.dart'
+      - 'lib/features/auth/data/orbit_identity_client.dart'
+      - 'test/features/check_in/**'
+      - 'test/app/orbit_check_in_navigation_test.dart'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check-in-flutter:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Analyze modified Check-In and integration surfaces
+        run: |
+          dart analyze lib/features/check_in \
+            lib/features/orbit/presentation/screens/orbit_screen.dart \
+            lib/features/home/presentation/screens/orbit_live_home_screen.dart \
+            lib/features/auth/data/orbit_identity_client.dart
+      - name: Focused Check-In widgets and navigation tests
+        run: |
+          flutter test test/features/check_in \
+            test/app/orbit_check_in_navigation_test.dart
