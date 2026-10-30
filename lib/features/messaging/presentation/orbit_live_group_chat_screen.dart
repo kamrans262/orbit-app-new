@@ -10,6 +10,7 @@ import '../../group_chat/domain/models/group_chat_models.dart';
 import '../../group_chat/presentation/screens/group_chat_screen.dart';
 import '../data/orbit_messaging_api.dart';
 import '../data/orbit_messaging_coordinator.dart';
+import '../data/orbit_messaging_local_vault.dart';
 import '../data/orbit_messaging_models.dart';
 import '../data/orbit_messaging_media_bridge.dart';
 import '../data/orbit_messaging_reactions.dart';
@@ -40,6 +41,7 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
   late final OrbitCircleRepository _circles=widget.circles??OrbitCircleRepository();
   final OrbitMessagingMediaBridge _media=OrbitMessagingMediaBridge();
   List<GroupChatMessage> _messages=const [];
+  List<GroupChatMessage> _olderMessages=const [];
   List<GroupParticipant> _participants=const [];
   OrbitConversation? _thread;
   String? _owner;
@@ -101,61 +103,10 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
       List<GroupChatMessage> next=const [];
       if(ready){
         final history=await _messenger.refresh(conversation);
-        final reactionState=OrbitReactionReducer.fold(history,localUser:owner);
-        final loaded=<GroupChatMessage>[];
-        for(final entry in history){
-          if(entry.kind=='reaction')continue;
-          final reply=entry.kind=='reply'
-            ?OrbitEncryptedReply.fromText(entry.text):null;
-          final manifest=OrbitEncryptedChatMedia.tryParse(entry.text);
-          var type=entry.senderId==owner
-            ?GroupChatMessageType.sentText:GroupChatMessageType.receivedText;
-          String? text=entry.text;
-          if(reply!=null){
-            final original=history.where((e)=>e.id==reply.targetId).toList();
-            final quote=original.isEmpty?'Original message':original.first.text;
-            text='↪ '+(quote.length>60?quote.substring(0,60)+'…':quote)+
-              '\n'+reply.text;
-          }
-          Uint8List? bytes;
-          Duration? audioLength;
-          if(manifest!=null){
-            try {
-              if(manifest.kind!='video'){
-                bytes=await _media.open(manifest);
-              }
-              if(manifest.kind=='image'){
-                type=entry.senderId==owner
-                  ?GroupChatMessageType.sentImage:GroupChatMessageType.receivedImage;
-              }else if(manifest.kind=='voice'){
-                type=entry.senderId==owner
-                  ?GroupChatMessageType.sentVoice:GroupChatMessageType.receivedVoice;
-                audioLength=Duration(milliseconds:manifest.durationMs??1000);
-              }else{
-                type=GroupChatMessageType.futureVideo;
-              }
-              text=null;
-            }catch(_){
-              text='Encrypted media is no longer available.';
-              type=entry.senderId==owner
-                ?GroupChatMessageType.sentText:GroupChatMessageType.receivedText;
-            }
-          }
-          loaded.add(GroupChatMessage(
-            id:entry.id,type:type,senderId:entry.senderId,
-            readEnvelopeId:entry.envelopeId,
-            senderName:entry.senderId==owner
-              ?'You':names[entry.senderId]??'Circle member',
-            isMine:entry.senderId==owner,text:text,
-            imageBytes:manifest?.kind=='image'?bytes:null,
-            videoMediaId:manifest?.kind=='video'?manifest!.mediaId:null,
-            audioBytes:manifest?.kind=='voice'?bytes:null,
-            audioDuration:audioLength,
-            reactions:reactionState[entry.id]?.counts??const <String,int>{},
-            selectedReaction:reactionState[entry.id]?.selected,
-            timestamp:_time(entry.createdAt),createdAt:entry.createdAt));
-        }
-        next=loaded;
+        next=await _renderHistory(history,owner,names);
+        final ids=next.map((item)=>item.id).toSet();
+        next=[..._olderMessages.where((item)=>!ids.contains(item.id)),
+          ...next]..sort((a,b)=>a.createdAt.compareTo(b.createdAt));
       }
       if(!mounted||epoch!=_epoch)return;
       setState((){
@@ -169,6 +120,7 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
       if(!mounted||epoch!=_epoch)return;
       setState((){
         _thread=null;_participants=const [];_messages=const [];
+        _olderMessages=const [];
         _loading=false;_cryptoReady=false;
         _error='A Circle message could not be verified. '
           'It was not acknowledged or deleted. Reconnect to retry safely.';
@@ -177,12 +129,90 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
       if(!mounted||epoch!=_epoch)return;
       setState((){
         _thread=null;_participants=const [];_messages=const [];
+        _olderMessages=const [];
         _loading=false;_cryptoReady=false;
         _error='Circle messaging is unavailable. Verify membership, '
           'privacy and individual Circle consent.';
       });
     }
   }
+  Future<List<GroupChatMessage>> _renderHistory(
+      List<OrbitLocalDecryptedMessage> history,
+      String owner,Map<String,String> names) async {
+    final reactionState=OrbitReactionReducer.fold(history,localUser:owner);
+    final loaded=<GroupChatMessage>[];
+    for(final entry in history){
+      if(entry.kind=='reaction')continue;
+      final reply=entry.kind=='reply'
+        ?OrbitEncryptedReply.fromText(entry.text):null;
+      final manifest=OrbitEncryptedChatMedia.tryParse(entry.text);
+      var type=entry.senderId==owner
+        ?GroupChatMessageType.sentText:GroupChatMessageType.receivedText;
+      String? text=entry.text;
+      if(reply!=null){
+        final original=history.where((e)=>e.id==reply.targetId).toList();
+        final quote=original.isEmpty?'Original message':original.first.text;
+        text='↪ '+(quote.length>60?quote.substring(0,60)+'…':quote)+
+          '\n'+reply.text;
+      }
+      Uint8List? bytes;
+      Duration? audioLength;
+      if(manifest!=null){
+        try {
+          if(manifest.kind!='video'){
+            bytes=await _media.open(manifest);
+          }
+          if(manifest.kind=='image'){
+            type=entry.senderId==owner
+              ?GroupChatMessageType.sentImage:GroupChatMessageType.receivedImage;
+          }else if(manifest.kind=='voice'){
+            type=entry.senderId==owner
+              ?GroupChatMessageType.sentVoice:GroupChatMessageType.receivedVoice;
+            audioLength=Duration(milliseconds:manifest.durationMs??1000);
+          }else{
+            type=GroupChatMessageType.futureVideo;
+          }
+          text=null;
+        }catch(_){
+          text='Encrypted media is no longer available.';
+          type=entry.senderId==owner
+            ?GroupChatMessageType.sentText:GroupChatMessageType.receivedText;
+        }
+      }
+      loaded.add(GroupChatMessage(
+        id:entry.id,type:type,senderId:entry.senderId,
+        readEnvelopeId:entry.envelopeId,
+        senderName:entry.senderId==owner
+          ?'You':names[entry.senderId]??'Circle member',
+        isMine:entry.senderId==owner,text:text,
+        imageBytes:manifest?.kind=='image'?bytes:null,
+        videoMediaId:manifest?.kind=='video'?manifest!.mediaId:null,
+        audioBytes:manifest?.kind=='voice'?bytes:null,
+        audioDuration:audioLength,
+        reactions:reactionState[entry.id]?.counts??const <String,int>{},
+        selectedReaction:reactionState[entry.id]?.selected,
+        timestamp:_time(entry.createdAt),createdAt:entry.createdAt));
+    }
+    return loaded;
+  }
+
+  Future<List<GroupChatMessage>> _loadOlder() async {
+    final thread=_thread;
+    final owner=_owner;
+    if(thread==null||owner==null||!_cryptoReady){
+      return const <GroupChatMessage>[];
+    }
+    final raw=await _messenger.loadOlder(thread);
+    if(!mounted||raw.isEmpty)return const <GroupChatMessage>[];
+    final names={for(final member in _participants)member.id:member.name};
+    final rendered=await _renderHistory(raw,owner,names);
+    final known={..._olderMessages.map((item)=>item.id),
+      ..._messages.map((item)=>item.id)};
+    _olderMessages=[...rendered.where((item)=>!known.contains(item.id)),
+      ..._olderMessages];
+    return rendered;
+  }
+
   Future<void> _playVideo(String mediaId) async {
     try{
       final bytes=await _media.open(OrbitEncryptedChatMedia(
@@ -322,5 +352,8 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
     onSendMedia:_sendAttachment,
     onMessageReactionChanged:_react,
     liveMode:true,encryptedTransportReady:_cryptoReady,
+    hasMoreOlder:_cryptoReady && _owner!=null && _thread!=null &&
+      _messenger.hasOlderMessages(_owner!,_thread!.id),
+    onLoadOlder:_loadOlder,
   );
 }
