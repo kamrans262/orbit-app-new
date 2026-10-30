@@ -18,6 +18,7 @@ import '../../../presence/data/orbit_presence_rollout.dart';
 import '../../../ping/presentation/navigation/orbit_ping_navigation.dart';
 import '../../../ping/data/orbit_ping_repository.dart';
 import '../../../auth/data/orbit_identity_client.dart';
+import '../../../messaging/presentation/orbit_messaging_navigation.dart';
 import '../widgets/orbit_circle_confirmation.dart';
 import '../../../presence/presentation/orbit_presence_runtime.dart';
 import '../../../presence/presentation/orbit_circle_presence_settings_screen.dart';
@@ -301,13 +302,21 @@ class _OrbitLiveCircleDetailScreenState extends State<OrbitLiveCircleDetailScree
         imagePath:null,
         onTap:()=>_memberPreview(p),
       )).toList(growable:false),
-      groups:const <CircleGroupData>[],
+      groups:(_circle!=null && _error==null &&
+          _circle!.lifecycleState=='active')
+        ?<CircleGroupData>[
+          CircleGroupData(id:_circle!.id,name:'Circle Chat',
+            memberCount:_members.length,memberAvatars:const [],
+            onTap:()=>OrbitMessagingNavigation.openCircle(context,
+              circleId:_circle!.id,circleName:_circle!.name)),
+        ]:const <CircleGroupData>[],
       onBack: () => Navigator.of(context).maybePop(),
       onAddMember: _openInvite,
       onSettingsPressed: _circle == null ? null : _openSettings,
       onPresencePressed: _circle == null || !OrbitPresenceRollout.enabled
           ? null : _openPresenceSettings,
       liveInviteMode: true,
+      liveGroupNavigation:true,
       headerTitle:'Friend Details',
       lifecycleNotice:_temporaryNotice(),
       // Reuse the original two-tab Circle / Group design. M5 does not

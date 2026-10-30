@@ -40,6 +40,7 @@ class FriendDetailsScreen extends StatefulWidget {
     this.showAddMemberButton = true,
     this.showGroupSegment = true,
     this.showFavoriteActions = true,
+    this.liveGroupNavigation = false,
     this.headerTitle = 'Friend Details',
     this.lifecycleNotice,
     this.initialSegment = FriendDetailsSegment.circle,
@@ -158,6 +159,7 @@ class FriendDetailsScreen extends StatefulWidget {
   final bool showAddMemberButton;
   final bool showGroupSegment;
   final bool showFavoriteActions;
+  final bool liveGroupNavigation;
   final String headerTitle;
   final String? lifecycleNotice;
   final FriendDetailsSegment initialSegment;
@@ -518,6 +520,10 @@ class _FriendDetailsScreenState extends State<FriendDetailsScreen> {
   }
 
   void _openGroupChat(CircleGroupData group) {
+    if(widget.liveGroupNavigation){
+      group.onTap?.call();
+      return;
+    }
     group.onTap?.call();
     Navigator.of(context, rootNavigator: true).push(
       AppFadeSlidePageRoute<void>(
