@@ -54,6 +54,9 @@ fn curve(v: &Value, name: &str) -> CryptoResult<Curve25519PublicKey> {
 
 fn handle(v: &Value) -> CryptoResult<Value> {
     let command = required(v, "op")?;
+    if command == "bridge_version" {
+        return Ok(json!({"abi":1,"crypto":"vodozemac","version":"0.11.1"}));
+    }
     let k = key(v)?;
     match command {
         "account_create" => {
