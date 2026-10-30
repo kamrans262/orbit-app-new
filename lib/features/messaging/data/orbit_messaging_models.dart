@@ -157,6 +157,13 @@ class OrbitMessagingKeyDirectory {
 }
 
 /// A protocol error is not an instruction to reset identity/ratchet state.
+class OrbitQueuedMessageException implements Exception {
+  const OrbitQueuedMessageException(this.clientId);
+  final String clientId;
+  @override
+  String toString()=>'Encrypted message is queued, not yet delivered.';
+}
+
 class OrbitMessagingSecurityException extends OrbitIdentityException {
   OrbitMessagingSecurityException(super.message,[super.statusCode]);
 }
