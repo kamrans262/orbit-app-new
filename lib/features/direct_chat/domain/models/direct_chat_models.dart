@@ -15,7 +15,7 @@ enum DirectChatMessageType {
   futureFile,
 }
 
-enum DirectChatDeliveryStatus { sending, sent, delivered, read, failed }
+enum DirectChatDeliveryStatus { sending, waiting, sent, delivered, read, failed }
 
 class DirectChatPerson {
   const DirectChatPerson({
