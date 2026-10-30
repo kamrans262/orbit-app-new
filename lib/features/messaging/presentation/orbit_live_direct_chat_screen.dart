@@ -2,9 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../../auth/data/orbit_identity_client.dart';
-import '../../../direct_chat/domain/models/direct_chat_models.dart';
-import '../../../direct_chat/presentation/screens/direct_chat_screen.dart';
+import '../../auth/data/orbit_identity_client.dart';
+import '../../direct_chat/domain/models/direct_chat_models.dart';
+import '../../direct_chat/presentation/screens/direct_chat_screen.dart';
 import '../data/orbit_messaging_api.dart';
 import '../data/orbit_messaging_coordinator.dart';
 import '../data/orbit_messaging_models.dart';

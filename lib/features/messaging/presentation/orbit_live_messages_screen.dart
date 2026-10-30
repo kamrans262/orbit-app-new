@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 
-import '../../../circles/data/orbit_circle_repository.dart';
-import '../../../circles/domain/models/friend_details_models.dart';
-import '../../../friends/data/orbit_social_repository.dart';
-import '../../../messages/presentation/screens/messages_screen.dart';
+import '../../circles/data/orbit_circle_repository.dart';
+import '../../circles/domain/models/friend_details_models.dart';
+import '../../friends/data/orbit_social_repository.dart';
+import '../../messages/presentation/screens/messages_screen.dart';
 import '../data/orbit_messaging_api.dart';
 import '../data/orbit_messaging_models.dart';
 import 'orbit_messaging_navigation.dart';

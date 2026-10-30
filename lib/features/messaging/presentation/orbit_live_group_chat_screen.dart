@@ -2,10 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../../auth/data/orbit_identity_client.dart';
-import '../../../circles/data/orbit_circle_repository.dart';
-import '../../../group_chat/domain/models/group_chat_models.dart';
-import '../../../group_chat/presentation/screens/group_chat_screen.dart';
+import '../../auth/data/orbit_identity_client.dart';
+import '../../circles/data/orbit_circle_repository.dart';
+import '../../group_chat/domain/models/group_chat_models.dart';
+import '../../group_chat/presentation/screens/group_chat_screen.dart';
 import '../data/orbit_messaging_api.dart';
 import '../data/orbit_messaging_coordinator.dart';
 import '../data/orbit_messaging_models.dart';
