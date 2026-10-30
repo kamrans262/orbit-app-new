@@ -9,6 +9,7 @@ import '../../../../core/widgets/app_action_row.dart';
 import '../../data/orbit_social_repository.dart';
 import 'orbit_friend_requests_screen.dart';
 import '../../../ping/presentation/navigation/orbit_ping_navigation.dart';
+import '../../../messaging/presentation/orbit_messaging_navigation.dart';
 import '../widgets/orbit_social_confirmation.dart';
 
 /// Authenticated person detail. A friend is never represented as a Circle.
@@ -179,7 +180,16 @@ class _OrbitPersonScreenState extends State<OrbitPersonScreen> {
           SettingsListCard(
             key: const Key('friend_profile_quick_actions_card'),
             children: <Widget>[
-              _futureAction('Message', Icons.chat_bubble_outline_rounded),
+              SettingsListItem(
+                icon:Icons.chat_bubble_outline_rounded,label:'Message',
+                enabled:friend && !_busy,
+                onTap:(){
+                  if(friend && !_busy){
+                    OrbitMessagingNavigation.openDirect(context,
+                      peerId:_person.id,peerName:_person.name);
+                  }
+                },
+              ),
               SettingsListItem(
                 icon: Icons.notifications_active_outlined, label: 'Ping',
                 enabled: friend && !_busy,
