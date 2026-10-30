@@ -53,7 +53,8 @@ class _Pages extends OrbitMessagingApi {
 }
 
 class _DecryptForTest extends OrbitUnconfiguredMessagingCipher {
-  const _DecryptForTest();
+  _DecryptForTest();
+  int decryptCount=0;
 
   @override
   bool get independentlyVerified=>true;
@@ -62,7 +63,12 @@ class _DecryptForTest extends OrbitUnconfiguredMessagingCipher {
   Future<Uint8List> decrypt({
     required OrbitMailboxEnvelope envelope,
     required String conversationId,
-  }) async =>Uint8List.fromList(utf8.encode(envelope.messageId));
+  }) async {
+    decryptCount++;
+    // Force overlapping calls to exercise the cross-coordinator lock.
+    await Future<void>.delayed(const Duration(milliseconds:10));
+    return Uint8List.fromList(utf8.encode(envelope.messageId));
+  }
 }
 
 class _MemoryVaultForTest extends OrbitMessagingLocalVault {
@@ -87,6 +93,23 @@ class _MemoryVaultForTest extends OrbitMessagingLocalVault {
 }
 
 void main(){
+  test('Parallel pollers cannot decrypt the same mailbox envelope twice',() async {
+    final api=_Pages();
+    final vault=_MemoryVaultForTest();
+    final cipher=_DecryptForTest();
+    final a=OrbitMessagingCoordinator(api:api,cipher:cipher,vault:vault);
+    final b=OrbitMessagingCoordinator(api:api,cipher:cipher,vault:vault);
+    final thread=OrbitConversation(
+      id:'same-thread',kind:'direct',groupEpoch:1,
+      peerId:'friend',createdAt:DateTime.utc(2026,10,1));
+    await Future.wait([
+      a.refresh(thread,limit:2),
+      b.refresh(thread,limit:2),
+    ]);
+    expect(cipher.decryptCount,1);
+    expect(api.acknowledged,['env-newest']);
+  });
+
   test('Initial HTTPS sync keeps its cursor across refresh and backfills only new ciphertext',() async {
     final api=_Pages();
     final vault=_MemoryVaultForTest();
@@ -95,7 +118,7 @@ void main(){
       kind:'text',text:'already-seen',createdAt:DateTime.utc(2026,10,29),
       envelopeId:'env-already-seen');
     final coordinator=OrbitMessagingCoordinator(
-      api:api,cipher:const _DecryptForTest(),vault:vault);
+      api:api,cipher:_DecryptForTest(),vault:vault);
     final thread=OrbitConversation(
       id:'thread',kind:'direct',groupEpoch:1,
       peerId:'friend',createdAt:DateTime.utc(2026,10,1));
