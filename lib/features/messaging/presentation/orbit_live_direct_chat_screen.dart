@@ -292,10 +292,17 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
   }
 
   Future<void> _more() async {
-    final thread=_thread;
-    if(thread==null)return;
-    await const OrbitMessagingConversationActions().openDirect(context,
+    OrbitConversation thread;
+    try{
+      // Even when a contact's identity changed and decryption is held,
+      // the user must be able to reach the independent key-review action.
+      thread=_thread??await _api.direct(widget.peerId);
+    }catch(_){return;}
+    if(!mounted)return;
+    await OrbitMessagingConversationActions(
+      api:_api,coordinator:_messenger).openDirect(context,
       thread:thread,peerId:widget.peerId,
+      showEncryptionReview:_messenger.cipher.independentlyVerified,
       onClose:()=>Navigator.of(context).maybePop());
   }
 
