@@ -5,6 +5,7 @@ enum GroupChatMessageType {
   receivedText,
   sentText,
   sentVoice,
+  receivedVoice,
   receivedImage,
   sentImage,
   receivedMultiImage,
@@ -43,6 +44,7 @@ class GroupChatMessage {
     this.audioUrl,
     this.audioBytes,
     this.audioDuration,
+    this.audioDuration,
     this.images = const <String>[],
     this.imageBytes,
     this.reactionAvatars = const <String>[],
@@ -58,6 +60,7 @@ class GroupChatMessage {
   final String? text;
   final String? audioUrl;
   final Uint8List? audioBytes;
+  final Duration? audioDuration;
   final Duration? audioDuration;
   final List<String> images;
   final Uint8List? imageBytes;
@@ -77,6 +80,7 @@ class GroupChatMessage {
       text: text ?? this.text,
       audioUrl: audioUrl,
       audioBytes:audioBytes,
+      audioDuration:audioDuration,
       audioDuration: audioDuration,
       images: images,
       imageBytes:imageBytes,
