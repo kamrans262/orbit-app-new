@@ -144,7 +144,10 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
             reactions:reactionState[entry.id]?.counts??const <String,int>{},
             selectedReaction:reactionState[entry.id]?.selected,
             timestamp:_time(entry.createdAt),createdAt:entry.createdAt,
-            deliveryStatus:DirectChatDeliveryStatus.delivered));
+            // Server accepted does not mean a recipient device decrypted it.
+            deliveryStatus:entry.senderId==owner
+              ?DirectChatDeliveryStatus.sent
+              :DirectChatDeliveryStatus.delivered));
         }
         next=loaded;
       }
