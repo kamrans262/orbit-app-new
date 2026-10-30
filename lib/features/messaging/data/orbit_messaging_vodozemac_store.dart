@@ -46,6 +46,7 @@ class OrbitVodozemacStateStore {
 
   Map<String,dynamic> _empty()=> <String,dynamic>{
     'v':1,'account':null,'public':null,'published':false,
+    'next_prekey_id':25,
     'sessions_out':<String,dynamic>{},
     'sessions_in':<String,dynamic>{},
     'groups_out':<String,dynamic>{},
