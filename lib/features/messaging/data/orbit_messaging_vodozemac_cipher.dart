@@ -247,7 +247,16 @@ class OrbitMessagingVodozemacCipher implements OrbitMessagingCipher {
     final s=await _open();
     final pins=s.bucket('identity_pins');
     final id='$peerId|$deviceId';
-    if(pins[id]==actual)return;
+    final existing=s.bucket('sessions_out')[deviceId];
+    // The signing identity can remain unchanged while the trusted device
+    // rotates its signed Curve prekey or its server key version. Explicit
+    // confirmation must reset that stale Olm session too, or the user could
+    // become permanently unable to send to the verified replacement.
+    final sessionChanged=existing is Map &&
+      (existing['curve']!=remote.signedPrekey ||
+       existing['key_version']!=remote.keyVersion ||
+       existing['fingerprint']!=remote.fingerprint);
+    if(pins[id]==actual&&!sessionChanged)return;
     pins[id]=actual;
     s.put('identity_pins',pins);
     final outgoing=s.bucket('sessions_out')..remove(deviceId);
