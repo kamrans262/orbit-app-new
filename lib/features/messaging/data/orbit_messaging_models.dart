@@ -73,15 +73,25 @@ class OrbitMailboxEnvelope {
       createdAt:DateTime.parse(j['created_at'] as String));
 }
 class OrbitEnvelopePage {
-  const OrbitEnvelopePage(this.items,this.nextCursor);
+  const OrbitEnvelopePage(this.items,this.nextCursor,{
+    this.redactedMessageIds=const <String>[],
+  });
   final List<OrbitMailboxEnvelope> items;
   final String? nextCursor;
+  // Opaque per-device deletion receipts; no message text or attachment key.
+  final List<String> redactedMessageIds;
   factory OrbitEnvelopePage.fromJson(Map<String,dynamic> j) {
     final rows=j['items'];
-    if(rows is! List)throw const FormatException('Invalid encrypted mailbox.');
+    final deleted=j['redacted_message_ids'];
+    if(rows is! List || (deleted!=null && deleted is! List)){
+      throw const FormatException('Invalid encrypted mailbox.');
+    }
     return OrbitEnvelopePage(rows.map((v)=>OrbitMailboxEnvelope.fromJson(
       Map<String,dynamic>.from(v as Map))).toList(growable:false),
-      j['next_cursor'] as String?);
+      j['next_cursor'] as String?,
+      redactedMessageIds:deleted==null
+        ?const <String>[]
+        :List<String>.from(deleted as List,growable:false));
   }
 }
 class OrbitMessageAccepted {
