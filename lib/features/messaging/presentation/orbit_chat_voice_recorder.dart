@@ -24,6 +24,7 @@ abstract final class OrbitChatVoiceRecorder {
     final recorder=AudioRecorder();
     File? output;
     var recording=false;
+    OrbitChatVoiceCapture? completed;
     var elapsed=Duration.zero;
     Timer? ticker;
     final clock=Stopwatch();
@@ -103,8 +104,8 @@ abstract final class OrbitChatVoiceRecorder {
           },
         ),
       );
-      if(result!=null)return result;
-      return null;
+      completed=result;
+      return result;
     }finally{
       ticker?.cancel();
       clock.stop();
@@ -112,20 +113,9 @@ abstract final class OrbitChatVoiceRecorder {
         try{await recorder.stop();}catch(_){}
       }
       await recorder.dispose();
-      // Successful recording is owned by the caller until upload completes.
-      // Cancelled/failed recordings must never survive in temporary storage.
-      final completedPath=output?.path;
-      if(completedPath!=null&&
-          !NavigatorAttemptVoiceCapture._keep.contains(completedPath)){
-        // The recorder caller takes ownership only on a successful pop.
-        // A successful path is retained by the static method below.
+      if(completed==null && output!=null && await output!.exists()){
+        try{await output!.delete();}catch(_){}
       }
     }
   }
-}
-
-/// Voice capture callers delete their own encrypted-upload source file.
-/// This marker is intentionally empty; it has no persistent settings.
-abstract final class NavigatorAttemptVoiceCapture {
-  static final Set<String> _keep=<String>{};
 }
