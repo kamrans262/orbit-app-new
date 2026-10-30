@@ -87,7 +87,8 @@ class OrbitMessagingMediaBridge {
       'video'=>OrbitMediaFormat.videoLimit,
       _=>0,
     };
-    if(byteCount<=0||byteCount>limit){
+    if((kind=='video' && (durationMs==null || durationMs<1 ||
+        durationMs>60000)) || byteCount<=0||byteCount>limit){
       throw const FormatException('Media exceeds encrypted upload limit.');
     }
     final recipients=await _eligibleRecipients(fresh,current);

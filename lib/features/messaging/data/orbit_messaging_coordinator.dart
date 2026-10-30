@@ -9,6 +9,7 @@ import 'orbit_messaging_api.dart';
 import 'orbit_messaging_cipher.dart';
 import 'orbit_messaging_local_vault.dart';
 import 'orbit_messaging_models.dart';
+import 'orbit_messaging_media_bridge.dart';
 
 /// Authenticated account-bound messaging orchestration.
 /// No E2EE fallback, no optimistic "sent", no plaintext HTTPS requests.
@@ -94,13 +95,41 @@ class OrbitMessagingCoordinator {
     final content=message.trim();
     if(content.isEmpty)throw ArgumentError('Enter a message.');
     if(content.runes.length>4096)throw ArgumentError('Message is too long.');
+    return sendEncrypted(thread,kind:'text',data:Uint8List.fromList(
+      utf8.encode(content)));
+  }
+
+  /// Attachment manifest contains only an opaque M6 media reference, never
+  /// a readable URL, content key, phone storage path or media plaintext.
+  Future<OrbitMessagingSendResult> sendMedia(
+      OrbitConversation thread,OrbitEncryptedChatMedia media) =>
+    sendEncrypted(thread,kind:media.kind,
+      data:Uint8List.fromList(utf8.encode(media.encode())));
+
+  Future<OrbitMessagingSendResult> sendEncrypted(
+      OrbitConversation thread,{required String kind,
+      required Uint8List data}) async {
+    if(!const ['text','emoji','image','voice','video','reaction','reply']
+        .contains(kind)||data.isEmpty||data.length>22000){
+      throw OrbitMessagingSecurityException('Unsupported encrypted payload.',422);
+    }
     await requireSecure();
+    // Server epoch changes on Circle membership/consent/approved-device
+    // changes. Requery before every group send; an old epoch is never reused.
+    if(thread.kind=='circle'){
+      if(thread.circleId==null)throw OrbitMessagingSecurityException(
+        'Circle is unavailable.',409);
+      final current=await api.circle(thread.circleId!);
+      if(current.id!=thread.id ||current.groupEpoch!=thread.groupEpoch){
+        throw OrbitMessagingSecurityException(
+          'Circle recipients changed. Refresh keys before sending.',409);
+      }
+    }
     final account=await api.owner;
     final devices=await _recipients(thread);
     final encrypted=await cipher.encrypt(
       conversationId:thread.id,groupEpoch:thread.groupEpoch,
-      kind:'text',plaintext:Uint8List.fromList(utf8.encode(content)),
-      recipients:devices,
+      kind:kind,plaintext:data,recipients:devices,
     );
     if(!cipher.independentlyVerified || encrypted.protocol!=cipher.protocol ||
        encrypted.envelopes.isEmpty ||
