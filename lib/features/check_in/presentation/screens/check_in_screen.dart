@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_circular_icon_button.dart';
+import '../../../../core/widgets/app_primary_button.dart';
+import '../../../circles/presentation/widgets/orbit_circle_sheet.dart';
 import '../../domain/models/check_in_models.dart';
 import '../widgets/check_in_activity_selector.dart';
 import '../widgets/check_in_pulse_control.dart';
@@ -20,16 +22,22 @@ class CheckInScreen extends StatefulWidget {
     this.initialActivityId,
     this.onCheckInSent,
     this.onMorePressed,
+    this.onViewHistory,
+    this.onViewFeed,
     super.key,
   });
 
   factory CheckInScreen.demo({
     ValueChanged<CheckInSubmission>? onCheckInSent,
     VoidCallback? onMorePressed,
+    VoidCallback? onViewHistory,
+    VoidCallback? onViewFeed,
   }) {
     return CheckInScreen(
       onCheckInSent: onCheckInSent,
       onMorePressed: onMorePressed,
+      onViewHistory: onViewHistory,
+      onViewFeed: onViewFeed,
       activities: const <CheckInActivityData>[
         CheckInActivityData(
           id: 'home',
@@ -110,6 +118,8 @@ class CheckInScreen extends StatefulWidget {
   final String? initialActivityId;
   final ValueChanged<CheckInSubmission>? onCheckInSent;
   final VoidCallback? onMorePressed;
+  final VoidCallback? onViewHistory;
+  final VoidCallback? onViewFeed;
 
   @override
   State<CheckInScreen> createState() => _CheckInScreenState();
@@ -118,6 +128,7 @@ class CheckInScreen extends StatefulWidget {
 class _CheckInScreenState extends State<CheckInScreen> {
   static const double _horizontalPadding = 20;
   String? _selectedActivityId;
+  String? _customText;
 
   @override
   void initState() {
@@ -136,7 +147,7 @@ class _CheckInScreenState extends State<CheckInScreen> {
 
   void _send(CheckInInteractionType interactionType) {
     final activity = _selectedActivity;
-    if (activity == null) {
+    if (activity == null && (_selectedActivityId != 'custom' || _customText == null)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Choose an activity first.'),
@@ -147,12 +158,41 @@ class _CheckInScreenState extends State<CheckInScreen> {
     }
     widget.onCheckInSent?.call(
       CheckInSubmission(
-        activityId: activity.id,
-        activityName: activity.label,
+        activityId: activity?.id ?? 'custom',
+        activityName: activity?.label ?? 'Custom',
+        customText: activity == null ? _customText : null,
         sentAt: DateTime.now(),
         interactionType: interactionType,
       ),
     );
+  }
+
+  Future<void> _customActivity() async {
+    final controller=TextEditingController(text:_customText??'');
+    try {
+      final answer=await showOrbitCircleSheet<String>(
+        context:context,title:'Custom Check-In',
+        builder:(sheet)=>Column(mainAxisSize:MainAxisSize.min,children:[
+          TextField(
+            key:const Key('check_in_custom_field'),
+            controller:controller,maxLines:3,maxLength:160,
+            autofocus:true,decoration:const InputDecoration(
+              hintText:'What are you up to?',border:OutlineInputBorder()),
+          ),
+          const SizedBox(height:12),
+          AppPrimaryButton(label:'Use this update',onPressed:(){
+            final text=controller.text.trim();
+            if(text.isEmpty||text.runes.length>160)return;
+            Navigator.of(sheet).pop(text);
+          }),
+        ]),
+      );
+      if(!mounted||answer==null)return;
+      setState((){
+        _customText=answer;
+        _selectedActivityId='custom';
+      });
+    }finally{controller.dispose();}
   }
 
   @override
@@ -234,8 +274,27 @@ class _CheckInScreenState extends State<CheckInScreen> {
                       onSelected: (activity) {
                         setState(() => _selectedActivityId = activity.id);
                       },
-                      onMorePressed: widget.onMorePressed,
+                      onMorePressed: widget.onMorePressed ?? () => _customActivity(),
                     ),
+                    if(_selectedActivityId=='custom' && _customText!=null) ...[
+                      const SizedBox(height:12),
+                      Text(_customText!,textAlign:TextAlign.center,
+                        maxLines:2,overflow:TextOverflow.ellipsis,
+                        style:const TextStyle(fontFamily:AppTypography.fontFamily,
+                          fontSize:13,color:AppColors.textMuted)),
+                    ],
+                    if(widget.onViewHistory!=null||widget.onViewFeed!=null) ...[
+                      const SizedBox(height:18),
+                      Wrap(alignment:WrapAlignment.center,spacing:12,
+                        children:[
+                          if(widget.onViewHistory!=null)
+                            TextButton(onPressed:widget.onViewHistory,
+                              child:const Text('My Check-Ins')),
+                          if(widget.onViewFeed!=null)
+                            TextButton(onPressed:widget.onViewFeed,
+                              child:const Text('Friends’ Check-Ins')),
+                        ]),
+                    ],
                   ],
                 ),
               ),
