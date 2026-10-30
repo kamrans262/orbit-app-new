@@ -56,6 +56,7 @@ class GroupChatMessage {
     this.readRecipientNames=const <String>[],
     this.deliveredDevices=0,
     this.isQueued=false,
+    this.isSending=false,
   });
 
   final String id;
@@ -83,10 +84,12 @@ class GroupChatMessage {
   final List<String> readRecipientNames;
   final int deliveredDevices;
   final bool isQueued;
+  final bool isSending;
   final DateTime createdAt;
 
   GroupChatMessage copyWith({
-    String? id,ChatReactionState? reactionState,String? text,bool? isQueued}) {
+    String? id,ChatReactionState? reactionState,String? text,
+    bool? isQueued,bool? isSending}) {
     return GroupChatMessage(
       id: id ?? this.id,
       type: type,
@@ -110,6 +113,7 @@ class GroupChatMessage {
       readRecipientNames:readRecipientNames,
       deliveredDevices:deliveredDevices,
       isQueued:isQueued??this.isQueued,
+      isSending:isSending??this.isSending,
       createdAt: createdAt,
     );
   }
