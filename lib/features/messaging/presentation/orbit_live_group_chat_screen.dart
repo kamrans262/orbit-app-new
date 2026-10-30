@@ -111,7 +111,9 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
           Duration? audioLength;
           if(manifest!=null){
             try {
-              bytes=await _media.open(manifest);
+              if(manifest.kind!='video'){
+                bytes=await _media.open(manifest);
+              }
               if(manifest.kind=='image'){
                 type=entry.senderId==owner
                   ?GroupChatMessageType.sentImage:GroupChatMessageType.receivedImage;
@@ -135,7 +137,7 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
               ?'You':names[entry.senderId]??'Circle member',
             isMine:entry.senderId==owner,text:text,
             imageBytes:manifest?.kind=='image'?bytes:null,
-            videoBytes:manifest?.kind=='video'?bytes:null,
+            videoMediaId:manifest?.kind=='video'?manifest!.mediaId:null,
             audioBytes:manifest?.kind=='voice'?bytes:null,
             audioDuration:audioLength,
             reactions:reactionState[entry.id]?.counts??const <String,int>{},
@@ -162,9 +164,17 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
       });
     }
   }
-  void _playVideo(Uint8List bytes){
-    Navigator.of(context).push<void>(AppFadeSlidePageRoute<void>(
-      builder:(_)=>OrbitPrivateChatVideoViewer(bytes:bytes)));
+  Future<void> _playVideo(String mediaId) async {
+    try{
+      final bytes=await _media.open(OrbitEncryptedChatMedia(
+        mediaId:mediaId,kind:'video',mime:'video/mp4',durationMs:null));
+      if(!mounted)return;
+      await Navigator.of(context).push<void>(AppFadeSlidePageRoute<void>(
+        builder:(_)=>OrbitPrivateChatVideoViewer(bytes:bytes)));
+    }catch(_){
+      if(mounted)ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content:Text('Encrypted video is unavailable or exceeds the preview limit.')));
+    }
   }
 
   Future<void> _more() async {

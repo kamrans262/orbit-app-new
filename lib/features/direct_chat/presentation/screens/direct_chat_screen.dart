@@ -201,7 +201,7 @@ class DirectChatScreen extends StatefulWidget {
   final DirectReactionCallback? onReactionChanged;
   final VoidCallback? onViewMap;
   final VoidCallback? onMorePressed;
-  final ValueChanged<Uint8List>? onOpenVideo;
+  final ValueChanged<String>? onOpenVideo;
   final bool liveMode;
   final bool encryptedTransportReady;
 
@@ -1022,8 +1022,8 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
       case DirectChatMessageType.futureVideo:
       case DirectChatMessageType.futureFile:
         return _FutureDirectMessage(message: message,
-          onTap:message.videoBytes!=null && widget.onOpenVideo!=null
-            ?()=>widget.onOpenVideo!(message.videoBytes!):null);
+          onTap:message.videoMediaId!=null && widget.onOpenVideo!=null
+            ?()=>widget.onOpenVideo!(message.videoMediaId!):null);
     }
   }
 

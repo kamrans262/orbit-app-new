@@ -47,6 +47,7 @@ class GroupChatMessage {
     this.images = const <String>[],
     this.imageBytes,
     this.videoBytes,
+    this.videoMediaId,
     this.reactionAvatars = const <String>[],
     this.reactionState = ChatReactionState.none,
     this.reactions=const <String,int>{},
@@ -66,6 +67,7 @@ class GroupChatMessage {
   final List<String> images;
   final Uint8List? imageBytes;
   final Uint8List? videoBytes;
+  final String? videoMediaId;
   final List<String> reactionAvatars;
   final String timestamp;
   final ChatReactionState reactionState;
@@ -88,6 +90,7 @@ class GroupChatMessage {
       images: images,
       imageBytes:imageBytes,
       videoBytes:videoBytes,
+      videoMediaId:videoMediaId,
       reactionAvatars: reactionAvatars,
       timestamp: timestamp,
       reactionState: reactionState ?? this.reactionState,

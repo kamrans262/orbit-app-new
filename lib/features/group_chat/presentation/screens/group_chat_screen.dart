@@ -170,7 +170,7 @@ class GroupChatScreen extends StatefulWidget {
   final ReactionChangedCallback? onReactionChanged;
   final GroupMessageReactionChangedCallback? onMessageReactionChanged;
   final VoidCallback? onMorePressed;
-  final ValueChanged<Uint8List>? onOpenVideo;
+  final ValueChanged<String>? onOpenVideo;
   final bool liveMode;
   final bool encryptedTransportReady;
 
@@ -736,8 +736,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       case GroupChatMessageType.futureFile:
       case GroupChatMessageType.futureSystemMessage:
         return _FutureMessagePlaceholder(message: message,
-          onTap:message.videoBytes!=null && widget.onOpenVideo!=null
-            ?()=>widget.onOpenVideo!(message.videoBytes!):null);
+          onTap:message.videoMediaId!=null && widget.onOpenVideo!=null
+            ?()=>widget.onOpenVideo!(message.videoMediaId!):null);
     }
   }
 
