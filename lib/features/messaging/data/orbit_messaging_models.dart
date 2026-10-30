@@ -102,6 +102,56 @@ class OrbitMessageAccepted {
     OrbitMessageAccepted(j['id'] as String,j['conversation_id'] as String,
       j['accepted']==true,j['delivered']==true);
 }
+/// A group sender-key packet is already authenticated and encrypted by the
+/// independently reviewed client protocol. This model never stores keys.
+class OrbitSenderKeyEnvelope {
+  const OrbitSenderKeyEnvelope({
+    required this.id,required this.senderId,required this.senderDeviceId,
+    required this.recipientKeyVersion,required this.groupEpoch,
+    required this.protocol,required this.ciphertextB64,required this.headerB64,
+  });
+  final String id,senderId,senderDeviceId,protocol,ciphertextB64,headerB64;
+  final int recipientKeyVersion,groupEpoch;
+  factory OrbitSenderKeyEnvelope.fromJson(Map<String,dynamic> j)=>
+    OrbitSenderKeyEnvelope(
+      id:j['id'] as String,
+      senderId:j['sender_id'] as String,
+      senderDeviceId:j['sender_device_id'] as String,
+      recipientKeyVersion:(j['recipient_key_version'] as num).toInt(),
+      groupEpoch:(j['group_epoch'] as num).toInt(),
+      protocol:j['protocol'] as String,
+      ciphertextB64:j['ciphertext_b64'] as String,
+      headerB64:j['protocol_header_b64'] as String,
+    );
+}
+
+class OrbitSenderKeyPage {
+  const OrbitSenderKeyPage(this.items,this.nextCursor,this.groupEpoch);
+  final List<OrbitSenderKeyEnvelope> items;
+  final String? nextCursor;
+  final int groupEpoch;
+  factory OrbitSenderKeyPage.fromJson(Map<String,dynamic> j){
+    final raw=j['items'];
+    if(raw is! List)throw const FormatException('Invalid sender-key mailbox.');
+    return OrbitSenderKeyPage(
+      raw.map((e)=>OrbitSenderKeyEnvelope.fromJson(
+        Map<String,dynamic>.from(e as Map))).toList(growable:false),
+      j['next_cursor'] as String?,
+      (j['group_epoch'] as num).toInt(),
+    );
+  }
+}
+
+class OrbitSenderKeySaved {
+  const OrbitSenderKeySaved(this.id,this.groupEpoch,this.stored);
+  final String id;
+  final int groupEpoch;
+  final bool stored;
+  factory OrbitSenderKeySaved.fromJson(Map<String,dynamic> j)=>
+    OrbitSenderKeySaved(j['id'] as String,
+      (j['group_epoch'] as num).toInt(),j['stored']==true);
+}
+
 class OrbitMessagingPublicKeyBundle {
   const OrbitMessagingPublicKeyBundle({required this.identityEd25519,
     required this.signedPrekeyX25519,required this.signature,
