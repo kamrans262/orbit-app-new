@@ -136,15 +136,23 @@ class DirectSentTextMessage extends StatelessWidget {
                 const SizedBox(width:3),
                 Icon(switch(message.deliveryStatus){
                   DirectChatDeliveryStatus.sending=>Icons.schedule_rounded,
+                  DirectChatDeliveryStatus.waiting=>Icons.cloud_off_outlined,
                   DirectChatDeliveryStatus.sent=>Icons.done_rounded,
                   DirectChatDeliveryStatus.delivered=>Icons.done_all_rounded,
                   DirectChatDeliveryStatus.read=>Icons.done_all_rounded,
                   DirectChatDeliveryStatus.failed=>Icons.error_outline_rounded,
                 },size:12,color:message.deliveryStatus==DirectChatDeliveryStatus.read
                   ?const Color(0xFF7C5CFC):const Color(0xFF8B95A1)),
-                if(message.deliveryStatus==DirectChatDeliveryStatus.sending)...[
+                if(message.deliveryStatus==DirectChatDeliveryStatus.sending ||
+                   message.deliveryStatus==DirectChatDeliveryStatus.waiting ||
+                   message.deliveryStatus==DirectChatDeliveryStatus.failed)...[
                   const SizedBox(width:3),
-                  const Text('Waiting',style:TextStyle(
+                  Text(switch(message.deliveryStatus){
+                    DirectChatDeliveryStatus.sending=>'Sending',
+                    DirectChatDeliveryStatus.waiting=>'Waiting',
+                    DirectChatDeliveryStatus.failed=>'Failed',
+                    _=>'',
+                  },style:const TextStyle(
                     fontFamily:AppTypography.fontFamily,fontSize:10,
                     color:Color(0xFF8B95A1))),
                 ],
