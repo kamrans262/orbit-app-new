@@ -121,11 +121,15 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
         await _retryQueuedCiphertext();
         final history=await _messenger.refresh(thread);
         next=await _renderHistory(history,thread,owner);
+        final redacted=_messenger.redactedMessageIds(owner,thread.id);
+        _olderMessages=_olderMessages.where(
+          (item)=>!redacted.contains(item.id)).toList(growable:false);
         final ids=next.map((item)=>item.id).toSet();
         next=[..._olderMessages.where((item)=>!ids.contains(item.id)),
           ...next]..sort((a,b)=>a.createdAt.compareTo(b.createdAt));
       }
       if(!mounted||epoch!=_epoch)return;
+      if(!ready)_olderMessages=const [];
       setState((){
         _owner=owner;_thread=thread;_cryptoReady=ready;
         _messages=next;_loading=false;
