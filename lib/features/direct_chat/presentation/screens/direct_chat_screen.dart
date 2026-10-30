@@ -803,7 +803,8 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
       case DirectChatMessageType.receivedAudio:
       case DirectChatMessageType.sentAudio:
         return ChatAudioMessage(
-          audioSource: message.audioUrl ?? 'assets/audio/group_voice_demo.wav',
+          audioSource: message.audioBytes!=null ? '' : (message.audioUrl ?? 'assets/audio/group_voice_demo.wav'),
+          audioBytes:message.audioBytes,
           duration: message.audioDuration ?? const Duration(seconds: 8),
           timestamp: message.timestamp,
           isMine: message.isMine,
@@ -812,6 +813,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
       case DirectChatMessageType.sentImage:
         return SingleImageMessage(
           source: message.imageUrl ?? '',
+          bytes:message.imageBytes,
           timestamp: message.timestamp,
           isMine: message.isMine,
         );

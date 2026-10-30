@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/chat/message_reactions.dart';
+import '../../../../core/chat/chat_audio_message.dart';
 import '../../../../core/chat/multiple_image_message.dart';
 import '../../../../core/chat/single_image_message.dart';
 
@@ -554,6 +555,11 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       case GroupChatMessageType.sentText:
         return SentTextMessage(message: message);
       case GroupChatMessageType.sentVoice:
+        if(message.audioBytes!=null){
+          return ChatAudioMessage(audioSource:'',audioBytes:message.audioBytes,
+            duration:message.audioDuration??const Duration(seconds:1),
+            timestamp:message.timestamp,isMine:message.isMine);
+        }
         return SentVoiceMessage(message: message);
       case GroupChatMessageType.receivedImage:
         return ReceivedImageMessage(
@@ -563,6 +569,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       case GroupChatMessageType.sentImage:
         return SingleImageMessage(
           source: message.images.isEmpty ? '' : message.images.first,
+          bytes:message.imageBytes,
           timestamp: message.timestamp,
           isMine: true,
         );
