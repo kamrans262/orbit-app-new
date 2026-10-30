@@ -12,6 +12,7 @@ import '../../../../core/chat/multiple_image_message.dart';
 import '../../../../core/chat/single_image_message.dart';
 
 import '../../../../app/theme/app_typography.dart';
+import '../../../../app/theme/app_colors.dart';
 import '../../domain/models/group_chat_models.dart';
 import '../widgets/chat_input_bar.dart';
 import '../../../messaging/presentation/orbit_chat_voice_recorder.dart';
@@ -723,14 +724,45 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                   ?OrbitMessageVisibilityObserver(
                     onDwell:()=>widget.onMessageViewed!(
                       message.readEnvelopeId!),
-                    child:_buildMessage(message))
-                  :_buildMessage(message),
+                    child:_buildMessageWithReceipts(message))
+                  :_buildMessageWithReceipts(message),
                 ),
               ),
             );
           },
         );
     }
+  }
+
+  Widget _buildMessageWithReceipts(GroupChatMessage message) {
+    final bubble=_buildMessage(message);
+    if(!widget.liveMode||!message.isMine)return bubble;
+    final readers=message.readRecipientNames;
+    if(readers.isEmpty && message.deliveredDevices<=0)return bubble;
+    final visible=readers.take(3).join(', ');
+    final additional=readers.length>3?readers.length-3:0;
+    final receipt=readers.isNotEmpty
+      ?'Read by $visible'+(additional>0?' +$additional more':'')
+      :'Delivered to ${message.deliveredDevices} device'+
+        (message.deliveredDevices==1?'':'s');
+    return Column(
+      mainAxisSize:MainAxisSize.min,
+      crossAxisAlignment:CrossAxisAlignment.stretch,
+      children:[
+        bubble,
+        Align(
+          alignment:Alignment.centerRight,
+          child:Padding(
+            padding:const EdgeInsets.only(top:4,right:6),
+            child:Text(receipt,maxLines:2,
+              overflow:TextOverflow.ellipsis,
+              style:const TextStyle(
+                fontFamily:AppTypography.fontFamily,fontSize:12,
+                color:AppColors.textMuted)),
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildMessage(GroupChatMessage message) {
