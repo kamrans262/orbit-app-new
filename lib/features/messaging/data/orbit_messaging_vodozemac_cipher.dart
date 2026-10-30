@@ -691,7 +691,6 @@ class OrbitMessagingVodozemacCipher implements OrbitMessagingCipher {
           };
           s.put('groups_in',received);
         }
-        final processed=s.bucket('processed_sender_keys');
         processed[distribution.id]=groupEpoch;
         if(processed.length>1000){
           throw OrbitMessagingSecurityException(
