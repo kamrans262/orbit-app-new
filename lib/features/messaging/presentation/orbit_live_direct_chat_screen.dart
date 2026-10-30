@@ -175,6 +175,14 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
         _error=ready?null:'The secure messaging protocol has not yet been '
           'verified on this device. No messages can be sent or decrypted.';
       });
+    }on OrbitMessagingSecurityException{
+      if(!mounted||epoch!=_epoch)return;
+      setState((){
+        _loading=false;_cryptoReady=false;_thread=null;
+        _messages=const [];
+        _error='An encrypted message could not be verified. '
+          'It was not acknowledged or deleted. Reconnect to retry safely.';
+      });
     }catch(_){
       if(!mounted||epoch!=_epoch)return;
       setState((){
