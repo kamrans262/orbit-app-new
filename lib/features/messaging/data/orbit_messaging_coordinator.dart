@@ -85,6 +85,7 @@ class OrbitMessagingCoordinator {
     final owner=await api.owner;
     await _serialMailbox(owner,'__crypto__',() async {
       await api.registerKeys(await cipher.setupDevice());
+      await cipher.confirmDeviceRegistration();
     });
   }
 
@@ -299,6 +300,9 @@ class OrbitMessagingCoordinator {
     await requireSecure();
     final owner=await api.owner;
     return _serialMailbox(owner,'__crypto__',() async {
+      if(thread.kind=='circle'){
+        await cipher.refreshGroupKeys(thread.id,thread.groupEpoch);
+      }
       final page=await api.sync(thread.id,limit:limit.clamp(1,200));
       _olderCursors.putIfAbsent(
         _pageKey(owner,thread.id),()=>page.nextCursor);
@@ -323,6 +327,9 @@ class OrbitMessagingCoordinator {
     return _serialMailbox(owner,'__crypto__',() async {
       final cursor=_olderCursors[key];
       if(cursor==null)return const <OrbitLocalDecryptedMessage>[];
+      if(thread.kind=='circle'){
+        await cipher.refreshGroupKeys(thread.id,thread.groupEpoch);
+      }
       final page=await api.envelopes(
         thread.id,cursor:cursor,limit:limit.clamp(1,50));
       final items=await _commitPage(thread,owner,page);
@@ -358,7 +365,10 @@ class OrbitMessagingCoordinator {
       // removed by an authenticated device-specific deletion receipt.
       if(_redactedByConversation[_pageKey(owner,thread.id)]
           ?.contains(encrypted.messageId)==true)continue;
-      if(await vault.hasMessage(thread.id,encrypted.messageId))continue;
+      if(await vault.hasMessage(thread.id,encrypted.messageId)){
+        await cipher.confirmStoredDecryption(encrypted.id);
+        continue;
+      }
       try{
         final decrypted=await cipher.decrypt(
           envelope:encrypted,conversationId:thread.id);
@@ -372,6 +382,7 @@ class OrbitMessagingCoordinator {
         // acknowledging receipt. Neither HTTP polling nor pagination may
         // advance the ratchet a second time for the same committed message.
         await vault.saveDecrypted(message);
+        await cipher.confirmStoredDecryption(encrypted.id);
         saved.add(message);
         if(encrypted.senderId!=owner){
           await api.delivered(thread.id,encrypted.id);
