@@ -162,20 +162,46 @@ class OrbitMessagingLocalVault {
     }
   }
 
-  Future<void> queue(OrbitQueuedCiphertext queued) async {
+  /// Atomically store encrypted transport bytes and an optional encrypted
+  /// local-only pending preview. No plaintext appears in SQLite indexes.
+  Future<void> queue(OrbitQueuedCiphertext queued,{
+      OrbitLocalDecryptedMessage? preview}) async {
     final owner=await _owner();
     final clientIndex=await _index(owner,queued.clientId);
     final conversationIndex=await _index(owner,queued.conversationId);
     final encrypted=await _seal(owner,clientIndex,
       jsonEncode(queued.toJson()));
+    String? previewIndex;
+    String? previewEncrypted;
+    if(preview!=null){
+      if(preview.id!='local-${queued.clientId}' ||
+          preview.conversationId!=queued.conversationId ||
+          preview.senderId!=owner){
+        throw OrbitMessagingSecurityException(
+          'Pending message owner or transport ID mismatch.',409);
+      }
+      previewIndex=await _index(owner,preview.id);
+      previewEncrypted=await _seal(owner,previewIndex,jsonEncode({
+        'message_id':preview.id,
+        'conversation_id':preview.conversationId,
+        'sender_id':preview.senderId,'kind':preview.kind,
+        'text':preview.text,
+        'created_at':preview.createdAt.toUtc().toIso8601String(),
+      }));
+    }
     await _db(owner,(db)=>db.transaction((txn) async{
       await _sameOwner(owner);
       await txn.insert('outbox',{
-        'client_id':clientIndex,
-        'conversation_id':conversationIndex,
-        'blob_enc':encrypted,
-        'created_at':0,
+        'client_id':clientIndex,'conversation_id':conversationIndex,
+        'blob_enc':encrypted,'created_at':0,
       },conflictAlgorithm:ConflictAlgorithm.ignore);
+      if(previewIndex!=null&&previewEncrypted!=null){
+        await txn.insert('history',{
+          'message_id':previewIndex,'conversation_id':conversationIndex,
+          'sender_id':'sealed','kind':'sealed',
+          'blob_enc':previewEncrypted,'created_at':0,
+        },conflictAlgorithm:ConflictAlgorithm.ignore);
+      }
     }));
   }
 
@@ -199,8 +225,13 @@ class OrbitMessagingLocalVault {
   Future<void> acknowledge(String clientId) async {
     final owner=await _owner();
     final index=await _index(owner,clientId);
-    await _db(owner,(db)=>db.delete('outbox',
-      where:'client_id = ?',whereArgs:[index]).then((_){}));
+    final localIndex=await _index(owner,'local-$clientId');
+    await _db(owner,(db)=>db.transaction((txn) async {
+      await _sameOwner(owner);
+      await txn.delete('outbox',where:'client_id = ?',whereArgs:[index]);
+      await txn.delete('history',where:'message_id = ?',
+        whereArgs:[localIndex]);
+    }));
   }
 
   /// Skip already-committed messages before invoking an irreversible
