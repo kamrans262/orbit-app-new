@@ -17,6 +17,7 @@ import '../../moments/data/orbit_moment_intent_vault.dart';
 import '../../moments/data/orbit_m7_background_retry.dart';
 import '../../moments/data/orbit_moment_audience_memory.dart';
 import '../../messaging/data/orbit_messaging_local_vault.dart';
+import '../../messaging/data/orbit_messaging_cipher.dart';
 
 enum OrbitRestoreState { signedOut, authenticated, deviceRegistration, deletionPending, offlineProfile }
 
@@ -253,6 +254,7 @@ class OrbitIdentityClient {
           try { await OrbitMomentAudienceMemory().purge(lastUser); }catch(_){}
           // A new account must never inherit the prior user's local chat keys.
           try { await OrbitMessagingLocalVault().purge(lastUser); }catch(_){}
+          try { await OrbitMessagingCipherRegistry.instance.purge(lastUser); }catch(_){}
         }
         await OrbitPresenceRuntime.instance.stop();
         await OrbitM5FirebaseChangeSource.instance.stop();
@@ -385,6 +387,7 @@ class OrbitIdentityClient {
       await OrbitM7BackgroundRetry.cancel();
       try { await OrbitMomentAudienceMemory().purge(oldMediaOwner); }catch(_){}
       try { await OrbitMessagingLocalVault().purge(oldMediaOwner); }catch(_){}
+      try { await OrbitMessagingCipherRegistry.instance.purge(oldMediaOwner); }catch(_){}
     }
     abandonStandardSignup();
     _access = null;

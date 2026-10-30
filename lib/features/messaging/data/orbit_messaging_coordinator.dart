@@ -17,7 +17,7 @@ class OrbitMessagingCoordinator {
     OrbitMessagingCipher? cipher,OrbitMessagingLocalVault? vault,
     OrbitCircleRepository? circles})
     : api=api??OrbitMessagingApi(),
-      cipher=cipher??const OrbitUnconfiguredMessagingCipher(),
+      cipher=cipher??OrbitMessagingCipherRegistry.instance.active,
       vault=vault??OrbitMessagingLocalVault(),
       circles=circles??OrbitCircleRepository();
 

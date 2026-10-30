@@ -29,6 +29,24 @@ abstract class OrbitMessagingCipher {
   Future<void> purgeForOwner(String owner);
 }
 
+/// A vetted provider may be installed only as part of a reviewed app
+/// release. This registry makes logout purge reach the same provider as
+/// send/decrypt; never leave private ratchet state behind when switching users.
+class OrbitMessagingCipherRegistry {
+  OrbitMessagingCipherRegistry._();
+  static final instance=OrbitMessagingCipherRegistry._();
+  OrbitMessagingCipher _active=const OrbitUnconfiguredMessagingCipher();
+  OrbitMessagingCipher get active=>_active;
+  void installReviewed(OrbitMessagingCipher provider){
+    if(!provider.independentlyVerified){
+      throw OrbitMessagingSecurityException(
+        'Unverified messaging protocol cannot be installed.',403);
+    }
+    _active=provider;
+  }
+  Future<void> purge(String owner)=>_active.purgeForOwner(owner);
+}
+
 /// No mock AES key-exchange, plaintext upload or false Signal branding.
 /// Screens can load authorized conversation metadata while disabled.
 class OrbitUnconfiguredMessagingCipher implements OrbitMessagingCipher {
