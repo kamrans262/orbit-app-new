@@ -17,6 +17,7 @@ class ChatInputBar extends StatefulWidget {
     this.onPickSingleImage,
     this.onPickMultipleImages,
     this.onPickSticker,
+    this.onRecordVoice,
     this.enabled = true,
     super.key,
   });
@@ -27,6 +28,7 @@ class ChatInputBar extends StatefulWidget {
   final VoidCallback? onPickSingleImage;
   final VoidCallback? onPickMultipleImages;
   final VoidCallback? onPickSticker;
+  final VoidCallback? onRecordVoice;
   final bool enabled;
 
   @override
@@ -109,6 +111,12 @@ class _ChatInputBarState extends State<ChatInputBar> {
                         _GroupAttachmentChoice.sticker,
                       ),
               ),
+              _AttachmentTile(
+                icon:Icons.mic_none_rounded,
+                label:'Voice message',
+                onTap:widget.onRecordVoice==null?null:()=>
+                  Navigator.pop(sheetContext,_GroupAttachmentChoice.voice),
+              ),
               const _AttachmentTile(
                 icon: Icons.attach_file_rounded,
                 label: 'Files (coming next)',
@@ -128,6 +136,9 @@ class _ChatInputBarState extends State<ChatInputBar> {
         break;
       case _GroupAttachmentChoice.sticker:
         widget.onPickSticker?.call();
+        break;
+      case _GroupAttachmentChoice.voice:
+        widget.onRecordVoice?.call();
         break;
     }
   }
@@ -249,7 +260,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
   }
 }
 
-enum _GroupAttachmentChoice { singleImage, multipleImages, sticker }
+enum _GroupAttachmentChoice { singleImage, multipleImages, sticker, voice }
 
 class _AttachmentTile extends StatelessWidget {
   const _AttachmentTile({required this.icon, required this.label, this.onTap});
