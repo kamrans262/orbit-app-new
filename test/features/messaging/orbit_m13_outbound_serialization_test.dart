@@ -150,7 +150,7 @@ void main(){
       expect(result.clientId,isNotEmpty);
       expect(vault.queued,[result.clientId]);
       expect(vault.acknowledged,isEmpty);
-      expect(vault.previews,singleElement);
+      expect(vault.previews,hasLength(1));
       expect(vault.previews.single.id,'local-'+result.clientId!);
       expect(vault.previews.single.text,'Offline private text');
     }
