@@ -33,6 +33,12 @@ class OrbitMessagingCoordinator {
   // Account-scoped server cursors. Repeated foreground refreshes must not
   // reset the older-message paging position to the newest messages.
   final Map<String,String?> _olderCursors=<String,String?>{};
+  final Map<String,Set<String>> _redactedByConversation={};
+
+  Set<String> redactedMessageIds(String owner,String conversation)=>
+    Set<String>.unmodifiable(
+      _redactedByConversation[_pageKey(owner,conversation)]??<String>{});
+
 
   // Serialize all cryptographic work per owner across ALL active chat
   // coordinators in one process. Polling, session setup, send, and backfill
@@ -320,6 +326,19 @@ class OrbitMessagingCoordinator {
 
   Future<List<OrbitLocalDecryptedMessage>> _commitPage(
       OrbitConversation thread,String owner,OrbitEnvelopePage page) async {
+    // Delete only messages this authenticated device actually received,
+    // as proved by the server's device-scoped deletion receipts. Delete the
+    // local cached copy before repainting or acknowledging newer envelopes.
+    if(page.redactedMessageIds.isNotEmpty){
+      final key=_pageKey(owner,thread.id);
+      _redactedByConversation.putIfAbsent(key,()=><String>{})
+          .addAll(page.redactedMessageIds);
+      for(final id in page.redactedMessageIds.toSet()){
+        if(await api.owner!=owner)throw OrbitMessagingSecurityException(
+          'Account changed before message redaction sync.',401);
+        await vault.deleteMessage(thread.id,id);
+      }
+    }
     final saved=<OrbitLocalDecryptedMessage>[];
     for(final encrypted in page.items.reversed){
       if(await api.owner!=owner)throw OrbitMessagingSecurityException(
@@ -378,6 +397,7 @@ class OrbitMessagingCoordinator {
       await cipher.purgeForOwner(owner);
       await vault.purge(owner);
       _olderCursors.removeWhere((key,_)=>key.startsWith('$owner|'));
+      _redactedByConversation.removeWhere((key,_)=>key.startsWith('$owner|'));
     });
   }
 }
