@@ -153,7 +153,8 @@ class OrbitMessagingMediaBridge {
     if(thread.kind=='direct'){
       final peer=thread.peerId;
       if(peer==null)throw OrbitIdentityException('Recipient unavailable.',409);
-      await _api.discoverKeys(peer);
+      // Eligibility lookup must not spend a one-time ratchet prekey.
+      await _api.discoverKeys(peer,consumeOneTimePrekey:false);
       return [peer];
     }
     final circle=thread.circleId;
@@ -164,7 +165,7 @@ class OrbitMessagingMediaBridge {
       for(final p in result.items){
         if(p.id==owner||p.role=='restricted')continue;
         try{
-          await _api.discoverKeys(p.id);
+          await _api.discoverKeys(p.id,consumeOneTimePrekey:false);
           eligible.add(p.id);
         }on OrbitIdentityException catch(err){
           if(err.statusCode!=404)rethrow;
