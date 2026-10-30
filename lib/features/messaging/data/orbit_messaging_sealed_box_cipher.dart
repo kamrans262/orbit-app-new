@@ -246,6 +246,15 @@ class OrbitMessagingSealedBoxCipher implements OrbitMessagingCipher {
     }
   }
   @override
+  Future<void> confirmDeviceRegistration() async {}
+  @override
+  Future<void> refreshGroupKeys(String conversationId,int groupEpoch) async {
+    throw OrbitMessagingSecurityException(
+      'Unaudited sealed-box envelopes cannot import Circle sender keys.',503);
+  }
+  @override
+  Future<void> confirmStoredDecryption(String envelopeId) async {}
+  @override
   Future<void> purgeForOwner(String owner) async {
     _verified.clear();
     await _store.purge(owner);
