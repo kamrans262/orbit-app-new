@@ -110,7 +110,7 @@ fn handle(v: &Value) -> CryptoResult<Value> {
                 return Err("native_prekey_capacity_exceeded");
             }
             let outcome = a.generate_one_time_keys(safe_count as usize);
-            if !outcome.discarded.is_empty() {
+            if !outcome.removed.is_empty() {
                 // Should be unreachable because of the capacity guard.
                 return Err("published_prekey_would_be_evicted");
             }
