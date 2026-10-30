@@ -17,6 +17,7 @@ import '../../domain/models/group_chat_models.dart';
 import '../widgets/chat_input_bar.dart';
 import '../../../messaging/presentation/orbit_chat_voice_recorder.dart';
 import '../../../messaging/presentation/orbit_message_visibility_observer.dart';
+import '../../../messaging/data/orbit_messaging_models.dart';
 import '../widgets/group_chat_header.dart';
 import '../widgets/received_image_message.dart';
 import '../widgets/received_text_message.dart';
@@ -358,6 +359,15 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         if(!mounted)return;
         setState((){
           _messages.add(message);
+          _replyTo=null;
+        });
+        _messageController.clear();
+        _scheduleScrollToBottom();
+      }on OrbitQueuedMessageException catch(queued){
+        if(!mounted)return;
+        setState((){
+          _messages.add(message.copyWith(
+            id:'local-'+queued.clientId,isQueued:true));
           _replyTo=null;
         });
         _messageController.clear();
@@ -738,13 +748,16 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     final bubble=_buildMessage(message);
     if(!widget.liveMode||!message.isMine)return bubble;
     final readers=message.readRecipientNames;
-    if(readers.isEmpty && message.deliveredDevices<=0)return bubble;
+    if(!message.isQueued &&
+       readers.isEmpty && message.deliveredDevices<=0)return bubble;
     final visible=readers.take(3).join(', ');
     final additional=readers.length>3?readers.length-3:0;
-    final receipt=readers.isNotEmpty
-      ?'Read by $visible'+(additional>0?' +$additional more':'')
-      :'Delivered to ${message.deliveredDevices} device'+
-        (message.deliveredDevices==1?'':'s');
+    final receipt=message.isQueued
+      ?'Waiting for connection'
+      :readers.isNotEmpty
+        ?'Read by $visible'+(additional>0?' +$additional more':'')
+        :'Delivered to ${message.deliveredDevices} device'+
+          (message.deliveredDevices==1?'':'s');
     return Column(
       mainAxisSize:MainAxisSize.min,
       crossAxisAlignment:CrossAxisAlignment.stretch,
