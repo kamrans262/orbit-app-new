@@ -250,7 +250,8 @@ class OrbitMessagingCoordinator {
   Future<OrbitMessagingRetryResult> retryPending() async {
     await requireSecure();
     final owner=await api.owner;
-    var sent=0;
+    return _serialMailbox(owner,'__crypto__',() async {
+      var sent=0;
     var needsReview=0;
     for(final pending in await vault.pending()){
       if(await api.owner!=owner)break;
@@ -270,7 +271,8 @@ class OrbitMessagingCoordinator {
         needsReview++;
       }
     }
-    return OrbitMessagingRetryResult(sent:sent,needsReview:needsReview);
+      return OrbitMessagingRetryResult(sent:sent,needsReview:needsReview);
+    });
   }
 
   /// Foreground sync of the newest server envelopes. Keep the original
