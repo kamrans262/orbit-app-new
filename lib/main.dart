@@ -10,10 +10,24 @@ import 'features/connectivity/presentation/orbit_connectivity_runtime.dart';
 import 'features/moments/data/orbit_m7_background_retry.dart';
 import 'features/create/presentation/screens/orbit_create_sheet.dart';
 import 'features/splash/presentation/screens/orbit_splash_gate.dart';
+import 'features/messaging/data/orbit_messaging_cipher.dart';
+import 'features/messaging/data/orbit_messaging_vodozemac_ffi.dart';
+import 'features/messaging/data/orbit_messaging_vodozemac_cipher.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   unawaited(OrbitM7BackgroundRetry.initialize());
+
+  // No dart-defines or demo cipher fallback. A vetted source-reviewed mobile
+  // release must explicitly approve and bundle the Apache vodozemac library
+  // before enabling E2EE. No silent switch to the unaudited sealed-box proof.
+  if(OrbitMessagingVodozemacCipher.releaseCertified){
+    final native=OrbitVodozemacNative.tryLoad();
+    if(native!=null){
+      OrbitMessagingCipherRegistry.instance.installReviewed(
+        OrbitMessagingVodozemacCipher(native:native));
+    }
+  }
 
   // One source of truth for the shared bottom-navigation + button.
   // Wherever the shared bottom bar is visible, + opens the Create sheet.
