@@ -261,6 +261,8 @@ class OrbitIdentityClient {
         if(lastUser != null && lastUser.isNotEmpty) {
           await _storage.delete(key: 'orbit.ping.pending.v1.$lastUser');
           await _storage.delete(key: 'orbit.ping.replykeys.v1.$lastUser');
+          await _storage.delete(key: 'orbit.checkin.pending.v1.$lastUser');
+          await _storage.delete(key: 'orbit.checkin.audience.v1.$lastUser');
         }
     await _storage.delete(key: _circlesCacheKey);
     await _storage.delete(key: _dashboardSafeKey);
@@ -392,6 +394,8 @@ class OrbitIdentityClient {
     if(oldMediaOwner != null && oldMediaOwner.isNotEmpty) {
       await _storage.delete(key: 'orbit.ping.pending.v1.$oldMediaOwner');
       await _storage.delete(key: 'orbit.ping.replykeys.v1.$oldMediaOwner');
+      await _storage.delete(key: 'orbit.checkin.pending.v1.$oldMediaOwner');
+      await _storage.delete(key: 'orbit.checkin.audience.v1.$oldMediaOwner');
     }
     await _storage.delete(key: _circlesCacheKey);
     await _storage.delete(key: _dashboardSafeKey);

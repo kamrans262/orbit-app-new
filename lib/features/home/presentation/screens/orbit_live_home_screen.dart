@@ -12,6 +12,7 @@ import '../../../moments/data/orbit_moment_repository.dart';
 import '../../../ping/data/orbit_ping_repository.dart';
 import '../../../ping/data/orbit_ping_notification_preferences.dart';
 import '../../../ping/presentation/navigation/orbit_ping_navigation.dart';
+import '../../../check_in/presentation/navigation/orbit_check_in_navigation.dart';
 import '../../../moments/data/orbit_m7_rollout.dart';
 import '../../../moments/data/orbit_moment_push_runtime.dart';
 import '../../../moments/presentation/screens/orbit_live_moment_viewer.dart';
@@ -451,6 +452,8 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
         iconColor:Color(0xFF4978F2),iconBackground:Color(0xFFE7EDFF)),
       QuickActionData(id:'moment',title:'Moment',icon:Icons.photo_camera_outlined,
         iconColor:Color(0xFF16B88B),iconBackground:Color(0xFFE2F8F2)),
+      QuickActionData(id:'checkin',title:'Check-In',icon:Icons.favorite_border_rounded,
+        iconColor:Color(0xFFD40D7B),iconBackground:Color(0xFFFFE9F5)),
     ],
     upcomingPlans:const <UpcomingPlanData>[],promoBanner:null,
     favoritePeople:_peopleWithPresence,recentMoments:_recent,
@@ -460,6 +463,9 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
     },
     onQuickActionPressed:(action){
       if(action.id=='moment'){_openMoments();}
+      else if(action.id=='checkin'){
+        unawaited(OrbitCheckInNavigation.openComposer(context));
+      }
       else if(action.id=='ping'){
         unawaited(OrbitPingNavigation.chooseFriend(context,
           social:_social,repository:_pings));

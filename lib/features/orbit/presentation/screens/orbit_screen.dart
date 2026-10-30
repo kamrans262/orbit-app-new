@@ -21,6 +21,7 @@ import '../../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../../direct_chat/presentation/screens/direct_chat_screen.dart';
 
 import '../../../check_in/presentation/screens/check_in_screen.dart';
+import '../../../check_in/presentation/navigation/orbit_check_in_navigation.dart';
 import '../../../location/data/orbit_location_models.dart';
 import '../../../location/presentation/orbit_location_live_map.dart';
 import '../../../friends/data/orbit_social_repository.dart';
@@ -238,7 +239,7 @@ class _OrbitScreenState extends State<OrbitScreen> {
                         scrollController: scrollController,
                         expanded: _expandedContent && _selectedPerson != null,
                         people: widget.liveMode?_authorizedPeople:widget.people,
-                        showCheckIn:!widget.liveMode,
+                        showCheckIn:true,
                         gifts: widget.gifts,
                         selectedPerson: _selectedPerson,
                         messageController: _messageController,
@@ -398,6 +399,10 @@ class _OrbitScreenState extends State<OrbitScreen> {
 
   void _openCheckIn() {
     FocusManager.instance.primaryFocus?.unfocus();
+    if(widget.liveMode){
+      unawaited(OrbitCheckInNavigation.openComposer(context));
+      return;
+    }
     Navigator.of(context).push<void>(
       AppFadeSlidePageRoute<void>(
         builder: (_) => CheckInScreen.demo(
