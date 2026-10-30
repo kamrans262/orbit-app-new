@@ -294,9 +294,10 @@ class OrbitMessagingVodozemacCipher implements OrbitMessagingCipher {
           'A trusted recipient device changed keys. Review before sending.',409);
       }
     }else{
-      // Claim an X3DH one-time key ONLY when a new Olm session is required.
-      final fresh=await _api.discoverKeys(recipient,
-        consumeOneTimePrekey:true);
+      // Claim a one-time prekey ONLY for this target device, never the
+      // entire multi-device roster. Remaining trusted devices keep their
+      // public handshake keys available until actually used.
+      final fresh=await _api.claimDeviceKey(recipient,remote.id);
       final matching=fresh.devices.where((d)=>d.id==remote.id).toList();
       if(matching.length!=1||matching.single.oneTimePublic==null){
         throw OrbitMessagingSecurityException(
