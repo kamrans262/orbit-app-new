@@ -168,31 +168,31 @@ class _CheckInScreenState extends State<CheckInScreen> {
   }
 
   Future<void> _customActivity() async {
-    final controller=TextEditingController(text:_customText??'');
-    try {
-      final answer=await showOrbitCircleSheet<String>(
-        context:context,title:'Custom Check-In',
-        builder:(sheet)=>Column(mainAxisSize:MainAxisSize.min,children:[
-          TextField(
-            key:const Key('check_in_custom_field'),
-            controller:controller,maxLines:3,maxLength:160,
-            autofocus:true,decoration:const InputDecoration(
-              hintText:'What are you up to?',border:OutlineInputBorder()),
-          ),
-          const SizedBox(height:12),
-          AppPrimaryButton(label:'Use this update',onPressed:(){
-            final text=controller.text.trim();
-            if(text.isEmpty||text.runes.length>160)return;
-            Navigator.of(sheet).pop(text);
-          }),
-        ]),
-      );
-      if(!mounted||answer==null)return;
-      setState((){
-        _customText=answer;
-        _selectedActivityId='custom';
-      });
-    }finally{controller.dispose();}
+    var draft=_customText??'';
+    final answer=await showOrbitCircleSheet<String>(
+      context:context,title:'Custom Check-In',
+      builder:(sheet)=>Column(mainAxisSize:MainAxisSize.min,children:[
+        TextFormField(
+          key:const Key('check_in_custom_field'),
+          initialValue:draft,
+          onChanged:(value)=>draft=value,
+          maxLines:3,maxLength:160,
+          autofocus:true,decoration:const InputDecoration(
+            hintText:'What are you up to?',border:OutlineInputBorder()),
+        ),
+        const SizedBox(height:12),
+        AppPrimaryButton(label:'Use this update',onPressed:(){
+          final text=draft.trim();
+          if(text.isEmpty||text.runes.length>160)return;
+          Navigator.of(sheet).pop(text);
+        }),
+      ]),
+    );
+    if(!mounted||answer==null)return;
+    setState((){
+      _customText=answer;
+      _selectedActivityId='custom';
+    });
   }
 
   @override
