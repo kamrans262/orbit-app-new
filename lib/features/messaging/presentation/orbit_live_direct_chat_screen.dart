@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'dart:typed_data';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -8,6 +10,7 @@ import '../../direct_chat/presentation/screens/direct_chat_screen.dart';
 import '../data/orbit_messaging_api.dart';
 import '../data/orbit_messaging_coordinator.dart';
 import '../data/orbit_messaging_models.dart';
+import '../data/orbit_messaging_media_bridge.dart';
 
 /// The original direct-chat widget, not a competing screen. Never constructs
 /// demo Miami messages or shows a fabricated live-location card.
@@ -25,6 +28,7 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
   late final OrbitMessagingApi _api=widget.messaging??OrbitMessagingApi();
   late final OrbitMessagingCoordinator _messenger=widget.coordinator??
     OrbitMessagingCoordinator(api:_api);
+  final OrbitMessagingMediaBridge _media=OrbitMessagingMediaBridge();
   List<DirectChatMessage> _messages=const [];
   OrbitConversation? _thread;
   String? _owner;
@@ -70,15 +74,48 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
       List<DirectChatMessage> next=const [];
       if(ready){
         final history=await _messenger.refresh(thread);
-        next=history.map((h)=>DirectChatMessage(
-          id:h.id,conversationId:thread.id,
-          type:h.senderId==owner
-            ?DirectChatMessageType.sentText:DirectChatMessageType.receivedText,
-          senderId:h.senderId,senderName:h.senderId==owner?'You':widget.peerName,
-          isMine:h.senderId==owner,text:h.text,
-          timestamp:_time(h.createdAt),createdAt:h.createdAt,
-          deliveryStatus:DirectChatDeliveryStatus.delivered,
-        )).toList(growable:false);
+        final loaded=<DirectChatMessage>[];
+        for(final entry in history){
+          final manifest=OrbitEncryptedChatMedia.tryParse(entry.text);
+          var type=entry.senderId==owner
+            ?DirectChatMessageType.sentText:DirectChatMessageType.receivedText;
+          String? text=entry.text;
+          Uint8List? bytes;
+          Duration? audioLength;
+          if(manifest!=null){
+            try{
+              bytes=await _media.open(manifest);
+              if(manifest.kind=='image'){
+                type=entry.senderId==owner
+                  ?DirectChatMessageType.sentImage:DirectChatMessageType.receivedImage;
+              }else if(manifest.kind=='voice'){
+                type=entry.senderId==owner
+                  ?DirectChatMessageType.sentAudio:DirectChatMessageType.receivedAudio;
+                audioLength=Duration(milliseconds:manifest.durationMs??1000);
+              }else {
+                type=DirectChatMessageType.futureVideo;
+              }
+              text=null;
+            }catch(_){
+              // Never render a private storage path, raw media manifest or
+              // public URL when recipient access or key is revoked.
+              type=entry.senderId==owner
+                ?DirectChatMessageType.sentText:DirectChatMessageType.receivedText;
+              text='Encrypted media is no longer available.';
+            }
+          }
+          loaded.add(DirectChatMessage(
+            id:entry.id,conversationId:thread.id,
+            type:type,senderId:entry.senderId,
+            senderName:entry.senderId==owner?'You':widget.peerName,
+            isMine:entry.senderId==owner,text:text,
+            audioBytes:manifest?.kind=='voice'?bytes:null,
+            audioDuration:audioLength,
+            imageBytes:manifest?.kind=='image'?bytes:null,
+            timestamp:_time(entry.createdAt),createdAt:entry.createdAt,
+            deliveryStatus:DirectChatDeliveryStatus.delivered));
+        }
+        next=loaded;
       }
       if(!mounted||epoch!=_epoch)return;
       setState((){
@@ -102,7 +139,25 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
     if(thread==null || !_cryptoReady){
       throw OrbitIdentityException('Encrypted messaging is unavailable.',503);
     }
-    final result=await _messenger.sendText(thread,message.text??'');
+    OrbitMessagingSendResult result;
+    if(message.type==DirectChatMessageType.sentImage){
+      final path=message.imageUrl;
+      if(path==null)throw OrbitIdentityException(
+        'Image is unavailable for encrypted upload.',422);
+      final manifest=await _media.stage(conversation:thread,
+        original:File(path),kind:'image');
+      result=await _messenger.sendMedia(thread,manifest);
+    }else if(message.type==DirectChatMessageType.sentAudio){
+      final path=message.audioUrl;
+      if(path==null)throw OrbitIdentityException(
+        'Voice recording is unavailable.',422);
+      final manifest=await _media.stage(conversation:thread,
+        original:File(path),kind:'voice',
+        durationMs:message.audioDuration?.inMilliseconds);
+      result=await _messenger.sendMedia(thread,manifest);
+    }else{
+      result=await _messenger.sendText(thread,message.text??'');
+    }
     if(result.queued){
       if(mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content:Text('Encrypted message queued offline; not yet delivered.')));
