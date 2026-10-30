@@ -32,9 +32,14 @@ void main(){
       ])))));
     await tester.pump(const Duration(milliseconds:900));
     expect(seen,0);
-    await tester.scrollUntilVisible(find.text('Private message'),250,
-      scrollable:find.byType(Scrollable).first);
-    await tester.pump(const Duration(milliseconds:900));
+    // An item only barely peeking into the scroll area must not count.
+    // Reveal the entire message so the test verifies dwell, not an
+    // arbitrary scrollUntilVisible stopping position or screen inset.
+    await tester.ensureVisible(find.text('Private message'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds:500));
+    expect(seen,0);
+    await tester.pump(const Duration(milliseconds:250));
     expect(seen,1);
     await tester.pump(const Duration(seconds:2));
     expect(seen,1);
