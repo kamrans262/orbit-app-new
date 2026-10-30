@@ -87,7 +87,8 @@ class _CiphertextVault extends OrbitMessagingLocalVault {
   final acknowledged=<String>[];
 
   @override
-  Future<void> queue(OrbitQueuedCiphertext item) async {
+  Future<void> queue(OrbitQueuedCiphertext item,{
+      OrbitLocalDecryptedMessage? preview}) async {
     queued.add(item.clientId);
   }
 
