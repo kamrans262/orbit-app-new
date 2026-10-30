@@ -144,6 +144,16 @@ class OrbitMessagingCoordinator {
     }
     final account=await api.owner;
     final devices=await _recipients(thread);
+    if(thread.kind=='circle'){
+      // A server epoch is an access-control fence, not an encryption key.
+      // Require the vetted provider to rotate and distribute actual group
+      // sender keys before this message can be encrypted.
+      await cipher.prepareGroupEpoch(
+        conversationId:thread.id,
+        groupEpoch:thread.groupEpoch,
+        recipients:devices,
+      );
+    }
     final encrypted=await cipher.encrypt(
       conversationId:thread.id,groupEpoch:thread.groupEpoch,
       kind:kind,plaintext:data,recipients:devices,
