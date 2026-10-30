@@ -53,6 +53,8 @@ class GroupChatScreen extends StatefulWidget {
     this.hasMoreOlder = false,
     this.onReactionChanged,
     this.onMessageReactionChanged,
+    this.liveMode = false,
+    this.encryptedTransportReady = false,
     super.key,
   });
 
@@ -154,6 +156,8 @@ class GroupChatScreen extends StatefulWidget {
   final bool hasMoreOlder;
   final ReactionChangedCallback? onReactionChanged;
   final GroupMessageReactionChangedCallback? onMessageReactionChanged;
+  final bool liveMode;
+  final bool encryptedTransportReady;
 
   @override
   State<GroupChatScreen> createState() => _GroupChatScreenState();
@@ -250,39 +254,53 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   }
 
   Future<void> _sendCurrentMessage() async {
-    final text = _messageController.text.trim();
-    if (text.isEmpty) return;
-
-    final now = DateTime.now();
-    final optimisticMessage = GroupChatMessage(
-      id: 'local-${now.microsecondsSinceEpoch}',
-      type: GroupChatMessageType.sentText,
-      senderId: widget.currentUserId,
-      senderName: 'You',
-      isMine: true,
-      text: text,
-      timestamp: _formatTime(now),
-      createdAt: now,
+    final text=_messageController.text.trim();
+    if(text.isEmpty)return;
+    if(widget.liveMode && (!widget.encryptedTransportReady ||
+        widget.onSendMessage==null)) {
+      _sendError('Verified encryption is required before sending.');
+      return;
+    }
+    final now=DateTime.now();
+    final message=GroupChatMessage(
+      id:'local-'+now.microsecondsSinceEpoch.toString(),
+      type:GroupChatMessageType.sentText,senderId:widget.currentUserId,
+      senderName:'You',isMine:true,text:text,
+      timestamp:_formatTime(now),createdAt:now,
     );
-
-    setState(() => _messages.add(optimisticMessage));
+    if(widget.liveMode){
+      try{
+        await widget.onSendMessage!(text);
+        if(!mounted)return;
+        setState(()=>_messages.add(message));
+        _messageController.clear();
+        _scheduleScrollToBottom();
+      }catch(_){
+        if(mounted)_sendError('Encrypted message was not confirmed as sent.');
+      }
+      return;
+    }
+    setState(()=>_messages.add(message));
     _messageController.clear();
     _scheduleScrollToBottom();
-
-    try {
+    try{
       await widget.onSendMessage?.call(text);
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Message could not be sent.')),
-      );
+    }catch(_){
+      if(mounted)_sendError('Message could not be sent.');
     }
+  }
+  void _sendError(String message){
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(content:Text(message)));
   }
 
   Future<void> _changeReaction(
     GroupChatMessage message,
     ChatReactionState next,
   ) async {
+    if(widget.liveMode && widget.onReactionChanged==null){
+      _sendError('Encrypted reactions are not yet available.');return;
+    }
     final index = _messages.indexWhere((item) => item.id == message.id);
     if (index < 0) return;
     final previous = _messages[index];
@@ -296,6 +314,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   }
 
   Future<void> _pickSingleImage() async {
+    if(widget.liveMode){_sendError('Encrypted group media is not yet available.');return;}
     try {
       final image = await _imagePicker.pickImage(
         source: ImageSource.gallery,
@@ -327,6 +346,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   }
 
   Future<void> _pickMultipleImages() async {
+    if(widget.liveMode){_sendError('Encrypted group media is not yet available.');return;}
     try {
       final images = await _imagePicker.pickMultiImage(imageQuality: 90);
       if (!mounted || images.isEmpty) return;
@@ -358,6 +378,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   }
 
   Future<void> _pickSticker() async {
+    if(widget.liveMode){_sendError('Encrypted group stickers are not yet available.');return;}
     final sticker = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.white,
@@ -414,6 +435,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     ChatReactionKind? selected,
     Map<ChatReactionKind, int> counts,
   ) async {
+    if(widget.liveMode && widget.onMessageReactionChanged==null){
+      _sendError('Encrypted reactions are not yet available.');return;
+    }
     await widget.onMessageReactionChanged?.call(
       message.id,
       selected?.backendValue,
@@ -442,6 +466,14 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
               onVideoCall: widget.onVideoCall,
             ),
             Expanded(child: _buildBody()),
+            if(widget.liveMode && !widget.encryptedTransportReady)
+              const Padding(
+                padding:EdgeInsets.symmetric(horizontal:20,vertical:8),
+                child:Text('This Circle chat requires verified end-to-end encryption.',
+                  textAlign:TextAlign.center,
+                  style:TextStyle(fontFamily:AppTypography.fontFamily,
+                    fontSize:12,color:Color(0xFF64748B))),
+              ),
             SafeArea(
               top: false,
               child: ChatInputBar(
@@ -451,6 +483,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                 onPickSingleImage: _pickSingleImage,
                 onPickMultipleImages: _pickMultipleImages,
                 onPickSticker: _pickSticker,
+                enabled: !widget.liveMode || widget.encryptedTransportReady,
               ),
             ),
           ],
