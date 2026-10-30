@@ -17,6 +17,7 @@ class ChatInputBar extends StatefulWidget {
     this.onPickSingleImage,
     this.onPickMultipleImages,
     this.onPickSticker,
+    this.enabled = true,
     super.key,
   });
 
@@ -26,6 +27,7 @@ class ChatInputBar extends StatefulWidget {
   final VoidCallback? onPickSingleImage;
   final VoidCallback? onPickMultipleImages;
   final VoidCallback? onPickSticker;
+  final bool enabled;
 
   @override
   State<ChatInputBar> createState() => _ChatInputBarState();
@@ -63,6 +65,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
   }
 
   Future<void> _openPicker() async {
+    if(!widget.enabled)return;
     final choice = await showModalBottomSheet<_GroupAttachmentChoice>(
       context: context,
       backgroundColor: Colors.white,
@@ -152,7 +155,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
               shape: const CircleBorder(),
               child: InkWell(
                 key: ChatInputKeys.plusButton,
-                onTap: _openPicker,
+                onTap: widget.enabled ? _openPicker : null,
                 customBorder: const CircleBorder(),
                 child: const SizedBox.square(
                   dimension: 44,
@@ -173,6 +176,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
                 key: ChatInputKeys.textField,
                 controller: widget.controller,
                 focusNode: widget.focusNode,
+                enabled: widget.enabled,
                 minLines: 1,
                 maxLines: 4,
                 textInputAction: TextInputAction.newline,
@@ -218,7 +222,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
                   clipBehavior: Clip.antiAlias,
                   child: InkWell(
                     key: ChatInputKeys.sendButton,
-                    onTap: _hasText ? widget.onSend : null,
+                    onTap: _hasText && widget.enabled ? widget.onSend : null,
                     customBorder: const CircleBorder(),
                     child: SizedBox.square(
                       dimension: 44,
