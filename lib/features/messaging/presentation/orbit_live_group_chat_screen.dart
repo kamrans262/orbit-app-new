@@ -165,6 +165,14 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
         _error=ready?null:'This Circle requires verified end-to-end encryption '
           'and a reviewed messaging key before encrypted messages can be exchanged.';
       });
+    }on OrbitMessagingSecurityException{
+      if(!mounted||epoch!=_epoch)return;
+      setState((){
+        _thread=null;_participants=const [];_messages=const [];
+        _loading=false;_cryptoReady=false;
+        _error='A Circle message could not be verified. '
+          'It was not acknowledged or deleted. Reconnect to retry safely.';
+      });
     }catch(_){
       if(!mounted||epoch!=_epoch)return;
       setState((){
