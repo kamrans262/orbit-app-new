@@ -14,6 +14,7 @@ import '../../../ping/data/orbit_ping_notification_preferences.dart';
 import '../../../ping/presentation/navigation/orbit_ping_navigation.dart';
 import '../../../check_in/presentation/navigation/orbit_check_in_navigation.dart';
 import '../../../check_in/data/orbit_check_in_repository.dart';
+import '../../../messaging/presentation/orbit_messaging_navigation.dart';
 import '../../../moments/data/orbit_m7_rollout.dart';
 import '../../../moments/data/orbit_moment_push_runtime.dart';
 import '../../../moments/presentation/screens/orbit_live_moment_viewer.dart';
@@ -458,6 +459,8 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
         iconColor:Color(0xFF16B88B),iconBackground:Color(0xFFE2F8F2)),
       QuickActionData(id:'checkin',title:'Check-In',icon:Icons.favorite_border_rounded,
         iconColor:Color(0xFFD40D7B),iconBackground:Color(0xFFFFE9F5)),
+      QuickActionData(id:'messages',title:'Messages',icon:Icons.chat_bubble_outline_rounded,
+        iconColor:Color(0xFF7C3AED),iconBackground:Color(0xFFF2EAFE)),
     ],
     upcomingPlans:const <UpcomingPlanData>[],promoBanner:null,
     favoritePeople:_peopleWithPresence,recentMoments:_recent,
@@ -467,6 +470,9 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
     },
     onQuickActionPressed:(action){
       if(action.id=='moment'){_openMoments();}
+      else if(action.id=='messages'){
+        unawaited(OrbitMessagingNavigation.openList(context));
+      }
       else if(action.id=='checkin'){
         unawaited(OrbitCheckInNavigation.openComposer(context));
       }
