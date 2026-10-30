@@ -47,7 +47,7 @@ void main() {
     await tester.tap(find.text('Home'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(CheckInKeys.heart));
-    await tester.pump(const Duration(milliseconds: 2400));
+    await tester.pumpAndSettle(const Duration(milliseconds: 250));
 
     expect(submission?.activityId, 'home');
     expect(submission?.interactionType, CheckInInteractionType.tap);
@@ -91,7 +91,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Working on the garden'),findsOneWidget);
     await tester.tap(find.byKey(CheckInKeys.heart));
-    await tester.pump(const Duration(milliseconds:2400));
+    await tester.pumpAndSettle(const Duration(milliseconds:250));
     expect(sent?.activityId,'custom');
     expect(sent?.customText,'Working on the garden');
     expect(tester.takeException(),isNull);
