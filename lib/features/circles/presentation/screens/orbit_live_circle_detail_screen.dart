@@ -19,6 +19,7 @@ import '../../../ping/presentation/navigation/orbit_ping_navigation.dart';
 import '../../../ping/data/orbit_ping_repository.dart';
 import '../../../auth/data/orbit_identity_client.dart';
 import '../../../messaging/presentation/orbit_messaging_navigation.dart';
+import '../../../messaging/data/orbit_messaging_api.dart';
 import '../widgets/orbit_circle_confirmation.dart';
 import '../../../presence/presentation/orbit_presence_runtime.dart';
 import '../../../presence/presentation/orbit_circle_presence_settings_screen.dart';
@@ -36,6 +37,7 @@ class _OrbitLiveCircleDetailScreenState extends State<OrbitLiveCircleDetailScree
     with WidgetsBindingObserver {
   late final OrbitCircleRepository _repo=widget.repository ?? OrbitCircleRepository();
   final OrbitPingRepository _pings=OrbitPingRepository();
+  final OrbitMessagingApi _messaging=OrbitMessagingApi();
   OrbitCircle? _circle;
   List<OrbitCircleMember> _members = const [];
   bool _loading = true;
@@ -150,8 +152,12 @@ class _OrbitLiveCircleDetailScreenState extends State<OrbitLiveCircleDetailScree
     final me=await OrbitIdentityClient.instance.currentLocalSocialOwner();
     if(!mounted)return;
     bool consent=false;
+    bool messageConsent=false;
     if(member.id==me){
       try{consent=await _pings.circleConsent(widget.circleId);}catch(_){}
+      try{
+        messageConsent=(await _messaging.consent(widget.circleId))['enabled']==true;
+      }catch(_){}
     }
     if(!mounted)return;
     await showOrbitCircleSheet<void>(
@@ -232,6 +238,48 @@ class _OrbitLiveCircleDetailScreenState extends State<OrbitLiveCircleDetailScree
                 }
               },
             ),
+          if(member.id==me) ...<Widget>[
+            const SizedBox(height:10),
+            OrbitCircleSheetAction(
+              title:messageConsent
+                ?'Revoke Circle Messaging Permission'
+                :'Allow Circle Messaging',
+              icon:Icons.chat_bubble_outline_rounded,
+              destructive:messageConsent,
+              onTap:() async {
+                Navigator.of(sheet).pop();
+                if(!mounted)return;
+                final approved=await showOrbitCircleConfirmation(
+                  context:context,
+                  title:messageConsent
+                    ?'Revoke Circle Messaging?'
+                    :'Allow Circle Messaging?',
+                  description:messageConsent
+                    ?'Stop sending and receiving new Circle messages. '
+                      'Members will no longer access messages through your consent.'
+                    :'Allow this Circle to exchange encrypted messages with you. '
+                      'Your global message privacy, membership and other members’ '
+                      'individual permission must also allow it.',
+                  confirmLabel:messageConsent?'Revoke Permission':'Allow Messaging',
+                  cancelLabel:'Cancel',destructive:messageConsent,
+                );
+                if(!approved||!mounted)return;
+                try{
+                  await _messaging.setConsent(widget.circleId,!messageConsent);
+                  if(mounted){
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content:Text(messageConsent
+                        ?'Circle messaging permission revoked.'
+                        :'Circle messaging permission granted.')));
+                    await _refresh(silent:true);
+                  }
+                }catch(_){
+                  if(mounted)ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content:Text('Messaging permission could not be changed. Check global privacy and Circle membership.')));
+                }
+              },
+            ),
+          ],
           const SizedBox(height: 10),
           AppActionRow(
             leadingIcon: Icons.shield_outlined,
