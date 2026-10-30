@@ -557,7 +557,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
   ) async {
     if(widget.liveMode && widget.onReactionChanged==null){
       _showError('Encrypted reactions are not yet available.');
-      return;
+      throw StateError('Encrypted reaction callback is unavailable.');
     }
     final index = _messages.indexWhere((item) => item.id == message.id);
     if (index < 0) return;

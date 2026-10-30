@@ -191,6 +191,19 @@ class OrbitMessagingLocalVault {
       where:'client_id = ?',whereArgs:[clientId]).then((_){}));
   }
 
+  /// Skip already-committed messages before invoking an irreversible
+  /// ratchet decrypt. Server HTTPS polling may replay the same envelope.
+  Future<bool> hasMessage(String conversation,String messageId) async {
+    final owner=await _owner();
+    return _db(owner,(db) async {
+      final rows=await db.query('history',columns:['message_id'],
+        where:'message_id = ? AND conversation_id = ?',
+        whereArgs:[messageId,conversation],limit:1);
+      await _sameOwner(owner);
+      return rows.isNotEmpty;
+    });
+  }
+
   Future<void> saveDecrypted(OrbitLocalDecryptedMessage message) async {
     final owner=await _owner();
     final encrypted=await _seal(owner,message.id,message.text);

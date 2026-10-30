@@ -175,6 +175,9 @@ class OrbitMessagingCoordinator {
     for(final encrypted in page.items.reversed){
       if(await api.owner!=owner)throw OrbitMessagingSecurityException(
         'Account changed while decrypting.',401);
+      // A ratchet ciphertext can be consumed once. This account-bound lookup
+      // avoids double-advancing sender/receiver chains on HTTPS refresh.
+      if(await vault.hasMessage(thread.id,encrypted.messageId))continue;
       try{
         final decrypted=await cipher.decrypt(
           envelope:encrypted,conversationId:thread.id);

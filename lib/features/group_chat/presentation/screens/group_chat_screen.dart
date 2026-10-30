@@ -299,7 +299,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     ChatReactionState next,
   ) async {
     if(widget.liveMode && widget.onReactionChanged==null){
-      _sendError('Encrypted reactions are not yet available.');return;
+      _sendError('Encrypted reactions are not yet available.');
+      throw StateError('Encrypted reaction callback is unavailable.');
     }
     final index = _messages.indexWhere((item) => item.id == message.id);
     if (index < 0) return;
@@ -436,7 +437,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     Map<ChatReactionKind, int> counts,
   ) async {
     if(widget.liveMode && widget.onMessageReactionChanged==null){
-      _sendError('Encrypted reactions are not yet available.');return;
+      _sendError('Encrypted reactions are not yet available.');
+      throw StateError('Encrypted reaction callback is unavailable.');
     }
     await widget.onMessageReactionChanged?.call(
       message.id,
