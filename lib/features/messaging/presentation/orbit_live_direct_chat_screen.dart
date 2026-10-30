@@ -13,6 +13,8 @@ import '../data/orbit_messaging_models.dart';
 import '../data/orbit_messaging_media_bridge.dart';
 import '../data/orbit_messaging_reactions.dart';
 import '../data/orbit_messaging_replies.dart';
+import '../../../core/navigation/app_fade_slide_page_route.dart';
+import 'orbit_private_chat_video_viewer.dart';
 import 'orbit_messaging_conversation_actions.dart';
 
 /// The original direct-chat widget, not a competing screen. Never constructs
@@ -126,6 +128,7 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
             audioBytes:manifest?.kind=='voice'?bytes:null,
             audioDuration:audioLength,
             imageBytes:manifest?.kind=='image'?bytes:null,
+            videoBytes:manifest?.kind=='video'?bytes:null,
             reactions:reactionState[entry.id]?.counts??const <String,int>{},
             selectedReaction:reactionState[entry.id]?.selected,
             timestamp:_time(entry.createdAt),createdAt:entry.createdAt,
@@ -150,6 +153,11 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
       });
     }
   }
+  void _playVideo(Uint8List bytes){
+    Navigator.of(context).push<void>(AppFadeSlidePageRoute<void>(
+      builder:(_)=>OrbitPrivateChatVideoViewer(bytes:bytes)));
+  }
+
   Future<void> _more() async {
     final thread=_thread;
     if(thread==null)return;
@@ -170,6 +178,15 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
         'Image is unavailable for encrypted upload.',422);
       final manifest=await _media.stage(conversation:thread,
         original:File(path),kind:'image');
+      result=await _messenger.sendMedia(thread,manifest);
+    }else if(message.type==DirectChatMessageType.futureVideo){
+      final path=message.videoUrl;
+      if(path==null||message.videoDuration==null){
+        throw OrbitIdentityException('Video is unavailable.',422);
+      }
+      final manifest=await _media.stage(conversation:thread,
+        original:File(path),kind:'video',
+        durationMs:message.videoDuration!.inMilliseconds);
       result=await _messenger.sendMedia(thread,manifest);
     }else if(message.type==DirectChatMessageType.sentAudio){
       final path=message.audioUrl;
@@ -220,6 +237,7 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
     errorMessage:_error??'This conversation is unavailable.',
     onRetry:_load,onBack:()=>Navigator.of(context).maybePop(),
     onMorePressed:_more,
+    onOpenVideo:_playVideo,
     onSendMessage:_send,
     onReactionChanged:_react,
     liveMode:true,encryptedTransportReady:_cryptoReady,

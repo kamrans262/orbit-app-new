@@ -14,6 +14,8 @@ import '../data/orbit_messaging_models.dart';
 import '../data/orbit_messaging_media_bridge.dart';
 import '../data/orbit_messaging_reactions.dart';
 import '../data/orbit_messaging_replies.dart';
+import '../../../core/navigation/app_fade_slide_page_route.dart';
+import 'orbit_private_chat_video_viewer.dart';
 import 'orbit_messaging_conversation_actions.dart';
 
 /// Wraps the APPROVED GroupChatScreen with live M5 Circle roles and M13
@@ -133,6 +135,7 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
               ?'You':names[entry.senderId]??'Circle member',
             isMine:entry.senderId==owner,text:text,
             imageBytes:manifest?.kind=='image'?bytes:null,
+            videoBytes:manifest?.kind=='video'?bytes:null,
             audioBytes:manifest?.kind=='voice'?bytes:null,
             audioDuration:audioLength,
             reactions:reactionState[entry.id]?.counts??const <String,int>{},
@@ -159,6 +162,11 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
       });
     }
   }
+  void _playVideo(Uint8List bytes){
+    Navigator.of(context).push<void>(AppFadeSlidePageRoute<void>(
+      builder:(_)=>OrbitPrivateChatVideoViewer(bytes:bytes)));
+  }
+
   Future<void> _more() async {
     final thread=_thread;
     if(thread==null)return;
@@ -233,6 +241,7 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
     errorMessage:_error??'Circle chat unavailable.',
     onRetry:_load,onBack:()=>Navigator.of(context).maybePop(),
     onMorePressed:_more,
+    onOpenVideo:_playVideo,
     onVideoCall:_videoUnavailable,
     onSendMessage:_send,
     onSendReply:_sendReply,
