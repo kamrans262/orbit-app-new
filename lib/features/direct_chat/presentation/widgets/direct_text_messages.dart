@@ -142,6 +142,12 @@ class DirectSentTextMessage extends StatelessWidget {
                   DirectChatDeliveryStatus.failed=>Icons.error_outline_rounded,
                 },size:12,color:message.deliveryStatus==DirectChatDeliveryStatus.read
                   ?const Color(0xFF7C5CFC):const Color(0xFF8B95A1)),
+                if(message.deliveryStatus==DirectChatDeliveryStatus.sending)...[
+                  const SizedBox(width:3),
+                  const Text('Waiting',style:TextStyle(
+                    fontFamily:AppTypography.fontFamily,fontSize:10,
+                    color:Color(0xFF8B95A1))),
+                ],
               ],
             ]),
           ),
