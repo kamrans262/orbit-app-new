@@ -391,6 +391,16 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     }
   }
 
+  void _showQueuedAttachment(String kind,String clientId){
+    if(!mounted)return;
+    final message=_newMine(type:DirectChatMessageType.sentText,
+      text:'Encrypted '+kind+' waiting for connection');
+    setState(()=>_messages.add(message.copyWith(
+      id:'local-'+clientId,
+      deliveryStatus:DirectChatDeliveryStatus.sending)));
+    _scrollToLatest();
+  }
+
   Future<void> _openAttachments() async {
     if(widget.liveMode && (!widget.encryptedTransportReady ||
         widget.onSendMessage==null)){
@@ -489,6 +499,8 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
         await widget.onSendMessage?.call(message);
       }
       _scrollToLatest();
+    } on OrbitQueuedMessageException catch(queued){
+      _showQueuedAttachment('image',queued.clientId);
     } catch (_) {
       if (mounted) _showError('Encrypted image could not be sent.');
     }
@@ -522,6 +534,8 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
         await widget.onSendMessage?.call(message);
       }
       _scrollToLatest();
+    } on OrbitQueuedMessageException catch(queued){
+      _showQueuedAttachment('image',queued.clientId);
     } catch (_) {
       if (mounted) _showError('One or more encrypted images were not sent.');
     }
@@ -579,6 +593,8 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
       if(!mounted)return;
       setState(()=>_messages.add(message));
       _scrollToLatest();
+    }on OrbitQueuedMessageException catch(queued){
+      _showQueuedAttachment('sticker',queued.clientId);
     }catch(_){
       if(mounted)_showError('Encrypted sticker was not confirmed.');
     }
@@ -616,6 +632,8 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
         await widget.onSendMessage?.call(message);
       }
       _scrollToLatest();
+    }on OrbitQueuedMessageException catch(queued){
+      _showQueuedAttachment('video',queued.clientId);
     }catch(_){
       if(mounted)_showError('Video was not confirmed as encrypted and sent.');
     }finally{
@@ -645,6 +663,8 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
       setState(()=>_messages.add(message.copyWith(
         deliveryStatus:DirectChatDeliveryStatus.sent)));
       _scrollToLatest();
+    }on OrbitQueuedMessageException catch(queued){
+      _showQueuedAttachment('voice',queued.clientId);
     }catch(_){
       if(mounted)_showError('Encrypted voice message was not confirmed.');
     }finally{
