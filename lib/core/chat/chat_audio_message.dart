@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -10,6 +11,7 @@ import '../../app/theme/app_typography.dart';
 class ChatAudioMessage extends StatefulWidget {
   const ChatAudioMessage({
     required this.audioSource,
+    this.audioBytes,
     required this.duration,
     required this.timestamp,
     required this.isMine,
@@ -18,6 +20,7 @@ class ChatAudioMessage extends StatefulWidget {
   });
 
   final String audioSource;
+  final Uint8List? audioBytes;
   final Duration duration;
   final String timestamp;
   final bool isMine;
@@ -46,7 +49,8 @@ class _ChatAudioMessageState extends State<ChatAudioMessage> {
   @override
   void didUpdateWidget(covariant ChatAudioMessage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.audioSource != widget.audioSource) {
+    if (oldWidget.audioSource != widget.audioSource ||
+        !identical(oldWidget.audioBytes,widget.audioBytes)) {
       _player?.stop();
       _position = Duration.zero;
       _duration = widget.duration;
@@ -99,9 +103,12 @@ class _ChatAudioMessageState extends State<ChatAudioMessage> {
         await player.resume();
       } else {
         final sourceValue = widget.audioSource.trim();
-        if (sourceValue.isEmpty) return;
+        if (sourceValue.isEmpty &&
+            (widget.audioBytes==null||widget.audioBytes!.isEmpty)) return;
         final Source source;
-        if (sourceValue.startsWith('http://') ||
+        if(widget.audioBytes!=null && widget.audioBytes!.isNotEmpty){
+          source=BytesSource(widget.audioBytes!);
+        }else if (sourceValue.startsWith('http://') ||
             sourceValue.startsWith('https://')) {
           source = UrlSource(sourceValue);
         } else {

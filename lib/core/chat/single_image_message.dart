@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -8,6 +9,7 @@ import 'chat_media_image.dart';
 class SingleImageMessage extends StatelessWidget {
   const SingleImageMessage({
     required this.source,
+    this.bytes,
     required this.timestamp,
     required this.isMine,
     this.onTap,
@@ -15,6 +17,7 @@ class SingleImageMessage extends StatelessWidget {
   });
 
   final String source;
+  final Uint8List? bytes;
   final String timestamp;
   final bool isMine;
   final VoidCallback? onTap;
@@ -35,7 +38,7 @@ class SingleImageMessage extends StatelessWidget {
               borderRadius: BorderRadius.circular(16),
               child: SizedBox(
                 width: width,
-                child: ChatMediaImage(source: source, fit: BoxFit.cover),
+                child: ChatMediaImage(source: source,bytes:bytes,fit: BoxFit.cover),
               ),
             ),
           ),

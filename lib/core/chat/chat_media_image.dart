@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -5,6 +6,7 @@ import 'package:flutter/material.dart';
 class ChatMediaImage extends StatelessWidget {
   const ChatMediaImage({
     required this.source,
+    this.bytes,
     this.fit = BoxFit.cover,
     this.width,
     this.height,
@@ -13,6 +15,7 @@ class ChatMediaImage extends StatelessWidget {
   });
 
   final String source;
+  final Uint8List? bytes;
   final BoxFit fit;
   final double? width;
   final double? height;
@@ -20,6 +23,10 @@ class ChatMediaImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if(bytes!=null && bytes!.isNotEmpty) {
+      return Image.memory(bytes!,width:width,height:height,fit:fit,
+        alignment:alignment,errorBuilder:(context,error,stack)=>_fallback());
+    }
     final value = source.trim();
     if (value.isEmpty) return _fallback();
 

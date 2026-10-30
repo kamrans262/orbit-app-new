@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 enum GroupChatViewState { loading, loaded, error }
 
 enum GroupChatMessageType {
@@ -40,8 +41,10 @@ class GroupChatMessage {
     this.senderAvatar,
     this.text,
     this.audioUrl,
+    this.audioBytes,
     this.audioDuration,
     this.images = const <String>[],
+    this.imageBytes,
     this.reactionAvatars = const <String>[],
     this.reactionState = ChatReactionState.none,
   });
@@ -54,8 +57,10 @@ class GroupChatMessage {
   final bool isMine;
   final String? text;
   final String? audioUrl;
+  final Uint8List? audioBytes;
   final Duration? audioDuration;
   final List<String> images;
+  final Uint8List? imageBytes;
   final List<String> reactionAvatars;
   final String timestamp;
   final ChatReactionState reactionState;
@@ -71,8 +76,10 @@ class GroupChatMessage {
       isMine: isMine,
       text: text ?? this.text,
       audioUrl: audioUrl,
+      audioBytes:audioBytes,
       audioDuration: audioDuration,
       images: images,
+      imageBytes:imageBytes,
       reactionAvatars: reactionAvatars,
       timestamp: timestamp,
       reactionState: reactionState ?? this.reactionState,

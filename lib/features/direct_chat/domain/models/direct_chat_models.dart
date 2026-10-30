@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 enum DirectChatViewState { loading, loaded, error }
 
 enum DirectChatMessageType {
@@ -45,8 +46,10 @@ class DirectChatMessage {
     this.senderAvatar,
     this.text,
     this.audioUrl,
+    this.audioBytes,
     this.audioDuration,
     this.imageUrl,
+    this.imageBytes,
     this.images = const <String>[],
     this.latitude,
     this.longitude,
@@ -66,8 +69,10 @@ class DirectChatMessage {
   final bool isMine;
   final String? text;
   final String? audioUrl;
+  final Uint8List? audioBytes;
   final Duration? audioDuration;
   final String? imageUrl;
+  final Uint8List? imageBytes;
   final List<String> images;
   final double? latitude;
   final double? longitude;
@@ -96,8 +101,10 @@ class DirectChatMessage {
       isMine: isMine,
       text: text ?? this.text,
       audioUrl: audioUrl,
+      audioBytes:audioBytes,
       audioDuration: audioDuration,
       imageUrl: imageUrl,
+      imageBytes:imageBytes,
       images: images,
       latitude: latitude,
       longitude: longitude,
