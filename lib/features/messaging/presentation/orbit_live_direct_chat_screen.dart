@@ -165,6 +165,7 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
     // delivered and explicit recipient-opt-in read acknowledgements.
     final status=<String,DirectChatDeliveryStatus>{};
     final newest=history.where((e)=>e.senderId==owner &&
+      !e.id.startsWith('local-') &&
       (e.kind=='text'||e.kind=='reply')).toList().reversed.take(5);
     for(final entry in newest){
       try{
@@ -233,7 +234,9 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
         timestamp:_time(entry.createdAt),createdAt:entry.createdAt,
         showDeliveryStatus:entry.senderId==owner,
         deliveryStatus:entry.senderId==owner
-          ?status[entry.id]??DirectChatDeliveryStatus.sent
+          ?entry.id.startsWith('local-')
+            ?DirectChatDeliveryStatus.sending
+            :status[entry.id]??DirectChatDeliveryStatus.sent
           :DirectChatDeliveryStatus.delivered));
     }
     return loaded;
@@ -374,7 +377,11 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
     if(result.queued){
       if(mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content:Text('Encrypted message queued offline; not yet delivered.')));
-      throw OrbitIdentityException('Queued, not acknowledged.',503);
+      if(result.clientId==null){
+        throw OrbitMessagingSecurityException(
+          'Encrypted queue did not return a stable retry identifier.',503);
+      }
+      throw OrbitQueuedMessageException(result.clientId!);
     }
     // Replace the temporary bubble with canonical encrypted server message IDs,
     // making reply/reaction targets valid across every approved device.
