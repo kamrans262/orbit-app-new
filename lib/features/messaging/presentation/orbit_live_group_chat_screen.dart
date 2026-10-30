@@ -12,6 +12,7 @@ import '../data/orbit_messaging_api.dart';
 import '../data/orbit_messaging_coordinator.dart';
 import '../data/orbit_messaging_models.dart';
 import '../data/orbit_messaging_media_bridge.dart';
+import '../data/orbit_messaging_reactions.dart';
 
 /// Wraps the APPROVED GroupChatScreen with live M5 Circle roles and M13
 /// ciphertext mailbox. No generated participants or fake media messages.
@@ -86,8 +87,10 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
       List<GroupChatMessage> next=const [];
       if(ready){
         final history=await _messenger.refresh(conversation);
+        final reactionState=OrbitReactionReducer.fold(history,localUser:owner);
         final loaded=<GroupChatMessage>[];
         for(final entry in history){
+          if(entry.kind=='reaction')continue;
           final manifest=OrbitEncryptedChatMedia.tryParse(entry.text);
           var type=entry.senderId==owner
             ?GroupChatMessageType.sentText:GroupChatMessageType.receivedText;
@@ -122,6 +125,8 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
             imageBytes:manifest?.kind=='image'?bytes:null,
             audioBytes:manifest?.kind=='voice'?bytes:null,
             audioDuration:audioLength,
+            reactions:reactionState[entry.id]?.counts??const <String,int>{},
+            selectedReaction:reactionState[entry.id]?.selected,
             timestamp:_time(entry.createdAt),createdAt:entry.createdAt));
         }
         next=loaded;
@@ -166,6 +171,17 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
       'Encrypted media is pending delivery, not yet acknowledged.',503);
   }
 
+  Future<void> _react(String messageId,String? selected,
+      Map<String,int> counts) async {
+    final thread=_thread;
+    if(thread==null||!_cryptoReady)throw OrbitIdentityException(
+      'Encrypted messaging is unavailable.',503);
+    final result=await _messenger.sendReaction(
+      thread,targetId:messageId,selected:selected);
+    if(!result.accepted||result.queued)throw OrbitIdentityException(
+      'Encrypted reaction was queued but not delivered.',503);
+  }
+
   void _videoUnavailable(){
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
       content:Text('Encrypted video calls are not provisioned.')));
@@ -183,6 +199,7 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
     onVideoCall:_videoUnavailable,
     onSendMessage:_send,
     onSendMedia:_sendAttachment,
+    onMessageReactionChanged:_react,
     liveMode:true,encryptedTransportReady:_cryptoReady,
   );
 }

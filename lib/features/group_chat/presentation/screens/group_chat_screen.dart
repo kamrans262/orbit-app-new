@@ -571,6 +571,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
               child: MessageReactionRegion(
                 messageId: message.id,
                 isMine: message.isMine,
+                initialSelected:_reactionFromValue(message.selectedReaction),
+                initialCounts:_reactionCountValues(message.reactions),
                 onChanged: (id, selected, counts) =>
                     _changeMessageReaction(message, selected, counts),
                 child: _buildMessage(message),
@@ -625,6 +627,22 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       case GroupChatMessageType.futureSystemMessage:
         return _FutureMessagePlaceholder(message: message);
     }
+  }
+
+  static ChatReactionKind? _reactionFromValue(String? value){
+    if(value==null)return null;
+    for(final kind in ChatReactionKind.values){
+      if(kind.backendValue==value)return kind;
+    }
+    return null;
+  }
+  static Map<ChatReactionKind,int> _reactionCountValues(Map<String,int> values){
+    final result=<ChatReactionKind,int>{};
+    for(final entry in values.entries){
+      final kind=_reactionFromValue(entry.key);
+      if(kind!=null && entry.value>0)result[kind]=entry.value;
+    }
+    return result;
   }
 
   static String _formatTime(DateTime time) {

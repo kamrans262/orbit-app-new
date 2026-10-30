@@ -11,6 +11,7 @@ import '../data/orbit_messaging_api.dart';
 import '../data/orbit_messaging_coordinator.dart';
 import '../data/orbit_messaging_models.dart';
 import '../data/orbit_messaging_media_bridge.dart';
+import '../data/orbit_messaging_reactions.dart';
 
 /// The original direct-chat widget, not a competing screen. Never constructs
 /// demo Miami messages or shows a fabricated live-location card.
@@ -74,8 +75,10 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
       List<DirectChatMessage> next=const [];
       if(ready){
         final history=await _messenger.refresh(thread);
+        final reactionState=OrbitReactionReducer.fold(history,localUser:owner);
         final loaded=<DirectChatMessage>[];
         for(final entry in history){
+          if(entry.kind=='reaction')continue;
           final manifest=OrbitEncryptedChatMedia.tryParse(entry.text);
           var type=entry.senderId==owner
             ?DirectChatMessageType.sentText:DirectChatMessageType.receivedText;
@@ -112,6 +115,8 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
             audioBytes:manifest?.kind=='voice'?bytes:null,
             audioDuration:audioLength,
             imageBytes:manifest?.kind=='image'?bytes:null,
+            reactions:reactionState[entry.id]?.counts??const <String,int>{},
+            selectedReaction:reactionState[entry.id]?.selected,
             timestamp:_time(entry.createdAt),createdAt:entry.createdAt,
             deliveryStatus:DirectChatDeliveryStatus.delivered));
         }
@@ -165,6 +170,16 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
     }
   }
 
+  Future<void> _react(String id,String? selected,Map<String,int> counts) async {
+    final thread=_thread;
+    if(thread==null||!_cryptoReady)throw OrbitIdentityException(
+      'Encrypted messaging is not available.',503);
+    final result=await _messenger.sendReaction(
+      thread,targetId:id,selected:selected);
+    if(!result.accepted||result.queued)throw OrbitIdentityException(
+      'Encrypted reaction was queued but not delivered.',503);
+  }
+
   @override
   Widget build(BuildContext context)=>DirectChatScreen(
     person:DirectChatPerson(id:widget.peerId,name:widget.peerName,
@@ -178,6 +193,7 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
     errorMessage:_error??'This conversation is unavailable.',
     onRetry:_load,onBack:()=>Navigator.of(context).maybePop(),
     onSendMessage:_send,
+    onReactionChanged:_react,
     liveMode:true,encryptedTransportReady:_cryptoReady,
     hasMoreOlder:false,
   );
