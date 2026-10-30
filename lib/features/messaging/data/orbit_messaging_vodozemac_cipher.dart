@@ -287,7 +287,11 @@ class OrbitMessagingVodozemacCipher implements OrbitMessagingCipher {
       ?Map<String,dynamic>.from(inbound[inKey] as Map):null;
     final out=outbound[remote.id] is Map
       ?Map<String,dynamic>.from(outbound[remote.id] as Map):null;
-    final isOutbound=known==null && out!=null && out['sid']==sid;
+    // A sender receives its own other-device/same-device mailbox copy.
+    // Its outbound chain cannot decrypt a copy sent to itself; establish
+    // the matching inbound prekey chain instead.
+    final isOutbound=known==null && out!=null && out['sid']==sid &&
+      remote.id!=s.device;
     final record=known??(isOutbound?out:null);
     late Map<String,dynamic> decrypted;
     if(record!=null){
@@ -527,8 +531,15 @@ class OrbitMessagingVodozemacCipher implements OrbitMessagingCipher {
         final processed=s.bucket('processed_sender_keys');
         if(processed.containsKey(distribution.id))continue;
         if(distribution.senderDeviceId==s.device){
-          // The sender's own inbound Megolm copy was saved atomically when
-          // the outbound group chain was created.
+          // Sender's own inbound Megolm copy was committed when the
+          // outbound chain was created; fail if its session was lost.
+          final group=s.bucket('groups_out')[conversationId];
+          if(group is! Map || group['epoch']!=groupEpoch ||
+              !s.bucket('groups_in').containsKey(
+                '${s.device}|${group['session_id']}')){
+            throw OrbitMessagingSecurityException(
+              'Local authenticated Circle sender-key state is missing.',409);
+          }
           processed[distribution.id]=groupEpoch;
           s.put('processed_sender_keys',processed);
           await _save(s);
