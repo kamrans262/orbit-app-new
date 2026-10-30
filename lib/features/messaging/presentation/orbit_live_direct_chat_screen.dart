@@ -13,6 +13,7 @@ import '../data/orbit_messaging_models.dart';
 import '../data/orbit_messaging_media_bridge.dart';
 import '../data/orbit_messaging_reactions.dart';
 import '../data/orbit_messaging_replies.dart';
+import 'orbit_messaging_conversation_actions.dart';
 
 /// The original direct-chat widget, not a competing screen. Never constructs
 /// demo Miami messages or shows a fabricated live-location card.
@@ -149,6 +150,14 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
       });
     }
   }
+  Future<void> _more() async {
+    final thread=_thread;
+    if(thread==null)return;
+    await const OrbitMessagingConversationActions().openDirect(context,
+      thread:thread,peerId:widget.peerId,
+      onClose:()=>Navigator.of(context).maybePop());
+  }
+
   Future<void> _send(DirectChatMessage message) async {
     final thread=_thread;
     if(thread==null || !_cryptoReady){
@@ -205,6 +214,7 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
       _error!=null?DirectChatViewState.error:DirectChatViewState.loaded,
     errorMessage:_error??'This conversation is unavailable.',
     onRetry:_load,onBack:()=>Navigator.of(context).maybePop(),
+    onMorePressed:_more,
     onSendMessage:_send,
     onReactionChanged:_react,
     liveMode:true,encryptedTransportReady:_cryptoReady,

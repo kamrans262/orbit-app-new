@@ -14,6 +14,7 @@ import '../data/orbit_messaging_models.dart';
 import '../data/orbit_messaging_media_bridge.dart';
 import '../data/orbit_messaging_reactions.dart';
 import '../data/orbit_messaging_replies.dart';
+import 'orbit_messaging_conversation_actions.dart';
 
 /// Wraps the APPROVED GroupChatScreen with live M5 Circle roles and M13
 /// ciphertext mailbox. No generated participants or fake media messages.
@@ -158,6 +159,13 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
       });
     }
   }
+  Future<void> _more() async {
+    final thread=_thread;
+    if(thread==null)return;
+    await const OrbitMessagingConversationActions().openCircle(context,
+      thread:thread,onClose:()=>Navigator.of(context).maybePop());
+  }
+
   Future<void> _send(String text) async {
     final thread=_thread;
     if(thread==null || !_cryptoReady)throw OrbitIdentityException(
@@ -215,6 +223,7 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
       _error!=null?GroupChatViewState.error:GroupChatViewState.loaded,
     errorMessage:_error??'Circle chat unavailable.',
     onRetry:_load,onBack:()=>Navigator.of(context).maybePop(),
+    onMorePressed:_more,
     onVideoCall:_videoUnavailable,
     onSendMessage:_send,
     onSendReply:_sendReply,
