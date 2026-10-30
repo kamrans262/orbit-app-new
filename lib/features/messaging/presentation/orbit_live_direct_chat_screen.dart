@@ -47,6 +47,7 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
   bool _otherTyping=false;
   bool _checkingTyping=false;
   int _epoch=0;
+  DateTime? _lastOutboxRetry;
 
   @override
   void initState(){
@@ -81,6 +82,22 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
     final hour=local.hour>12?local.hour-12:local.hour==0?12:local.hour;
     return hour.toString()+':'+local.minute.toString().padLeft(2,'0');
   }
+  Future<void> _retryQueuedCiphertext() async {
+    final now=DateTime.now();
+    if(_lastOutboxRetry!=null &&
+        now.difference(_lastOutboxRetry!)<const Duration(minutes:1))return;
+    _lastOutboxRetry=now;
+    final outcome=await _messenger.retryPending();
+    if(outcome.needsReview>0 && mounted &&
+        ModalRoute.of(context)?.isCurrent==true){
+      // Keep failed ciphertext in the encrypted local queue. Never mark it
+      // delivered or automatically re-encrypt after consent/key revocation.
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(
+        content:Text('Some queued encrypted messages need review '
+          'before they can be delivered.')));
+    }
+  }
+
   Future<void> _load() async {
     final epoch=++_epoch;
     if(_thread==null && mounted)setState(()=>_loading=true);
@@ -90,6 +107,7 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
       final ready=await _messenger.secureReady();
       List<DirectChatMessage> next=const [];
       if(ready){
+        await _retryQueuedCiphertext();
         final history=await _messenger.refresh(thread);
         next=await _renderHistory(history,thread,owner);
         final ids=next.map((item)=>item.id).toSet();
