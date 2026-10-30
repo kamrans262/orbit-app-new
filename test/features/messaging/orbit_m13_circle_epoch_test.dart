@@ -34,6 +34,14 @@ class _CountingCipher extends OrbitUnconfiguredMessagingCipher {
   }
 }
 void main(){
+  test('Circle encryption cannot bypass mandatory sender-key rotation',() async{
+    final provider=_CountingCipher();
+    await expectLater(provider.prepareGroupEpoch(
+      conversationId:'circle-thread',groupEpoch:8,recipients:const {}),
+      throwsA(isA<OrbitMessagingSecurityException>()));
+    expect(provider.encryptInvoked,isFalse);
+  });
+
   test('Circle membership/consent epoch change blocks encryption before device keys',() async{
     final cipher=_CountingCipher();
     final coordinator=OrbitMessagingCoordinator(
