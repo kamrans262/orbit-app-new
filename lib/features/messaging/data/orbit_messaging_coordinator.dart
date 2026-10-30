@@ -34,9 +34,9 @@ class OrbitMessagingCoordinator {
   // reset the older-message paging position to the newest messages.
   final Map<String,String?> _olderCursors=<String,String?>{};
 
-  // Serialize durable decryption and cursor advancement across ALL active
-  // chat coordinators in one process. Concurrent poll/resume/scroll callbacks
-  // must not advance the same per-device ratchet twice.
+  // Serialize all cryptographic work per owner across ALL active chat
+  // coordinators in one process. Polling, session setup, send, and backfill
+  // must not concurrently mutate the same device ratchet or sender-key state.
   static final Map<String,Future<void>> _mailboxLocks={};
   Future<T> _serialMailbox<T>(String owner,String conversation,
       Future<T> Function() operation) async {
@@ -76,7 +76,10 @@ class OrbitMessagingCoordinator {
   /// Public keys are not registered unless it passed independent verification.
   Future<void> setupDevice() async {
     await requireSecure();
-    await api.registerKeys(await cipher.setupDevice());
+    final owner=await api.owner;
+    await _serialMailbox(owner,'__crypto__',() async {
+      await api.registerKeys(await cipher.setupDevice());
+    });
   }
 
   Future<Map<String,OrbitMessagingKeyDirectory>> _recipients(
@@ -172,7 +175,7 @@ class OrbitMessagingCoordinator {
     // chats cannot encrypt against the same recipient device ratchet state.
     // Only ciphertext and state durably committed by the reviewed provider
     // may leave this critical section.
-    return _serialMailbox(account,'__outbound__',
+    return _serialMailbox(account,'__crypto__',
       ()=>_sendEncryptedLocked(thread,kind,data,account));
   }
 
@@ -276,7 +279,7 @@ class OrbitMessagingCoordinator {
       OrbitConversation thread,{int limit=200}) async {
     await requireSecure();
     final owner=await api.owner;
-    return _serialMailbox(owner,thread.id,() async {
+    return _serialMailbox(owner,'__crypto__',() async {
       final page=await api.sync(thread.id,limit:limit.clamp(1,200));
       _olderCursors.putIfAbsent(
         _pageKey(owner,thread.id),()=>page.nextCursor);
@@ -298,7 +301,7 @@ class OrbitMessagingCoordinator {
       // Initialize a cursor without pretending older messages are absent.
       await refresh(thread);
     }
-    return _serialMailbox(owner,thread.id,() async {
+    return _serialMailbox(owner,'__crypto__',() async {
       final cursor=_olderCursors[key];
       if(cursor==null)return const <OrbitLocalDecryptedMessage>[];
       final page=await api.envelopes(
@@ -368,8 +371,12 @@ class OrbitMessagingCoordinator {
   }
 
   Future<void> purge(String owner) async {
-    await cipher.purgeForOwner(owner);
-    await vault.purge(owner);
+    if(owner.isEmpty)return;
+    await _serialMailbox(owner,'__crypto__',() async {
+      await cipher.purgeForOwner(owner);
+      await vault.purge(owner);
+      _olderCursors.removeWhere((key,_)=>key.startsWith('$owner|'));
+    });
   }
 }
 class OrbitMessagingSendResult {
