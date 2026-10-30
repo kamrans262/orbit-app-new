@@ -21,7 +21,8 @@ abstract final class MessagesKeys {
 }
 
 class MessagesScreen extends StatefulWidget {
-  const MessagesScreen({required this.friends, this.onBack, super.key});
+  const MessagesScreen({required this.friends, this.onBack,
+    this.onOpenFriend, this.isLoading=false, this.statusMessage, super.key});
 
   factory MessagesScreen.demo({VoidCallback? onBack}) {
     return MessagesScreen(
@@ -53,6 +54,9 @@ class MessagesScreen extends StatefulWidget {
 
   final List<FriendMemberData> friends;
   final VoidCallback? onBack;
+  final ValueChanged<FriendMemberData>? onOpenFriend;
+  final bool isLoading;
+  final String? statusMessage;
 
   @override
   State<MessagesScreen> createState() => _MessagesScreenState();
@@ -121,7 +125,18 @@ class _MessagesScreenState extends State<MessagesScreen> {
               ),
               const SizedBox(height: _headerToListGap),
               Expanded(
-                child: visibleFriends.isEmpty
+                child: widget.isLoading
+                    ? const Center(child:CircularProgressIndicator(
+                        color:AppColors.primaryEnd))
+                    : widget.statusMessage!=null
+                      ? Center(child:Padding(
+                          padding:const EdgeInsets.all(24),
+                          child:Text(widget.statusMessage!,textAlign:TextAlign.center,
+                            style:const TextStyle(
+                              fontFamily:AppTypography.fontFamily,
+                              fontSize:14,color:AppColors.textMuted)),
+                        ))
+                    : visibleFriends.isEmpty
                     ? const _MessagesEmptyState()
                     : ListView.separated(
                         key: MessagesKeys.scroll,
@@ -155,6 +170,10 @@ class _MessagesScreenState extends State<MessagesScreen> {
   }
 
   void _openDirectChat(FriendMemberData friend) {
+    if(widget.onOpenFriend!=null){
+      widget.onOpenFriend!(friend);
+      return;
+    }
     Navigator.of(context).push<void>(
       AppFadeSlidePageRoute<void>(
         builder: (_) => DirectChatScreen.demo(
