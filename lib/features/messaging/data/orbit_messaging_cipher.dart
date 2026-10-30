@@ -26,6 +26,19 @@ abstract class OrbitMessagingCipher {
     required OrbitMailboxEnvelope envelope,
     required String conversationId,
   });
+  /// A reviewed group engine must durably rotate its sender-key chain when
+  /// the server's authenticated membership/device epoch changes, and deliver
+  /// authenticated distribution keys ONLY to eligible remaining devices.
+  /// No default success is permitted: checking an integer epoch is not
+  /// cryptographic key rotation. Do not emit ciphertext until this completes.
+  Future<void> prepareGroupEpoch({
+    required String conversationId,
+    required int groupEpoch,
+    required Map<String,OrbitMessagingKeyDirectory> recipients,
+  }) async {
+    throw OrbitMessagingSecurityException(
+      'Verified Circle sender-key rotation is not available.',503);
+  }
   Future<void> purgeForOwner(String owner);
 }
 
