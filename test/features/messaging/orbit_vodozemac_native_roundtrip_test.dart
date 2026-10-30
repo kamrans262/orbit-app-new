@@ -1,10 +1,12 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_ui/features/messaging/data/orbit_messaging_vodozemac_ffi.dart';
 
 void main(){
   final native=OrbitVodozemacNative.tryLoad();
+  final required=Platform.environment['ORBIT_M13_NATIVE_REQUIRED']=='1';
 
   test('Native audited Olm peer sessions exchange authenticated forward-secret messages',
       () {
@@ -46,7 +48,7 @@ void main(){
     });
     expect(utf8.decode(base64Decode(decrypted['plaintext_b64'] as String)),
       'Bob reply');
-  },skip:native==null);
+  },skip:native==null && !required);
 
   test('Native Megolm sender-key rotation makes old group key unusable',
       (){
@@ -88,5 +90,5 @@ void main(){
     });
     expect(utf8.decode(base64Decode(read['plaintext_b64'] as String)),
       'New roster');
-  },skip:native==null);
+  },skip:native==null && !required);
 }
