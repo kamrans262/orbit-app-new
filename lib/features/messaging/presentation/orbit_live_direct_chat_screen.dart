@@ -245,7 +245,27 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
     if(thread==null||owner==null||!_cryptoReady){
       return const <DirectChatMessage>[];
     }
-    final raw=await _messenger.loadOlder(thread);
+    List<OrbitLocalDecryptedMessage> raw;
+    try{
+      raw=await _messenger.loadOlder(thread);
+    }on OrbitIdentityException catch(error){
+      if(!mounted)return const <DirectChatMessage>[];
+      if(error.statusCode==401||error.statusCode==403||
+          error.statusCode==404||error.statusCode==409){
+        // Revoked access and failed authentication must clear stale bubbles.
+        setState((){
+          _cryptoReady=false;_thread=null;
+          _messages=const [];_olderMessages=const [];
+          _error='Earlier encrypted messages cannot be verified. '
+            'Reconnect to check permissions and message keys.';
+        });
+      }else{
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(
+          content:Text('Earlier messages are unavailable. '
+            'Reconnect and scroll up to retry.')));
+      }
+      return const <DirectChatMessage>[];
+    }
     if(!mounted||raw.isEmpty)return const <DirectChatMessage>[];
     final rendered=await _renderHistory(raw,thread,owner);
     final known={..._olderMessages.map((item)=>item.id),
