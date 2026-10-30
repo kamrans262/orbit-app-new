@@ -5,6 +5,9 @@ cd "$ROOT/native/orbit_vodozemac"
 [[ "$(uname)" == "Darwin" ]] || { echo "iOS builds require macOS"; exit 2; }
 command -v cargo >/dev/null || { echo "Install Rust/cargo first"; exit 2; }
 rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
+# The native Cargo.lock is generated only once on the first checked build;
+# include it in the security review before enabling production messaging.
+if [[ ! -f Cargo.lock ]]; then cargo generate-lockfile; fi
 cargo test --locked
 for target in aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios; do
   cargo build --target "$target" --release --locked
