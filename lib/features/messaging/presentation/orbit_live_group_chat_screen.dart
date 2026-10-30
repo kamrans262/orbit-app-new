@@ -178,7 +178,8 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
     // Read metadata is filtered on the server against each recipient's
     // current consent, privacy choice, and Circle membership.
     final recent=history.where((entry)=>
-      entry.senderId==owner && entry.kind!='reaction').toList()
+      entry.senderId==owner && !entry.id.startsWith('local-') &&
+      entry.kind!='reaction').toList()
       ..sort((a,b)=>b.createdAt.compareTo(a.createdAt));
     for(final entry in recent.take(5)){
       try{
@@ -247,6 +248,7 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
         selectedReaction:reactionState[entry.id]?.selected,
         readRecipientNames:readNames[entry.id]??const <String>[],
         deliveredDevices:deliveredDevices[entry.id]??0,
+        isQueued:entry.id.startsWith('local-'),
         timestamp:_time(entry.createdAt),createdAt:entry.createdAt));
     }
     return loaded;
@@ -351,7 +353,9 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
     if(result.queued){
       if(mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content:Text('Encrypted Circle message queued, not yet delivered.')));
-      throw OrbitIdentityException('Queued, not acknowledged.',503);
+      if(result.clientId==null)throw OrbitMessagingSecurityException(
+        'Encrypted queue has no stable retry ID.',503);
+      throw OrbitQueuedMessageException(result.clientId!);
     }
     _refreshAfterConfirmedSend();
   }
@@ -361,8 +365,13 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
       'Verified encryption required before replying.',503);
     final outcome=await _messenger.sendReply(
       thread,targetId:targetId,text:text);
-    if(!outcome.accepted||outcome.queued)throw OrbitIdentityException(
-      'Encrypted reply is queued but not acknowledged.',503);
+    if(outcome.queued){
+      if(outcome.clientId==null)throw OrbitMessagingSecurityException(
+        'Encrypted queue has no stable retry ID.',503);
+      throw OrbitQueuedMessageException(outcome.clientId!);
+    }
+    if(!outcome.accepted)throw OrbitIdentityException(
+      'Encrypted reply was not acknowledged.',503);
     _refreshAfterConfirmedSend();
   }
 
@@ -374,8 +383,11 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
       final manifest=await _media.stage(conversation:thread,original:file,
         kind:kind,durationMs:duration);
       final outcome=await _messenger.sendMedia(thread,manifest);
-      if(outcome.queued)throw OrbitIdentityException(
-        'Encrypted media is pending delivery, not yet acknowledged.',503);
+      if(outcome.queued){
+        if(outcome.clientId==null)throw OrbitMessagingSecurityException(
+          'Encrypted queue has no stable retry ID.',503);
+        throw OrbitQueuedMessageException(outcome.clientId!);
+      }
       _refreshAfterConfirmedSend();
     }finally{
       if(kind=='voice'){
