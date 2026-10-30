@@ -84,6 +84,11 @@ class _MemoryVaultForTest extends OrbitMessagingLocalVault {
   }
 
   @override
+  Future<void> deleteMessage(String conversation,String messageId) async {
+    saved.remove(messageId);
+  }
+
+  @override
   Future<List<OrbitLocalDecryptedMessage>> history(String conversation,{
     int limit=50}) async {
     final rows=saved.values.where((m)=>m.conversationId==conversation).toList()
@@ -92,7 +97,35 @@ class _MemoryVaultForTest extends OrbitMessagingLocalVault {
   }
 }
 
+class _RedactionPages extends _Pages {
+  @override
+  Future<OrbitEnvelopePage> sync(String conversation,{
+    List<String> delivered=const [],int limit=100}) async =>
+    const OrbitEnvelopePage([],null,
+      redactedMessageIds:['redacted-message']);
+}
+
 void main(){
+  test('Authenticated deletion receipts erase cached plaintext and UI IDs',() async {
+    final api=_RedactionPages();
+    final vault=_MemoryVaultForTest();
+    vault.saved['redacted-message']=OrbitLocalDecryptedMessage(
+      id:'redacted-message',conversationId:'thread',
+      senderId:'friend',kind:'text',text:'private',
+      createdAt:DateTime.utc(2026,10,20));
+    final coordinator=OrbitMessagingCoordinator(
+      api:api,cipher:_DecryptForTest(),vault:vault);
+    final thread=OrbitConversation(
+      id:'thread',kind:'direct',groupEpoch:1,peerId:'friend',
+      createdAt:DateTime.utc(2026,10,1));
+
+    final visible=await coordinator.refresh(thread);
+    expect(visible,isEmpty);
+    expect(vault.saved,isEmpty);
+    expect(coordinator.redactedMessageIds('owner','thread'),
+      contains('redacted-message'));
+  });
+
   test('Parallel pollers cannot decrypt the same mailbox envelope twice',() async {
     final api=_Pages();
     final vault=_MemoryVaultForTest();
