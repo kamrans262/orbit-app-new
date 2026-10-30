@@ -31,7 +31,7 @@ void main(){
     expect(api.lastMethod,'GET');
     expect(api.lastPath,contains('/conversations/circle-thread/sender-keys'));
     expect(page.groupEpoch,9);
-    expect(page.items,singleElement);
+    expect(page.items,hasLength(1));
     expect(page.items.single.senderDeviceId,'sender-device');
     expect(page.items.single.ciphertextB64,'opaque-base64');
   });
