@@ -15,6 +15,7 @@ import '../data/orbit_messaging_media_bridge.dart';
 import '../data/orbit_messaging_reactions.dart';
 import '../data/orbit_messaging_replies.dart';
 import '../../../core/navigation/app_fade_slide_page_route.dart';
+import 'orbit_chat_voice_recorder.dart';
 import 'orbit_private_chat_video_viewer.dart';
 import 'orbit_messaging_conversation_actions.dart';
 
@@ -255,12 +256,18 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
     final thread=_thread;
     if(thread==null||!_cryptoReady)throw OrbitIdentityException(
       'Verified encryption required before encrypted media upload.',503);
-    final manifest=await _media.stage(conversation:thread,original:file,
-      kind:kind,durationMs:duration);
-    final outcome=await _messenger.sendMedia(thread,manifest);
-    if(outcome.queued)throw OrbitIdentityException(
-      'Encrypted media is pending delivery, not yet acknowledged.',503);
-    _refreshAfterConfirmedSend();
+    try{
+      final manifest=await _media.stage(conversation:thread,original:file,
+        kind:kind,durationMs:duration);
+      final outcome=await _messenger.sendMedia(thread,manifest);
+      if(outcome.queued)throw OrbitIdentityException(
+        'Encrypted media is pending delivery, not yet acknowledged.',503);
+      _refreshAfterConfirmedSend();
+    }finally{
+      if(kind=='voice'){
+        await OrbitChatVoiceRecorder.discardTemporaryCapture(file);
+      }
+    }
   }
 
   Future<void> _react(String messageId,String? selected,
