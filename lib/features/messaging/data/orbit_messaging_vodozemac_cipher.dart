@@ -47,9 +47,12 @@ class OrbitMessagingVodozemacCipher implements OrbitMessagingCipher {
   final OrbitMessagingDeviceSource _source;
   final Ed25519 _ed25519=Ed25519();
   static const String protocolName='orbit-m13-olm-megolm-v1';
+  // Change ONLY in a source-reviewed release after native binary, licensing,
+  // cross-device ratchet and media/session tests have all passed.
+  static const bool releaseCertified=false;
 
   @override
-  bool get independentlyVerified=>false; // requires signed release review
+  bool get independentlyVerified=>releaseCertified;
   @override
   String get protocol=>protocolName;
 
