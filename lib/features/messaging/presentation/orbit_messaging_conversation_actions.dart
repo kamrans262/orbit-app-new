@@ -5,17 +5,23 @@ import '../../circles/presentation/widgets/orbit_circle_sheet.dart';
 import '../../friends/data/orbit_social_repository.dart';
 import '../data/orbit_messaging_api.dart';
 import '../data/orbit_messaging_models.dart';
+import '../data/orbit_messaging_coordinator.dart';
+import '../../../core/widgets/app_primary_button.dart';
 
 /// Reuses Orbit's full-width white sheets, current action rows and popup
 /// confirmation. Reports do not share private message content by default.
 class OrbitMessagingConversationActions {
   const OrbitMessagingConversationActions({
     OrbitMessagingApi? api,OrbitSocialRepository? social,
-  }):_api=api,_social=social;
+    OrbitMessagingCoordinator? coordinator,
+  }):_api=api,_social=social,_coordinator=coordinator;
   final OrbitMessagingApi? _api;
   final OrbitSocialRepository? _social;
+  final OrbitMessagingCoordinator? _coordinator;
   OrbitMessagingApi get api=>_api??OrbitMessagingApi();
   OrbitSocialRepository get social=>_social??OrbitSocialRepository();
+  OrbitMessagingCoordinator get coordinator=>_coordinator??
+    OrbitMessagingCoordinator(api:api);
 
   void _notice(BuildContext context,String message){
     if(context.mounted){
@@ -40,9 +46,96 @@ class OrbitMessagingConversationActions {
       cancelLabel:'Cancel',destructive:destructive);
   }
 
+  /// A full fingerprint must be compared over an independent trusted
+  /// channel (in person, voice, etc.). Mere server delivery is not proof of
+  /// the other person's new device identity.
+  Future<void> _confirmPeerKey(BuildContext context,String peer,
+      OrbitMessagingRemoteDevice device) async {
+    if(!context.mounted)return;
+    final input=TextEditingController();
+    try{
+      final approved=await showOrbitCircleSheet<bool>(
+        context:context,title:'Verify Device Encryption',
+        builder:(sheet)=>Column(
+          mainAxisSize:MainAxisSize.min,
+          crossAxisAlignment:CrossAxisAlignment.stretch,
+          children:[
+            const Text('Compare this complete safety fingerprint with '
+              'your contact using a separate trusted method. '
+              'A changed fingerprint could indicate a new device or '
+              'an attempt to intercept private messages.'),
+            const SizedBox(height:12),
+            SelectableText(device.fingerprint),
+            const SizedBox(height:12),
+            TextField(controller:input,
+              autocorrect:false,enableSuggestions:false,
+              decoration:const InputDecoration(
+                labelText:'Enter the independently verified fingerprint')),
+            const SizedBox(height:16),
+            AppPrimaryButton(label:'Trust Verified Device',onPressed:(){
+              if(input.text.trim().toLowerCase()!=device.fingerprint){
+                ScaffoldMessenger.maybeOf(sheet)?.showSnackBar(
+                  const SnackBar(content:Text(
+                    'Safety fingerprint does not match.')));
+                return;
+              }
+              Navigator.of(sheet).pop(true);
+            }),
+            const SizedBox(height:8),
+            TextButton(onPressed:()=>Navigator.of(sheet).pop(false),
+              child:const Text('Cancel')),
+          ],
+        ));
+      if(approved!=true||!context.mounted)return;
+      await coordinator.acceptVerifiedPeerIdentity(
+        peerId:peer,deviceId:device.id,
+        verifiedFingerprint:device.fingerprint);
+      _notice(context,'Verified contact keys updated. Reopen this chat '
+        'to establish new encrypted sessions.');
+    }catch(_){
+      _notice(context,'The device identity was not changed. '
+        'Recheck the safety fingerprint and trusted device settings.');
+    }finally{
+      input.dispose();
+    }
+  }
+
+  Future<void> _reviewPeerKeys(BuildContext context,String peer) async {
+    try{
+      final directory=await api.discoverKeys(peer,
+        consumeOneTimePrekey:false);
+      if(!context.mounted)return;
+      await showOrbitCircleSheet<void>(
+        context:context,title:'Encryption Safety',
+        builder:(sheet)=>Column(
+          mainAxisSize:MainAxisSize.min,
+          crossAxisAlignment:CrossAxisAlignment.stretch,
+          children:[
+            const Text('Review the identity of each approved device. '
+              'Only trust a changed identity after comparing the full '
+              'fingerprint with your contact.'),
+            const SizedBox(height:12),
+            ...directory.devices.map((device)=>Padding(
+              padding:const EdgeInsets.only(bottom:10),
+              child:OrbitCircleSheetAction(
+                title:'Verify device '+device.id.substring(
+                  0,device.id.length>8?8:device.id.length),
+                icon:Icons.verified_user_outlined,onTap:() async {
+                  Navigator.of(sheet).pop();
+                  await _confirmPeerKey(context,peer,device);
+                }),
+            )),
+          ],
+        ));
+    }catch(_){
+      _notice(context,'Device verification could not be opened. '
+        'Reconnect and confirm your friendship settings.');
+    }
+  }
+
   Future<void> openDirect(BuildContext context,{
     required OrbitConversation thread,required String peerId,
-    required VoidCallback onClose}) async {
+    required VoidCallback onClose,bool showEncryptionReview=false}) async {
     if(thread.kind!='direct'||thread.peerId!=peerId)return;
     await showOrbitCircleSheet<void>(context:context,
       title:'Conversation Options',
@@ -64,6 +157,15 @@ class OrbitMessagingConversationActions {
               await api.preferences(thread.id,mute:false);
             },'Conversation notifications enabled.');
           }),
+        if(showEncryptionReview)...[
+          const SizedBox(height:10),
+          OrbitCircleSheetAction(title:'Verify encryption devices',
+            icon:Icons.verified_user_outlined,
+            onTap:(){
+              Navigator.of(sheet).pop();
+              _reviewPeerKeys(context,peerId);
+            }),
+        ],
         const SizedBox(height:10),
         OrbitCircleSheetAction(title:'Report this conversation',
           icon:Icons.flag_outlined,
