@@ -67,12 +67,17 @@ class _OrbitMessageVisibilityObserverState
     final render=context.findRenderObject();
     if(render is! RenderBox||!render.attached||render.size.isEmpty)return false;
 
-    final viewport=RenderAbstractViewport.of(render);
-    if(viewport is! RenderBox||!viewport.attached||viewport.size.isEmpty){
+    // The viewport interface is not a RenderBox; its underlying render
+    // object usually is. Promote the concrete object before accessing
+    // layout metrics (Flutter 3.47 static analyzer compatibility).
+    final Object? viewportObject=RenderAbstractViewport.of(render);
+    if(viewportObject is! RenderBox ||
+        !viewportObject.attached || viewportObject.size.isEmpty){
       return false;
     }
     final messageRect=render.localToGlobal(Offset.zero)&render.size;
-    final viewportRect=viewport.localToGlobal(Offset.zero)&viewport.size;
+    final viewportRect=viewportObject.localToGlobal(Offset.zero)&
+      viewportObject.size;
     final screenRect=Offset.zero&MediaQuery.sizeOf(context);
     final visibleRect=messageRect.intersect(viewportRect).intersect(screenRect);
     if(visibleRect.isEmpty||messageRect.width<=0||messageRect.height<=0){
