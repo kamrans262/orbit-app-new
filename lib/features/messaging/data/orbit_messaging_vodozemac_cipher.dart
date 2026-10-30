@@ -793,6 +793,9 @@ class OrbitMessagingVodozemacCipher implements OrbitMessagingCipher {
     s.put('groups_out',<String,dynamic>{});
     s.put('group_pending',<String,dynamic>{});
     s.put('processed_sender_keys',<String,dynamic>{});
+    // A verified identity replacement invalidates uncommitted plaintext
+    // recovery buffers from the previous trust decision as well.
+    s.put('decryption_pending',<String,dynamic>{});
     await _save(s);
   }
 
