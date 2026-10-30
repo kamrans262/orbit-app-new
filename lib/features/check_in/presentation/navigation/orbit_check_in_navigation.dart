@@ -233,9 +233,11 @@ abstract final class OrbitCheckInNavigation {
           const SizedBox(height:12),
           AppPrimaryButton(label:'Use selected ('+selected.length.toString()+')',
             enabled:selected.isNotEmpty,
-            onPressed:()=>Navigator.of(sheet).pop(
-              selected.toList()..sort()
-            .map((index)=>available[index].$2.first).toList())),
+            onPressed:(){
+              final indexes=selected.toList()..sort();
+              Navigator.of(sheet).pop(indexes.map(
+                (index)=>available[index].$2.first).toList());
+            }),
         ],
       )),
     );
