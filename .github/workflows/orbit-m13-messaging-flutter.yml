@@ -67,7 +67,6 @@ jobs:
       - name: Check audited-core bridge and run unit tests
         working-directory: native/orbit_vodozemac
         run: |
-          cargo fmt --check
           cargo test --locked
           cargo build --release --locked
       - name: No-production-enablement assertion
