@@ -13,6 +13,7 @@ import 'orbit_messaging_models.dart';
 import 'orbit_messaging_media_bridge.dart';
 import 'orbit_messaging_reactions.dart';
 import 'orbit_messaging_replies.dart';
+import 'orbit_messaging_vodozemac_cipher.dart';
 
 /// Authenticated account-bound messaging orchestration.
 /// No E2EE fallback, no optimistic "sent", no plaintext HTTPS requests.
@@ -44,6 +45,10 @@ class OrbitMessagingCoordinator {
   // coordinators in one process. Polling, session setup, send, and backfill
   // must not concurrently mutate the same device ratchet or sender-key state.
   static final Map<String,Future<void>> _mailboxLocks={};
+  // For reviewed native builds, public identity registration is performed
+  // once per account/device/key fingerprint. No demo or unreviewed provider
+  // may generate or advertise keys as a side effect of opening Messages.
+  static final Set<String> _registeredNativeIdentities=<String>{};
   Future<T> _serialMailbox<T>(String owner,String conversation,
       Future<T> Function() operation) async {
     final key=_pageKey(owner,conversation);
@@ -70,7 +75,26 @@ class OrbitMessagingCoordinator {
   Future<bool> secureReady() async {
     if(!cipher.independentlyVerified)return false;
     final capability=await api.capabilities();
-    return capability.available && capability.e2eeClientVerified;
+    if(!capability.available || !capability.e2eeClientVerified)return false;
+    if(cipher is OrbitMessagingVodozemacCipher) {
+      await _ensureReviewedDeviceKeys();
+    }
+    return true;
+  }
+
+  /// Atomically register the audited native provider on the first successful
+  /// chat access. This cannot silently recreate keys after a rejected
+  /// identity rotation; Laravel 409 is surfaced for explicit user review.
+  Future<void> _ensureReviewedDeviceKeys({bool force=false}) async {
+    final owner=await api.owner;
+    await _serialMailbox(owner,'__crypto__',() async {
+      final bundle=await cipher.setupDevice();
+      final identityKey='$owner|${bundle.identityEd25519}';
+      if(!force && _registeredNativeIdentities.contains(identityKey))return;
+      await api.registerKeys(bundle);
+      await cipher.confirmDeviceRegistration();
+      _registeredNativeIdentities.add(identityKey);
+    });
   }
 
   Future<void> requireSecure() async {
@@ -78,15 +102,20 @@ class OrbitMessagingCoordinator {
       OrbitUnconfiguredMessagingCipher.unavailable,503);
   }
 
-  /// The engine owns ALL cryptographic keys and their durable ratchet stores.
-  /// Public keys are not registered unless it passed independent verification.
+  /// Explicit request re-registers native identity after the trusted device
+  /// reports an eligible account/key rotation. Do NOT automatically approve
+  /// changes in a safety-number mismatch.
   Future<void> setupDevice() async {
     await requireSecure();
-    final owner=await api.owner;
-    await _serialMailbox(owner,'__crypto__',() async {
-      await api.registerKeys(await cipher.setupDevice());
-      await cipher.confirmDeviceRegistration();
-    });
+    if(cipher is OrbitMessagingVodozemacCipher){
+      await _ensureReviewedDeviceKeys(force:true);
+    }else{
+      final owner=await api.owner;
+      await _serialMailbox(owner,'__crypto__',() async {
+        await api.registerKeys(await cipher.setupDevice());
+        await cipher.confirmDeviceRegistration();
+      });
+    }
   }
 
   Future<Map<String,OrbitMessagingKeyDirectory>> _recipients(
@@ -424,6 +453,7 @@ class OrbitMessagingCoordinator {
       await vault.purge(owner);
       _olderCursors.removeWhere((key,_)=>key.startsWith('$owner|'));
       _redactedByConversation.removeWhere((key,_)=>key.startsWith('$owner|'));
+      _registeredNativeIdentities.removeWhere((key)=>key.startsWith('$owner|'));
     });
   }
 }
