@@ -45,12 +45,20 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
   bool _loading=true,_cryptoReady=false;
   String? _error;
   Timer? _timer;
+  Timer? _typingTimer;
+  int _typingCount=0;
+  bool _checkingTyping=false;
   int _epoch=0;
   @override
   void initState(){
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _load();
+    _typingTimer=Timer.periodic(const Duration(seconds:4),(_){
+      if(!mounted || ModalRoute.of(context)?.isCurrent!=true ||
+          WidgetsBinding.instance.lifecycleState!=AppLifecycleState.resumed)return;
+      unawaited(_pollTyping());
+    });
     _timer=Timer.periodic(const Duration(seconds:25),(_){
       if(!mounted || ModalRoute.of(context)?.isCurrent!=true ||
           WidgetsBinding.instance.lifecycleState!=AppLifecycleState.resumed)return;
@@ -65,6 +73,7 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
   void dispose(){
     _epoch++;
     _timer?.cancel();
+    _typingTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -184,6 +193,31 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
       thread:thread,onClose:()=>Navigator.of(context).maybePop());
   }
 
+  void _setTyping(bool active){
+    final thread=_thread;
+    if(thread==null||!_cryptoReady)return;
+    unawaited(_api.typing(thread.id,active).then<void>((_) {},
+      onError:(_){/* Respect Circle Ghost Mode/consent. */}));
+  }
+
+  Future<void> _pollTyping() async {
+    final thread=_thread;
+    if(thread==null||!_cryptoReady||_checkingTyping)return;
+    _checkingTyping=true;
+    try{
+      final r=await _api.typingNow(thread.id);
+      final ids=r['typing_user_ids'];
+      final count=ids is List?ids.length:0;
+      if(mounted && _typingCount!=count){
+        setState(()=>_typingCount=count);
+      }
+    }catch(_){
+      if(mounted && _typingCount!=0)setState(()=>_typingCount=0);
+    }finally{
+      _checkingTyping=false;
+    }
+  }
+
   Future<void> _send(String text) async {
     final thread=_thread;
     if(thread==null || !_cryptoReady)throw OrbitIdentityException(
@@ -252,6 +286,10 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
     onRetry:_load,onBack:()=>Navigator.of(context).maybePop(),
     onMorePressed:_more,
     onOpenVideo:_playVideo,
+    onTypingChanged:_setTyping,
+    typingNotice:_typingCount>0
+      ?(_typingCount==1?'A member is typing…':'Members are typing…')
+      :null,
     onVideoCall:_videoUnavailable,
     onSendMessage:_send,
     onSendReply:_sendReply,

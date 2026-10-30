@@ -40,6 +40,9 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
   bool _loading=true,_cryptoReady=false;
   String? _error;
   Timer? _timer;
+  Timer? _typingTimer;
+  bool _otherTyping=false;
+  bool _checkingTyping=false;
   int _epoch=0;
 
   @override
@@ -47,6 +50,11 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _load();
+    _typingTimer=Timer.periodic(const Duration(seconds:4),(_){
+      if(!mounted || ModalRoute.of(context)?.isCurrent!=true ||
+          WidgetsBinding.instance.lifecycleState!=AppLifecycleState.resumed)return;
+      unawaited(_pollTyping());
+    });
     _timer=Timer.periodic(const Duration(seconds:25),(_){
       if(!mounted || ModalRoute.of(context)?.isCurrent!=true ||
           WidgetsBinding.instance.lifecycleState!=AppLifecycleState.resumed)return;
@@ -57,6 +65,7 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
   void dispose(){
     _epoch++;
     _timer?.cancel();
+    _typingTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -176,6 +185,31 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
       onClose:()=>Navigator.of(context).maybePop());
   }
 
+  void _setTyping(bool active){
+    final thread=_thread;
+    if(thread==null||!_cryptoReady)return;
+    unawaited(_api.typing(thread.id,active).then<void>((_) {},
+      onError:(_){/* Respect Ghost Mode and server typing opt-out. */}));
+  }
+
+  Future<void> _pollTyping() async {
+    final thread=_thread;
+    if(thread==null||!_cryptoReady||_checkingTyping)return;
+    _checkingTyping=true;
+    try{
+      final r=await _api.typingNow(thread.id);
+      final ids=r['typing_user_ids'];
+      final isTyping=ids is List && ids.contains(widget.peerId);
+      if(mounted && _otherTyping!=isTyping){
+        setState(()=>_otherTyping=isTyping);
+      }
+    }catch(_){
+      if(mounted && _otherTyping)setState(()=>_otherTyping=false);
+    }finally{
+      _checkingTyping=false;
+    }
+  }
+
   Future<void> _send(DirectChatMessage message) async {
     final thread=_thread;
     if(thread==null || !_cryptoReady){
@@ -237,7 +271,7 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
   @override
   Widget build(BuildContext context)=>DirectChatScreen(
     person:DirectChatPerson(id:widget.peerId,name:widget.peerName,
-      statusText:_cryptoReady?'Encrypted conversation':'Secure messaging pending',
+      statusText:_otherTyping?'Typing…':_cryptoReady?'Encrypted conversation':'Secure messaging pending',
       isOnline:false),
     messages:_messages,
     conversationId:_thread?.id??'unavailable',
@@ -248,6 +282,7 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
     onRetry:_load,onBack:()=>Navigator.of(context).maybePop(),
     onMorePressed:_more,
     onOpenVideo:_playVideo,
+    onTypingChanged:_setTyping,
     onSendMessage:_send,
     onReactionChanged:_react,
     liveMode:true,encryptedTransportReady:_cryptoReady,

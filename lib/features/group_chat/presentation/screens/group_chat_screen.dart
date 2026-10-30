@@ -64,6 +64,8 @@ class GroupChatScreen extends StatefulWidget {
     this.onMessageReactionChanged,
     this.onMorePressed,
     this.onOpenVideo,
+    this.onTypingChanged,
+    this.typingNotice,
     this.liveMode = false,
     this.encryptedTransportReady = false,
     super.key,
@@ -171,6 +173,8 @@ class GroupChatScreen extends StatefulWidget {
   final GroupMessageReactionChangedCallback? onMessageReactionChanged;
   final VoidCallback? onMorePressed;
   final ValueChanged<String>? onOpenVideo;
+  final ValueChanged<bool>? onTypingChanged;
+  final String? typingNotice;
   final bool liveMode;
   final bool encryptedTransportReady;
 
@@ -189,6 +193,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
   late List<GroupChatMessage> _messages;
   bool _loadingOlder = false;
+  Timer? _typingTimer;
+  bool _typingActive=false;
+
   GroupChatMessage? _replyTo;
 
   bool _initialScrollScheduled = false;
@@ -197,6 +204,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   void initState() {
     super.initState();
     _messages = List<GroupChatMessage>.of(widget.messages);
+    _messageController.addListener(_typingDidChange);
     _scrollController.addListener(_handleScroll);
     _scheduleInitialScroll();
   }
@@ -210,8 +218,27 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     }
   }
 
+  void _typingDidChange(){
+    if(!widget.liveMode||widget.onTypingChanged==null)return;
+    final active=_messageController.text.trim().isNotEmpty;
+    if(active==_typingActive)return;
+    _typingActive=active;
+    _typingTimer?.cancel();
+    widget.onTypingChanged!(active);
+    if(active){
+      _typingTimer=Timer.periodic(const Duration(seconds:4),(_){
+        if(mounted && _typingActive){
+          widget.onTypingChanged?.call(true);
+        }
+      });
+    }
+  }
+
   @override
   void dispose() {
+    _typingTimer?.cancel();
+    if(_typingActive)widget.onTypingChanged?.call(false);
+    _messageController.removeListener(_typingDidChange);
     _scrollController
       ..removeListener(_handleScroll)
       ..dispose();
@@ -596,6 +623,13 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
               onMore:widget.onMorePressed,
             ),
             Expanded(child: _buildBody()),
+            if(widget.liveMode && widget.typingNotice!=null)
+              Padding(
+                padding:const EdgeInsets.symmetric(horizontal:20,vertical:5),
+                child:Text(widget.typingNotice!,
+                  style:const TextStyle(fontFamily:AppTypography.fontFamily,
+                    fontSize:12,color:Color(0xFF7C5CFC))),
+              ),
             if(widget.liveMode && !widget.encryptedTransportReady)
               const Padding(
                 padding:EdgeInsets.symmetric(horizontal:20,vertical:8),

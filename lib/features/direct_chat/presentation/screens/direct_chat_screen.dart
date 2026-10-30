@@ -61,6 +61,7 @@ class DirectChatScreen extends StatefulWidget {
     this.onViewMap,
     this.onMorePressed,
     this.onOpenVideo,
+    this.onTypingChanged,
     this.liveMode = false,
     this.encryptedTransportReady = false,
     super.key,
@@ -202,6 +203,7 @@ class DirectChatScreen extends StatefulWidget {
   final VoidCallback? onViewMap;
   final VoidCallback? onMorePressed;
   final ValueChanged<String>? onOpenVideo;
+  final ValueChanged<bool>? onTypingChanged;
   final bool liveMode;
   final bool encryptedTransportReady;
 
@@ -217,6 +219,9 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
 
   late List<DirectChatMessage> _messages;
   bool _loadingOlder = false;
+  Timer? _typingTimer;
+  bool _typingActive=false;
+
   DirectChatMessage? _replyTo;
 
 
@@ -224,6 +229,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
   void initState() {
     super.initState();
     _messages = List<DirectChatMessage>.of(widget.messages);
+    _messageController.addListener(_typingDidChange);
     _scrollController.addListener(_handleOlderLoad);
   }
 
@@ -235,8 +241,27 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     }
   }
 
+  void _typingDidChange(){
+    if(!widget.liveMode||widget.onTypingChanged==null)return;
+    final active=_messageController.text.trim().isNotEmpty;
+    if(active==_typingActive)return;
+    _typingActive=active;
+    _typingTimer?.cancel();
+    widget.onTypingChanged!(active);
+    if(active){
+      _typingTimer=Timer.periodic(const Duration(seconds:4),(_){
+        if(mounted && _typingActive){
+          widget.onTypingChanged?.call(true);
+        }
+      });
+    }
+  }
+
   @override
   void dispose() {
+    _typingTimer?.cancel();
+    if(_typingActive)widget.onTypingChanged?.call(false);
+    _messageController.removeListener(_typingDidChange);
     _scrollController
       ..removeListener(_handleOlderLoad)
       ..dispose();
