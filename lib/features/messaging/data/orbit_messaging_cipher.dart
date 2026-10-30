@@ -39,6 +39,21 @@ abstract class OrbitMessagingCipher {
     throw OrbitMessagingSecurityException(
       'Verified Circle sender-key rotation is not available.',503);
   }
+  /// Clear unadvertised public prekeys only after Laravel has confirmed
+  /// that they are registered; network retries must not discard fresh keys.
+  Future<void> confirmDeviceRegistration() async {}
+
+  /// A verified group engine imports authenticated Olm-wrapped sender keys
+  /// before attempting to decrypt any Megolm message in the current epoch.
+  Future<void> refreshGroupKeys(String conversationId,int groupEpoch) async {
+    throw OrbitMessagingSecurityException(
+      'Verified Circle sender-key import is unavailable.',503);
+  }
+
+  /// Delete crash-recovery plaintext after the encrypted history transaction
+  /// is committed. Retain it on failures so a ratchet cannot lose a message.
+  Future<void> confirmStoredDecryption(String envelopeId) async {}
+
   Future<void> purgeForOwner(String owner);
 }
 
