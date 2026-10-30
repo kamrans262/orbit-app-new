@@ -404,35 +404,6 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     }
   }
 
-  Future<void> _recordVoice() async {
-    if(widget.liveMode && (!widget.encryptedTransportReady ||
-        widget.onSendMedia==null)){
-      _sendError('Verified encryption is required for group voice.');
-      return;
-    }
-    final recording=await OrbitChatVoiceRecorder.open(context);
-    if(recording==null||!mounted)return;
-    try{
-      if(widget.liveMode){
-        await widget.onSendMedia!(recording.file,'voice',recording.durationMs);
-      }
-      if(!mounted)return;
-      final bytes=Uint8List.fromList(await recording.file.readAsBytes());
-      final now=DateTime.now();
-      setState(()=>_messages.add(GroupChatMessage(
-        id:'voice-'+now.microsecondsSinceEpoch.toString(),
-        type:GroupChatMessageType.sentVoice,
-        senderId:widget.currentUserId,senderName:'You',isMine:true,
-        audioBytes:bytes,audioDuration:Duration(milliseconds:recording.durationMs),
-        timestamp:_formatTime(now),createdAt:now)));
-      _scheduleScrollToBottom();
-    }catch(_){
-      if(mounted)_sendError('Encrypted voice was not confirmed as sent.');
-    }finally{
-      try{if(await recording.file.exists())await recording.file.delete();}catch(_){}
-    }
-  }
-
   Future<void> _pickSticker() async {
     if(widget.liveMode && (!widget.encryptedTransportReady || widget.onSendMessage==null)){
       _sendError('Verified encryption is required for stickers.');return;
