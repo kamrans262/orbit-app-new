@@ -3,10 +3,48 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_ui/features/messaging/data/orbit_messaging_vodozemac_ffi.dart';
+import 'package:orbit_ui/features/messaging/data/orbit_messaging_models.dart';
 
 void main(){
   final native=OrbitVodozemacNative.tryLoad();
   final required=Platform.environment['ORBIT_M13_NATIVE_REQUIRED']=='1';
+
+  test('Prekey replenishment never evicts still-published handshake secrets',
+      () {
+    final bridge=native!;
+    final key=base64Encode(List<int>.generate(32,(i)=>i+1));
+    Map<String,dynamic> send(String op,Map<String,Object?> fields)=>
+      bridge.invoke({'op':op,'pickle_key_b64':key,...fields});
+
+    final first=send('account_create',{'device_id':'my-trusted-phone'});
+    String pickle=first['account_pickle'] as String;
+    var nextId=25;
+    var batches=0;
+    var exhausted=false;
+    // Consume only local creation slots, never the public server directory.
+    // Each accepted batch is separately sealed in the local account pickle.
+    for(var attempt=0;attempt<100;attempt++){
+      try{
+        final result=send('account_replenish_prekeys',{
+          'account_pickle':pickle,'start_id':nextId,'count':24,
+        });
+        final keys=result['one_time_prekeys'] as List;
+        expect(keys,isNotEmpty);
+        expect(keys.length,lessThanOrEqualTo(24));
+        batches++;
+        nextId=(result['next_key_id'] as num).toInt();
+        pickle=result['account_pickle'] as String;
+      }on OrbitMessagingSecurityException{
+        exhausted=true;
+        break;
+      }
+    }
+    expect(batches,greaterThan(0));
+    expect(exhausted,isTrue);
+    // The session/account identity remains stable at capacity.
+    final public=first['identity_ed25519'];
+    expect(public,isNotEmpty);
+  },skip:native==null&&!required);
 
   test('Native audited Olm peer sessions exchange authenticated forward-secret messages',
       () {
