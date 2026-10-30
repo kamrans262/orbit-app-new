@@ -214,10 +214,10 @@ class OrbitMessagingCoordinator {
   }
 
   Future<List<OrbitLocalDecryptedMessage>> refresh(
-      OrbitConversation thread,{int limit=100}) async {
+      OrbitConversation thread,{int limit=200}) async {
     await requireSecure();
     final owner=await api.owner;
-    final page=await api.sync(thread.id,limit:limit);
+    final page=await api.sync(thread.id,limit:limit.clamp(1,200));
     for(final encrypted in page.items.reversed){
       if(await api.owner!=owner)throw OrbitMessagingSecurityException(
         'Account changed while decrypting.',401);

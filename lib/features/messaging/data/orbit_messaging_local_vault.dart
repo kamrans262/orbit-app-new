@@ -244,7 +244,7 @@ class OrbitMessagingLocalVault {
     return _db(owner,(db) async{
       final rows=await db.query('history',
         where:'conversation_id = ?',whereArgs:[index],
-        orderBy:'rowid DESC',limit:limit.clamp(1,100));
+        orderBy:'rowid DESC',limit:limit.clamp(1,200));
       final messages=<OrbitLocalDecryptedMessage>[];
       for(final row in rows) {
         final hashedId=row['message_id'] as String;
