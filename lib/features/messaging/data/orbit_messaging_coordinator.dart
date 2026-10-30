@@ -121,6 +121,26 @@ class OrbitMessagingCoordinator {
     }
   }
 
+  /// Identity replacements are never accepted automatically. The user
+  /// must compare the full safety fingerprint using an independent channel.
+  Future<void> acceptVerifiedPeerIdentity({
+    required String peerId,required String deviceId,
+    required String verifiedFingerprint,
+  }) async {
+    await requireSecure();
+    if(cipher is! OrbitMessagingVodozemacCipher){
+      throw OrbitMessagingSecurityException(
+        'Reviewed device identity recovery is not installed.',503);
+    }
+    final owner=await api.owner;
+    await _serialMailbox(owner,'__crypto__',() async{
+      await (cipher as OrbitMessagingVodozemacCipher)
+          .acceptVerifiedPeerIdentity(
+        peerId:peerId,deviceId:deviceId,
+        verifiedFingerprint:verifiedFingerprint);
+    });
+  }
+
   Future<Map<String,OrbitMessagingKeyDirectory>> _recipients(
       OrbitConversation thread) async {
     final owner=await api.owner;
