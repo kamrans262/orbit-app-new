@@ -22,6 +22,7 @@ import '../widgets/direct_text_messages.dart';
 import '../widgets/live_location_card.dart';
 import '../../../welcome/presentation/screens/share_location_screen.dart';
 import '../../../messaging/presentation/orbit_chat_voice_recorder.dart';
+import '../../../messaging/presentation/orbit_message_visibility_observer.dart';
 
 abstract final class DirectChatScreenKeys {
   static const title = Key('direct_chat_title');
@@ -62,6 +63,7 @@ class DirectChatScreen extends StatefulWidget {
     this.onMorePressed,
     this.onOpenVideo,
     this.onTypingChanged,
+    this.onMessageViewed,
     this.liveMode = false,
     this.encryptedTransportReady = false,
     super.key,
@@ -204,6 +206,7 @@ class DirectChatScreen extends StatefulWidget {
   final VoidCallback? onMorePressed;
   final ValueChanged<String>? onOpenVideo;
   final ValueChanged<bool>? onTypingChanged;
+  final ValueChanged<String>? onMessageViewed;
   final bool liveMode;
   final bool encryptedTransportReady;
 
@@ -998,7 +1001,15 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                     initialCounts: _countsFromBackend(message.reactions),
                     onChanged: (id, selected, counts) =>
                         _changeReaction(message, selected, counts),
-                    child: _buildMessage(message),
+                    child:widget.liveMode &&
+                      !message.isMine &&
+                      message.readEnvelopeId!=null &&
+                      widget.onMessageViewed!=null
+                      ?OrbitMessageVisibilityObserver(
+                        onDwell:()=>widget.onMessageViewed!(
+                          message.readEnvelopeId!),
+                        child:_buildMessage(message))
+                      :_buildMessage(message),
                     ),
                   ),
                 );

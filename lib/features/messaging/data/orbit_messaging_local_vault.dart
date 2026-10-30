@@ -46,8 +46,9 @@ class OrbitLocalDecryptedMessage {
   const OrbitLocalDecryptedMessage({
     required this.id,required this.conversationId,
     required this.senderId,required this.kind,
-    required this.text,required this.createdAt});
+    required this.text,required this.createdAt,this.envelopeId});
   final String id,conversationId,senderId,kind,text;
+  final String? envelopeId;
   final DateTime createdAt;
 }
 
@@ -228,6 +229,7 @@ class OrbitMessagingLocalVault {
       'conversation_id':message.conversationId,
       'sender_id':message.senderId,'kind':message.kind,
       'text':message.text,
+      if(message.envelopeId!=null)'envelope_id':message.envelopeId,
       'created_at':message.createdAt.toUtc().toIso8601String(),
     }));
     await _db(owner,(db)=>db.insert('history',{
@@ -257,6 +259,7 @@ class OrbitMessagingLocalVault {
           id:value['message_id'] as String,conversationId:conversation,
           senderId:value['sender_id'] as String,
           kind:value['kind'] as String,text:value['text'] as String,
+          envelopeId:value['envelope_id'] as String?,
           createdAt:DateTime.parse(value['created_at'] as String)));
       }
       await _sameOwner(owner);

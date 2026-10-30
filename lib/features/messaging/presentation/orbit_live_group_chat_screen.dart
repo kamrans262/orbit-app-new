@@ -142,6 +142,7 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
           }
           loaded.add(GroupChatMessage(
             id:entry.id,type:type,senderId:entry.senderId,
+            readEnvelopeId:entry.envelopeId,
             senderName:entry.senderId==owner
               ?'You':names[entry.senderId]??'Circle member',
             isMine:entry.senderId==owner,text:text,
@@ -191,6 +192,15 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
     if(thread==null)return;
     await const OrbitMessagingConversationActions().openCircle(context,
       thread:thread,onClose:()=>Navigator.of(context).maybePop());
+  }
+
+  void _viewed(String envelopeId){
+    final thread=_thread;
+    if(thread==null||!_cryptoReady)return;
+    unawaited(_messenger.viewed(thread,envelopeId,
+      const Duration(milliseconds:700)).catchError((_){
+        // The server alone enforces the user's read-receipt privacy opt-out.
+      }));
   }
 
   void _setTyping(bool active){
@@ -287,6 +297,7 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
     onMorePressed:_more,
     onOpenVideo:_playVideo,
     onTypingChanged:_setTyping,
+    onMessageViewed:_viewed,
     typingNotice:_typingCount>0
       ?(_typingCount==1?'A member is typing…':'Members are typing…')
       :null,

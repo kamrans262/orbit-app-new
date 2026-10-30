@@ -231,7 +231,8 @@ class OrbitMessagingCoordinator {
         await vault.saveDecrypted(OrbitLocalDecryptedMessage(
           id:encrypted.messageId,conversationId:thread.id,
           senderId:encrypted.senderId,kind:encrypted.kind,
-          text:text,createdAt:encrypted.createdAt));
+          text:text,createdAt:encrypted.createdAt,
+          envelopeId:encrypted.id));
         // "Delivered" is a local durable-decrypt receipt, not an
         // optimistic network request or a read acknowledgement.
         if(encrypted.senderId!=owner){

@@ -52,6 +52,7 @@ class GroupChatMessage {
     this.reactionState = ChatReactionState.none,
     this.reactions=const <String,int>{},
     this.selectedReaction,
+    this.readEnvelopeId,
   });
 
   final String id;
@@ -73,6 +74,7 @@ class GroupChatMessage {
   final ChatReactionState reactionState;
   final Map<String,int> reactions;
   final String? selectedReaction;
+  final String? readEnvelopeId;
   final DateTime createdAt;
 
   GroupChatMessage copyWith({ChatReactionState? reactionState, String? text}) {
@@ -95,6 +97,7 @@ class GroupChatMessage {
       timestamp: timestamp,
       reactionState: reactionState ?? this.reactionState,
       reactions:reactions,selectedReaction:selectedReaction,
+      readEnvelopeId:readEnvelopeId,
       createdAt: createdAt,
     );
   }

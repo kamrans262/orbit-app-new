@@ -15,6 +15,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../domain/models/group_chat_models.dart';
 import '../widgets/chat_input_bar.dart';
 import '../../../messaging/presentation/orbit_chat_voice_recorder.dart';
+import '../../../messaging/presentation/orbit_message_visibility_observer.dart';
 import '../widgets/group_chat_header.dart';
 import '../widgets/received_image_message.dart';
 import '../widgets/received_text_message.dart';
@@ -65,6 +66,7 @@ class GroupChatScreen extends StatefulWidget {
     this.onMorePressed,
     this.onOpenVideo,
     this.onTypingChanged,
+    this.onMessageViewed,
     this.typingNotice,
     this.liveMode = false,
     this.encryptedTransportReady = false,
@@ -174,6 +176,7 @@ class GroupChatScreen extends StatefulWidget {
   final VoidCallback? onMorePressed;
   final ValueChanged<String>? onOpenVideo;
   final ValueChanged<bool>? onTypingChanged;
+  final ValueChanged<String>? onMessageViewed;
   final String? typingNotice;
   final bool liveMode;
   final bool encryptedTransportReady;
@@ -713,7 +716,15 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                 initialCounts:_reactionCountValues(message.reactions),
                 onChanged: (id, selected, counts) =>
                     _changeMessageReaction(message, selected, counts),
-                child: _buildMessage(message),
+                child:widget.liveMode &&
+                  !message.isMine &&
+                  message.readEnvelopeId!=null &&
+                  widget.onMessageViewed!=null
+                  ?OrbitMessageVisibilityObserver(
+                    onDwell:()=>widget.onMessageViewed!(
+                      message.readEnvelopeId!),
+                    child:_buildMessage(message))
+                  :_buildMessage(message),
                 ),
               ),
             );

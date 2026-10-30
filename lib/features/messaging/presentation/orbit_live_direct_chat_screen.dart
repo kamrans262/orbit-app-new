@@ -133,6 +133,7 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
           }
           loaded.add(DirectChatMessage(
             id:entry.id,conversationId:thread.id,
+            readEnvelopeId:entry.envelopeId,
             type:type,senderId:entry.senderId,
             senderName:entry.senderId==owner?'You':widget.peerName,
             isMine:entry.senderId==owner,text:text,
@@ -183,6 +184,15 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
     await const OrbitMessagingConversationActions().openDirect(context,
       thread:thread,peerId:widget.peerId,
       onClose:()=>Navigator.of(context).maybePop());
+  }
+
+  void _viewed(String envelopeId){
+    final thread=_thread;
+    if(thread==null||!_cryptoReady)return;
+    unawaited(_messenger.viewed(thread,envelopeId,
+      const Duration(milliseconds:700)).catchError((_){
+        // The server alone enforces the user's read-receipt privacy opt-out.
+      }));
   }
 
   void _setTyping(bool active){
@@ -283,6 +293,7 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
     onMorePressed:_more,
     onOpenVideo:_playVideo,
     onTypingChanged:_setTyping,
+    onMessageViewed:_viewed,
     onSendMessage:_send,
     onReactionChanged:_react,
     liveMode:true,encryptedTransportReady:_cryptoReady,
