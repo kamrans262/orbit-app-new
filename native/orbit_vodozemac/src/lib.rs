@@ -89,6 +89,37 @@ fn handle(v: &Value) -> CryptoResult<Value> {
                 "one_time_prekeys": published,
             }))
         }
+        "account_replenish_prekeys" => {
+            let mut a = account(v, &k)?;
+            let count = v.get("count").and_then(Value::as_u64)
+                .ok_or("missing_prekey_count")?;
+            let start = v.get("start_id").and_then(Value::as_u64)
+                .ok_or("missing_prekey_start_id")?;
+            if count < 1 || count > 24 ||
+               start < 25 || start > u32::MAX as u64 - count {
+                return Err("invalid_prekey_replenishment_bounds");
+            }
+            // Only add a few new unpublished Curve25519 keys, preserving
+            // the device's original signing identity and existing sessions.
+            a.generate_one_time_keys(count as usize);
+            let mut keys: Vec<String> = a.one_time_keys().values()
+                .map(|p| BASE64.encode(p.to_bytes())).collect();
+            keys.sort();
+            if keys.len() != count as usize {
+                return Err("native_prekey_capacity_exceeded");
+            }
+            let published: Vec<Value> = keys.iter().enumerate()
+                .map(|(i, p)| json!({
+                    "key_id": start + i as u64,
+                    "public_x25519": p
+                })).collect();
+            a.mark_keys_as_published();
+            Ok(json!({
+                "account_pickle":a.pickle().encrypt(&k),
+                "one_time_prekeys":published,
+                "next_key_id":start + count,
+            }))
+        }
         "session_outbound" => {
             let a = account(v, &k)?;
             let peer_identity = curve(v, "recipient_curve_b64")?;
