@@ -29,6 +29,16 @@ class OrbitMessagingCoordinator {
   final OrbitMessagingLocalVault vault;
   final OrbitCircleRepository circles;
 
+  // Account-scoped server cursors. Repeated foreground refreshes must not
+  // reset the older-message paging position to the newest messages.
+  final Map<String,String?> _olderCursors=<String,String?>{};
+  String _pageKey(String owner,String conversation)=>'$owner|$conversation';
+
+  bool hasOlderMessages(String owner,String conversation){
+    final key=_pageKey(owner,conversation);
+    return _olderCursors.containsKey(key) && _olderCursors[key]!=null;
+  }
+
   Future<bool> secureReady() async {
     if(!cipher.independentlyVerified)return false;
     final capability=await api.capabilities();
@@ -227,37 +237,72 @@ class OrbitMessagingCoordinator {
     return OrbitMessagingRetryResult(sent:sent,needsReview:needsReview);
   }
 
+  /// Foreground sync of the newest server envelopes. Keep the original
+  /// backfill cursor across periodic refreshes instead of returning to page 1.
   Future<List<OrbitLocalDecryptedMessage>> refresh(
       OrbitConversation thread,{int limit=200}) async {
     await requireSecure();
     final owner=await api.owner;
     final page=await api.sync(thread.id,limit:limit.clamp(1,200));
+    _olderCursors.putIfAbsent(
+      _pageKey(owner,thread.id),()=>page.nextCursor);
+    await _commitPage(thread,owner,page);
+    return vault.history(thread.id,limit:limit);
+  }
+
+  /// Decrypt at most one older page through the same verified ratchet provider,
+  /// using the server's opaque cursor and current authorization checks.
+  /// Returns ONLY messages newly stored during this request. Existing chat
+  /// widgets prepend them without changing the approved Orbit UI.
+  Future<List<OrbitLocalDecryptedMessage>> loadOlder(
+      OrbitConversation thread,{int limit=50}) async {
+    await requireSecure();
+    final owner=await api.owner;
+    final key=_pageKey(owner,thread.id);
+    if(!_olderCursors.containsKey(key)) {
+      // Initialize a cursor without pretending older messages are absent.
+      await refresh(thread);
+    }
+    final cursor=_olderCursors[key];
+    if(cursor==null)return const <OrbitLocalDecryptedMessage>[];
+    final page=await api.envelopes(
+      thread.id,cursor:cursor,limit:limit.clamp(1,50));
+    final items=await _commitPage(thread,owner,page);
+    if(await api.owner!=owner){
+      throw OrbitMessagingSecurityException(
+        'Account changed while retrieving older messages.',401);
+    }
+    _olderCursors[key]=page.nextCursor;
+    return items..sort((a,b)=>a.createdAt.compareTo(b.createdAt));
+  }
+
+  Future<List<OrbitLocalDecryptedMessage>> _commitPage(
+      OrbitConversation thread,String owner,OrbitEnvelopePage page) async {
+    final saved=<OrbitLocalDecryptedMessage>[];
     for(final encrypted in page.items.reversed){
       if(await api.owner!=owner)throw OrbitMessagingSecurityException(
         'Account changed while decrypting.',401);
-      // A ratchet ciphertext can be consumed once. This account-bound lookup
-      // avoids double-advancing sender/receiver chains on HTTPS refresh.
       if(await vault.hasMessage(thread.id,encrypted.messageId))continue;
       try{
         final decrypted=await cipher.decrypt(
           envelope:encrypted,conversationId:thread.id);
         final text=utf8.decode(decrypted);
-        await vault.saveDecrypted(OrbitLocalDecryptedMessage(
+        final message=OrbitLocalDecryptedMessage(
           id:encrypted.messageId,conversationId:thread.id,
           senderId:encrypted.senderId,kind:encrypted.kind,
           text:text,createdAt:encrypted.createdAt,
-          envelopeId:encrypted.id));
-        // "Delivered" is a local durable-decrypt receipt, not an
-        // optimistic network request or a read acknowledgement.
+          envelopeId:encrypted.id);
+        // Keep verified plaintext in the encrypted local vault before
+        // acknowledging receipt. Neither HTTP polling nor pagination may
+        // advance the ratchet a second time for the same committed message.
+        await vault.saveDecrypted(message);
+        saved.add(message);
         if(encrypted.senderId!=owner){
           await api.delivered(thread.id,encrypted.id);
         }
       }catch(error){
         if(error is OrbitMessagingSecurityException ||
             error is FormatException) {
-          // Never silently skip an undecryptable ciphertext. Leave it on
-          // the server without marking delivery/read or resetting any ratchet.
-          // The existing Orbit error state offers an explicit retry.
           throw OrbitMessagingSecurityException(
             'An encrypted message could not be authenticated. '
             'It remains pending and was not acknowledged.',409);
@@ -265,7 +310,7 @@ class OrbitMessagingCoordinator {
         rethrow;
       }
     }
-    return vault.history(thread.id,limit:limit);
+    return saved;
   }
 
   Future<void> redactOwn(OrbitConversation thread,String messageId) async {
