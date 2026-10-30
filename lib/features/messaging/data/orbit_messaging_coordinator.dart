@@ -90,7 +90,10 @@ class OrbitMessagingCoordinator {
     await _serialMailbox(owner,'__crypto__',() async {
       final bundle=await cipher.setupDevice();
       final identityKey='$owner|${bundle.identityEd25519}';
-      if(!force && _registeredNativeIdentities.contains(identityKey))return;
+      // A previously registered identity may have a newly prepared
+      // replenishment batch. Do not skip uploading those new public keys.
+      if(!force && _registeredNativeIdentities.contains(identityKey) &&
+          bundle.oneTimePrekeys.isEmpty)return;
       await api.registerKeys(bundle);
       await cipher.confirmDeviceRegistration();
       _registeredNativeIdentities.add(identityKey);
