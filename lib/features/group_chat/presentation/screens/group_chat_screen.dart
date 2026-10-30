@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'dart:typed_data';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -11,6 +13,7 @@ import '../../../../core/chat/single_image_message.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../domain/models/group_chat_models.dart';
 import '../widgets/chat_input_bar.dart';
+import '../../../messaging/presentation/orbit_chat_voice_recorder.dart';
 import '../widgets/group_chat_header.dart';
 import '../widgets/received_image_message.dart';
 import '../widgets/received_text_message.dart';
@@ -25,6 +28,7 @@ abstract final class GroupChatScreenKeys {
 }
 
 typedef SendGroupMessageCallback = FutureOr<void> Function(String text);
+typedef SendGroupMediaCallback = FutureOr<void> Function(File file,String kind,int? durationMs);
 typedef LoadOlderMessagesCallback = FutureOr<List<GroupChatMessage>> Function();
 typedef ReactionChangedCallback = FutureOr<void> Function(
   GroupChatMessage message,
@@ -50,6 +54,7 @@ class GroupChatScreen extends StatefulWidget {
     this.errorMessage = 'Unable to load this group chat.',
     this.onRetry,
     this.onSendMessage,
+    this.onSendMedia,
     this.onLoadOlder,
     this.hasMoreOlder = false,
     this.onReactionChanged,
@@ -153,6 +158,7 @@ class GroupChatScreen extends StatefulWidget {
   final VoidCallback onBack;
   final VoidCallback onVideoCall;
   final SendGroupMessageCallback? onSendMessage;
+  final SendGroupMediaCallback? onSendMedia;
   final LoadOlderMessagesCallback? onLoadOlder;
   final bool hasMoreOlder;
   final ReactionChangedCallback? onReactionChanged;
@@ -316,71 +322,121 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   }
 
   Future<void> _pickSingleImage() async {
-    if(widget.liveMode){_sendError('Encrypted group media is not yet available.');return;}
-    try {
-      final image = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 90,
-      );
-      if (!mounted || image == null) return;
-      final now = DateTime.now();
-      setState(() {
-        _messages.add(
-          GroupChatMessage(
-            id: 'image-${now.microsecondsSinceEpoch}',
-            type: GroupChatMessageType.sentImage,
-            senderId: widget.currentUserId,
-            senderName: 'You',
-            isMine: true,
-            images: <String>[image.path],
-            timestamp: _formatTime(now),
-            createdAt: now,
-          ),
-        );
-      });
+    if(widget.liveMode && (!widget.encryptedTransportReady ||
+        widget.onSendMedia==null)){
+      _sendError('Verified encryption is required for group images.');
+      return;
+    }
+    try{
+      final image=await _imagePicker.pickImage(source:ImageSource.gallery,
+        imageQuality:90);
+      if(!mounted||image==null)return;
+      if(widget.liveMode){
+        await widget.onSendMedia!(File(image.path),'image',null);
+      }
+      if(!mounted)return;
+      final now=DateTime.now();
+      setState(()=>_messages.add(GroupChatMessage(
+        id:'image-'+now.microsecondsSinceEpoch.toString(),
+        type:GroupChatMessageType.sentImage,senderId:widget.currentUserId,
+        senderName:'You',isMine:true,images:[image.path],
+        timestamp:_formatTime(now),createdAt:now)));
       _scheduleScrollToBottom();
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(content: Text('Unable to open the image picker.')),
-      );
+    }catch(_){
+      if(mounted)_sendError('Encrypted image was not confirmed as sent.');
     }
   }
 
   Future<void> _pickMultipleImages() async {
-    if(widget.liveMode){_sendError('Encrypted group media is not yet available.');return;}
-    try {
-      final images = await _imagePicker.pickMultiImage(imageQuality: 90);
-      if (!mounted || images.isEmpty) return;
-      final paths = images.map((image) => image.path).toList(growable: false);
-      final now = DateTime.now();
-      setState(() {
-        _messages.add(
-          GroupChatMessage(
-            id: 'images-${now.microsecondsSinceEpoch}',
-            type: paths.length == 1
-                ? GroupChatMessageType.sentImage
-                : GroupChatMessageType.sentMultiImage,
-            senderId: widget.currentUserId,
-            senderName: 'You',
-            isMine: true,
-            images: paths,
-            timestamp: _formatTime(now),
-            createdAt: now,
-          ),
-        );
-      });
+    if(widget.liveMode && (!widget.encryptedTransportReady ||
+        widget.onSendMedia==null)){
+      _sendError('Verified encryption is required for group images.');
+      return;
+    }
+    try{
+      final images=await _imagePicker.pickMultiImage(imageQuality:90);
+      if(!mounted||images.isEmpty)return;
+      for(final image in images){
+        if(widget.liveMode){
+          await widget.onSendMedia!(File(image.path),'image',null);
+        }
+        if(!mounted)return;
+        final now=DateTime.now();
+        setState(()=>_messages.add(GroupChatMessage(
+          id:'image-'+now.microsecondsSinceEpoch.toString(),
+          type:GroupChatMessageType.sentImage,
+          senderId:widget.currentUserId,senderName:'You',
+          isMine:true,images:[image.path],
+          timestamp:_formatTime(now),createdAt:now)));
+      }
       _scheduleScrollToBottom();
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(content: Text('Unable to open the image picker.')),
-      );
+    }catch(_){
+      if(mounted)_sendError('One or more encrypted images were not confirmed.');
+    }
+  }
+
+  Future<void> _recordVoice() async {
+    if(widget.liveMode && (!widget.encryptedTransportReady ||
+        widget.onSendMedia==null)){
+      _sendError('Verified encryption is required for group voice.');
+      return;
+    }
+    final recording=await OrbitChatVoiceRecorder.open(context);
+    if(recording==null||!mounted)return;
+    try{
+      if(widget.liveMode){
+        await widget.onSendMedia!(recording.file,'voice',recording.durationMs);
+      }
+      if(!mounted)return;
+      final bytes=Uint8List.fromList(await recording.file.readAsBytes());
+      final now=DateTime.now();
+      setState(()=>_messages.add(GroupChatMessage(
+        id:'voice-'+now.microsecondsSinceEpoch.toString(),
+        type:GroupChatMessageType.sentVoice,
+        senderId:widget.currentUserId,senderName:'You',isMine:true,
+        audioBytes:bytes,audioDuration:Duration(milliseconds:recording.durationMs),
+        timestamp:_formatTime(now),createdAt:now)));
+      _scheduleScrollToBottom();
+    }catch(_){
+      if(mounted)_sendError('Encrypted voice was not confirmed as sent.');
+    }finally{
+      try{if(await recording.file.exists())await recording.file.delete();}catch(_){}
+    }
+  }
+
+  Future<void> _recordVoice() async {
+    if(widget.liveMode && (!widget.encryptedTransportReady ||
+        widget.onSendMedia==null)){
+      _sendError('Verified encryption is required for group voice.');
+      return;
+    }
+    final recording=await OrbitChatVoiceRecorder.open(context);
+    if(recording==null||!mounted)return;
+    try{
+      if(widget.liveMode){
+        await widget.onSendMedia!(recording.file,'voice',recording.durationMs);
+      }
+      if(!mounted)return;
+      final bytes=Uint8List.fromList(await recording.file.readAsBytes());
+      final now=DateTime.now();
+      setState(()=>_messages.add(GroupChatMessage(
+        id:'voice-'+now.microsecondsSinceEpoch.toString(),
+        type:GroupChatMessageType.sentVoice,
+        senderId:widget.currentUserId,senderName:'You',isMine:true,
+        audioBytes:bytes,audioDuration:Duration(milliseconds:recording.durationMs),
+        timestamp:_formatTime(now),createdAt:now)));
+      _scheduleScrollToBottom();
+    }catch(_){
+      if(mounted)_sendError('Encrypted voice was not confirmed as sent.');
+    }finally{
+      try{if(await recording.file.exists())await recording.file.delete();}catch(_){}
     }
   }
 
   Future<void> _pickSticker() async {
-    if(widget.liveMode){_sendError('Encrypted group stickers are not yet available.');return;}
+    if(widget.liveMode && (!widget.encryptedTransportReady || widget.onSendMessage==null)){
+      _sendError('Verified encryption is required for stickers.');return;
+    }
     final sticker = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.white,
@@ -415,6 +471,11 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     );
     if (!mounted || sticker == null) return;
     final now = DateTime.now();
+    if(widget.liveMode){
+      try{await widget.onSendMessage!(sticker);}
+      catch(_){if(mounted)_sendError('Encrypted sticker was not sent.');return;}
+      if(!mounted)return;
+    }
     setState(() {
       _messages.add(
         GroupChatMessage(
@@ -486,6 +547,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                 onPickSingleImage: _pickSingleImage,
                 onPickMultipleImages: _pickMultipleImages,
                 onPickSticker: _pickSticker,
+                onRecordVoice:_recordVoice,
                 enabled: !widget.liveMode || widget.encryptedTransportReady,
               ),
             ),
