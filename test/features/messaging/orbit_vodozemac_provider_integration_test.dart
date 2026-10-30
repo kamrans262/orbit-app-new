@@ -104,6 +104,18 @@ class _UserApi extends OrbitMessagingApi {
       routing.directory(user,consume:consumeOneTimePrekey);
 
   @override
+  Future<OrbitMessagingKeyDirectory> claimDeviceKey(
+      String user,String deviceId) async {
+    final directory=routing.directory(user,consume:true);
+    if(directory.devices.length!=1 ||
+        directory.devices.single.id!=deviceId){
+      throw OrbitMessagingSecurityException(
+        'Cannot claim an unrelated device prekey.',409);
+    }
+    return directory;
+  }
+
+  @override
   Future<OrbitSenderKeySaved> distributeCircleSenderKey(
     String conversation,{
     required String clientId,required int groupEpoch,
