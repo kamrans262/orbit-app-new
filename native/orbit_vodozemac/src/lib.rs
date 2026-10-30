@@ -238,3 +238,71 @@ pub unsafe extern "C" fn orbit_vodozemac_free(ptr: *mut c_char) {
         drop(CString::from_raw(ptr));
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn olm_double_ratchet_roundtrip_and_rejects_modified_ciphertext() {
+        let alice = Account::new();
+        let mut bob = Account::new();
+        bob.generate_one_time_keys(1);
+        let one_time = *bob.one_time_keys().values()
+            .next().expect("created a one-time prekey");
+        let mut outgoing = alice.create_outbound_session(
+            SessionConfig::version_1(),bob.curve25519_key(),one_time
+        ).expect("created authenticated Olm session");
+        let prekey = outgoing.encrypt(b"first confidential message")
+            .expect("encrypted with Olm");
+        let OlmMessage::PreKey(pre) = prekey else {
+            panic!("first Olm message must carry prekey metadata");
+        };
+        let incoming = bob.create_inbound_session(
+            SessionConfig::version_1(),alice.curve25519_key(),&pre
+        ).expect("created matching authenticated receive session");
+        assert_eq!(incoming.plaintext,b"first confidential message");
+        let mut receiver=incoming.session;
+        let reply=receiver.encrypt(b"reply from receiver")
+            .expect("Double Ratchet reply");
+        assert_eq!(outgoing.decrypt(&reply).expect("authenticated reply"),
+            b"reply from receiver");
+        let mut altered=reply.to_parts().1;
+        if altered.len()>8 { altered[8]^=0x40; }
+        let forged=OlmMessage::from_parts(reply.message_type() as usize,&altered);
+        if let Ok(m)=forged {
+            assert!(outgoing.decrypt(&m).is_err());
+        }
+    }
+
+    #[test]
+    fn megolm_sender_key_rotation_excludes_previous_epoch() {
+        let mut previous=GroupSession::new(GroupConfig::version_1());
+        let mut oldRecipient=InboundGroupSession::new(
+            &previous.session_key(),GroupConfig::version_1());
+        let oldMessage=previous.encrypt(b"before roster change");
+        assert_eq!(oldRecipient.decrypt(&oldMessage)
+            .expect("first group key").plaintext,b"before roster change");
+
+        // Must create an entirely unrelated sender ratchet on roster change.
+        let mut rotated=GroupSession::new(GroupConfig::version_1());
+        assert_ne!(previous.session_id(),rotated.session_id());
+        let newMessage=rotated.encrypt(b"after member removal");
+        assert!(oldRecipient.decrypt(&newMessage).is_err());
+        let mut remaining=InboundGroupSession::new(
+            &rotated.session_key(),GroupConfig::version_1());
+        assert_eq!(remaining.decrypt(&newMessage)
+            .expect("remaining member has new key").plaintext,
+            b"after member removal");
+    }
+
+    #[test]
+    fn ffi_validates_input_and_never_unwraps_a_client_panic() {
+        let bad=CString::new("{not-json").unwrap();
+        let response=unsafe {orbit_vodozemac_call(bad.as_ptr())};
+        assert!(!response.is_null());
+        let text=unsafe {CStr::from_ptr(response)}.to_str().unwrap().to_owned();
+        unsafe {orbit_vodozemac_free(response)};
+        assert!(text.contains("\\"ok\\":false"));
+    }
+}
