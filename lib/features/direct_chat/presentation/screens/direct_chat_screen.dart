@@ -55,6 +55,8 @@ class DirectChatScreen extends StatefulWidget {
     this.onLoadOlder,
     this.onReactionChanged,
     this.onViewMap,
+    this.liveMode = false,
+    this.encryptedTransportReady = false,
     super.key,
   });
 
@@ -192,6 +194,8 @@ class DirectChatScreen extends StatefulWidget {
   final DirectLoadOlderCallback? onLoadOlder;
   final DirectReactionCallback? onReactionChanged;
   final VoidCallback? onViewMap;
+  final bool liveMode;
+  final bool encryptedTransportReady;
 
   @override
   State<DirectChatScreen> createState() => _DirectChatScreenState();
@@ -272,7 +276,27 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
   Future<void> _sendText() async {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
-    final message = _newMine(type: DirectChatMessageType.sentText, text: text);
+    if(widget.liveMode &&
+      (!widget.encryptedTransportReady || widget.onSendMessage==null)){
+      _showError('Verified end-to-end encryption is required before sending.');
+      return;
+    }
+    final message=_newMine(type:DirectChatMessageType.sentText,text:text);
+    if(widget.liveMode){
+      try{
+        // Do not fabricate a sent bubble: encryption, durable ratchet write
+        // and server acknowledgement must all happen first.
+        await widget.onSendMessage!(message);
+        if(!mounted)return;
+        setState(()=>_messages.add(message.copyWith(
+          deliveryStatus:DirectChatDeliveryStatus.sent)));
+        _messageController.clear();
+        _scrollToLatest();
+      }catch(_){
+        if(mounted)_showError('Encrypted send failed. No delivery was confirmed.');
+      }
+      return;
+    }
     setState(() => _messages.add(message));
     _messageController.clear();
     _scrollToLatest();
@@ -285,6 +309,10 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
   }
 
   Future<void> _openAttachments() async {
+    if(widget.liveMode){
+      _showError('Encrypted media attachments are not yet verified for chat.');
+      return;
+    }
     FocusScope.of(context).unfocus();
     final choice = await showModalBottomSheet<_AttachmentChoice>(
       context: context,
@@ -427,6 +455,10 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
   }
 
   Future<void> _shareLocation() async {
+    if(widget.liveMode){
+      _showError('Chat location sharing is unavailable. Use Orbit location sharing instead.');
+      return;
+    }
     FocusScope.of(context).unfocus();
     final live = await showModalBottomSheet<bool>(
       context: context,
@@ -523,6 +555,10 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     ChatReactionKind? selected,
     Map<ChatReactionKind, int> counts,
   ) async {
+    if(widget.liveMode && widget.onReactionChanged==null){
+      _showError('Encrypted reactions are not yet available.');
+      return;
+    }
     final index = _messages.indexWhere((item) => item.id == message.id);
     if (index < 0) return;
     final previous = _messages[index];
@@ -587,6 +623,14 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
             ),
             const SizedBox(height: 16),
             Expanded(child: _buildScrollableBody()),
+            if(widget.liveMode && !widget.encryptedTransportReady)
+              const Padding(
+                padding:EdgeInsets.symmetric(horizontal:20,vertical:8),
+                child:Text('Messages are private. Verified encryption setup is required before sending.',
+                  textAlign:TextAlign.center,
+                  style:TextStyle(fontFamily:AppTypography.fontFamily,
+                    fontSize:12,color:Color(0xFF64748B))),
+              ),
             SafeArea(
               top: false,
               child: DirectChatInputBar(
@@ -596,6 +640,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                 onAttachment: _openAttachments,
                 onLocation: _shareLocation,
                 onSend: _sendText,
+                enabled: !widget.liveMode || widget.encryptedTransportReady,
               ),
             ),
           ],
@@ -662,7 +707,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
           ),
         ),
         const SliverToBoxAdapter(child: SizedBox(height: 16)),
-        SliverPadding(
+        if(!widget.liveMode) SliverPadding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           sliver: SliverToBoxAdapter(
             child: KeyedSubtree(
@@ -676,8 +721,8 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
             ),
           ),
         ),
-        const SliverToBoxAdapter(child: SizedBox(height: 24)),
-        const SliverToBoxAdapter(
+        if(!widget.liveMode) const SliverToBoxAdapter(child: SizedBox(height: 24)),
+        if(!widget.liveMode) const SliverToBoxAdapter(
           child: Center(
             child: Text(
               'Today · 9:32 AM',
