@@ -103,6 +103,14 @@ class OrbitMessagingLocalVault {
     return SecretKey(raw);
   }
 
+  /// Prevent conversation IDs, message IDs and client retry IDs from
+  /// remaining readable in SQLite indexes or journal pages.
+  Future<String> _index(String owner,String id) async {
+    final raw=await (await _key(owner,create:true)).extractBytes();
+    return crypto.Hmac(crypto.sha256,raw)
+      .convert(utf8.encode(owner+'|'+id)).toString();
+  }
+
   Future<String> _seal(String owner,String id,String source) async {
     final secret=await _key(owner,create:true);
     final nonce=_cipher.newNonce();
@@ -155,15 +163,17 @@ class OrbitMessagingLocalVault {
 
   Future<void> queue(OrbitQueuedCiphertext queued) async {
     final owner=await _owner();
-    final encrypted=await _seal(owner,queued.clientId,
+    final clientIndex=await _index(owner,queued.clientId);
+    final conversationIndex=await _index(owner,queued.conversationId);
+    final encrypted=await _seal(owner,clientIndex,
       jsonEncode(queued.toJson()));
     await _db(owner,(db)=>db.transaction((txn) async{
       await _sameOwner(owner);
       await txn.insert('outbox',{
-        'client_id':queued.clientId,
-        'conversation_id':queued.conversationId,
+        'client_id':clientIndex,
+        'conversation_id':conversationIndex,
         'blob_enc':encrypted,
-        'created_at':DateTime.now().toUtc().millisecondsSinceEpoch,
+        'created_at':0,
       },conflictAlgorithm:ConflictAlgorithm.ignore);
     }));
   }
@@ -172,7 +182,7 @@ class OrbitMessagingLocalVault {
     final owner=await _owner();
     return _db(owner,(db) async {
       final rows=await db.query('outbox',
-        orderBy:'created_at ASC',limit:limit.clamp(1,40));
+        orderBy:'rowid ASC',limit:limit.clamp(1,40));
       final result=<OrbitQueuedCiphertext>[];
       for(final r in rows){
         final id=r['client_id'] as String;
@@ -187,18 +197,21 @@ class OrbitMessagingLocalVault {
 
   Future<void> acknowledge(String clientId) async {
     final owner=await _owner();
+    final index=await _index(owner,clientId);
     await _db(owner,(db)=>db.delete('outbox',
-      where:'client_id = ?',whereArgs:[clientId]).then((_){}));
+      where:'client_id = ?',whereArgs:[index]).then((_){}));
   }
 
   /// Skip already-committed messages before invoking an irreversible
   /// ratchet decrypt. Server HTTPS polling may replay the same envelope.
   Future<bool> hasMessage(String conversation,String messageId) async {
     final owner=await _owner();
+    final messageIndex=await _index(owner,messageId);
+    final conversationIndex=await _index(owner,conversation);
     return _db(owner,(db) async {
       final rows=await db.query('history',columns:['message_id'],
         where:'message_id = ? AND conversation_id = ?',
-        whereArgs:[messageId,conversation],limit:1);
+        whereArgs:[messageIndex,conversationIndex],limit:1);
       await _sameOwner(owner);
       return rows.isNotEmpty;
     });
@@ -206,35 +219,49 @@ class OrbitMessagingLocalVault {
 
   Future<void> saveDecrypted(OrbitLocalDecryptedMessage message) async {
     final owner=await _owner();
-    final encrypted=await _seal(owner,message.id,message.text);
-    await _db(owner,(db)=>db.insert('history',{
-      'message_id':message.id,'conversation_id':message.conversationId,
+    final index=await _index(owner,message.id);
+    final conversationIndex=await _index(owner,message.conversationId);
+    // Every private field is sealed, including sender ID, message kind,
+    // exact creation time, text and raw conversation/message identifiers.
+    final encrypted=await _seal(owner,index,jsonEncode({
+      'message_id':message.id,
+      'conversation_id':message.conversationId,
       'sender_id':message.senderId,'kind':message.kind,
-      'blob_enc':encrypted,
-      'created_at':message.createdAt.toUtc().millisecondsSinceEpoch,
-    },conflictAlgorithm:ConflictAlgorithm.replace).then((_){}));
+      'text':message.text,
+      'created_at':message.createdAt.toUtc().toIso8601String(),
+    }));
+    await _db(owner,(db)=>db.insert('history',{
+      'message_id':index,'conversation_id':conversationIndex,
+      'sender_id':'sealed','kind':'sealed',
+      'blob_enc':encrypted,'created_at':0,
+    },conflictAlgorithm:ConflictAlgorithm.ignore).then((_){}));
   }
 
   Future<List<OrbitLocalDecryptedMessage>> history(String conversation,
       {int limit=50}) async {
     final owner=await _owner();
+    final index=await _index(owner,conversation);
     return _db(owner,(db) async{
       final rows=await db.query('history',
-        where:'conversation_id = ?',whereArgs:[conversation],
-        orderBy:'created_at DESC',limit:limit.clamp(1,100));
+        where:'conversation_id = ?',whereArgs:[index],
+        orderBy:'rowid DESC',limit:limit.clamp(1,100));
       final messages=<OrbitLocalDecryptedMessage>[];
       for(final row in rows) {
-        final id=row['message_id'] as String;
+        final hashedId=row['message_id'] as String;
+        final clear=await _unseal(owner,hashedId,row['blob_enc'] as String);
+        final value=Map<String,dynamic>.from(jsonDecode(clear) as Map);
+        if(value['conversation_id']!=conversation){
+          throw const FormatException('Local encrypted chat index mismatch.');
+        }
         messages.add(OrbitLocalDecryptedMessage(
-          id:id,conversationId:conversation,
-          senderId:row['sender_id'] as String,
-          kind:row['kind'] as String,
-          text:await _unseal(owner,id,row['blob_enc'] as String),
-          createdAt:DateTime.fromMillisecondsSinceEpoch(
-            row['created_at'] as int,isUtc:true)));
+          id:value['message_id'] as String,conversationId:conversation,
+          senderId:value['sender_id'] as String,
+          kind:value['kind'] as String,text:value['text'] as String,
+          createdAt:DateTime.parse(value['created_at'] as String)));
       }
       await _sameOwner(owner);
-      return messages.reversed.toList(growable:false);
+      messages.sort((a,b)=>a.createdAt.compareTo(b.createdAt));
+      return messages;
     });
   }
 
