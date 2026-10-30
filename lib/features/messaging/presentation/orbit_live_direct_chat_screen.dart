@@ -93,7 +93,7 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
     }on OrbitIdentityException catch(error){
       if(error.statusCode==null||error.statusCode==408||
           error.statusCode==429||
-          (error.statusCode!=null&&error.statusCode!>=500)){
+          (error.statusCode!=null&&error.statusCode! >= 500)){
         // The encrypted queue is retained on transient network failures.
         return;
       }
