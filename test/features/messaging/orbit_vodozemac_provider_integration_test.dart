@@ -212,5 +212,27 @@ void main(){
     final rotated=state.states['alice|alice-device']!;
     final newSession=(rotated['groups_out'] as Map)['circle']['session_id'];
     expect(newSession,isNot(oldSession));
+
+    // The trusted signing identity may remain the same while its signed
+    // Curve prekey or key version rotates. A separately verified acceptance
+    // must clear the stale outbound Olm chain, never silently trust changes.
+    final stale=state.states['alice|alice-device']!;
+    final outgoing=stale['sessions_out'] as Map;
+    final toBob=Map<String,dynamic>.from(outgoing['bob-device'] as Map);
+    toBob['key_version']=0;
+    outgoing['bob-device']=toBob;
+    await state.write('alice','alice-device',stale);
+    final fingerprint=routing.directory('bob').devices.single.fingerprint;
+    await expectLater(alice.acceptVerifiedPeerIdentity(
+      peerId:'bob',deviceId:'bob-device',
+      verifiedFingerprint:List.filled(64,'0').join()),
+      throwsA(isA<OrbitMessagingSecurityException>()));
+    await alice.acceptVerifiedPeerIdentity(
+      peerId:'bob',deviceId:'bob-device',
+      verifiedFingerprint:fingerprint);
+    final accepted=state.states['alice|alice-device']!;
+    expect((accepted['sessions_out'] as Map).containsKey('bob-device'),
+      isFalse);
+    expect(accepted['groups_out'],isEmpty);
   },skip:native==null&&!required);
 }
