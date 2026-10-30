@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 /// Sends a read receipt only after one message is actually on screen for
 /// 700ms, not merely because a ListView prefetched it offscreen. Never emits
@@ -59,18 +60,27 @@ class _OrbitMessageVisibilityObserverState
     });
   }
   bool _isVisible(){
+    // The scroll viewport already excludes chat headers, composers, safe
+    // areas, and any other layout constraints. Hardcoded screen insets can
+    // suppress legitimate read receipts on small devices and in widget tests.
     if(ModalRoute.of(context)?.isCurrent!=true)return false;
     final render=context.findRenderObject();
-    if(render is! RenderBox||!render.attached||
-        render.size.isEmpty)return false;
-    final top=render.localToGlobal(Offset.zero).dy;
-    final media=MediaQuery.of(context);
-    final safeTop=media.padding.top+62;
-    final safeBottom=media.size.height-media.viewInsets.bottom-90;
-    if(safeBottom<=safeTop)return false;
-    final low=top.clamp(safeTop,safeBottom);
-    final high=(top+render.size.height).clamp(safeTop,safeBottom);
-    return (high-low)/render.size.height>=0.55;
+    if(render is! RenderBox||!render.attached||render.size.isEmpty)return false;
+
+    final viewport=RenderAbstractViewport.of(render);
+    if(viewport is! RenderBox||!viewport.attached||viewport.size.isEmpty){
+      return false;
+    }
+    final messageRect=render.localToGlobal(Offset.zero)&render.size;
+    final viewportRect=viewport.localToGlobal(Offset.zero)&viewport.size;
+    final screenRect=Offset.zero&MediaQuery.sizeOf(context);
+    final visibleRect=messageRect.intersect(viewportRect).intersect(screenRect);
+    if(visibleRect.isEmpty||messageRect.width<=0||messageRect.height<=0){
+      return false;
+    }
+    final fraction=(visibleRect.width*visibleRect.height)/
+        (messageRect.width*messageRect.height);
+    return fraction>=0.55;
   }
 
   @override
