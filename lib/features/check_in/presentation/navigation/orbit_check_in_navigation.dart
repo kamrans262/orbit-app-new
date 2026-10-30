@@ -395,7 +395,7 @@ abstract final class OrbitCheckInNavigation {
             DateTime.fromMillisecondsSinceEpoch(0)),
             child:const Text('No expiration')),
         ]),
-      )),
+      ),
     );
     if(!context.mounted || selected==null)return;
     try{
