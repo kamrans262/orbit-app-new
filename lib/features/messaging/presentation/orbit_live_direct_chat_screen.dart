@@ -9,6 +9,7 @@ import '../../direct_chat/domain/models/direct_chat_models.dart';
 import '../../direct_chat/presentation/screens/direct_chat_screen.dart';
 import '../data/orbit_messaging_api.dart';
 import '../data/orbit_messaging_coordinator.dart';
+import '../data/orbit_messaging_local_vault.dart';
 import '../data/orbit_messaging_models.dart';
 import '../data/orbit_messaging_media_bridge.dart';
 import '../data/orbit_messaging_reactions.dart';
@@ -36,6 +37,7 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
     OrbitMessagingCoordinator(api:_api);
   final OrbitMessagingMediaBridge _media=OrbitMessagingMediaBridge();
   List<DirectChatMessage> _messages=const [];
+  List<DirectChatMessage> _olderMessages=const [];
   OrbitConversation? _thread;
   String? _owner;
   bool _loading=true,_cryptoReady=false;
@@ -89,84 +91,10 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
       List<DirectChatMessage> next=const [];
       if(ready){
         final history=await _messenger.refresh(thread);
-        final reactionState=OrbitReactionReducer.fold(history,localUser:owner);
-        // Only the newest few sent messages need receipt polling on shared
-        // hosting. Sender acknowledgements remain different from device
-        // delivered and explicit recipient-opt-in read acknowledgements.
-        final status=<String,DirectChatDeliveryStatus>{};
-        final newest=history.where((e)=>e.senderId==owner &&
-          (e.kind=='text'||e.kind=='reply')).toList().reversed.take(5);
-        for(final entry in newest){
-          try{
-            final r=await _api.receipts(thread.id,entry.id);
-            final reads=(r['read_users'] as num?)?.toInt()??0;
-            final delivered=(r['delivered_devices'] as num?)?.toInt()??0;
-            status[entry.id]=reads>0?DirectChatDeliveryStatus.read:
-              delivered>0?DirectChatDeliveryStatus.delivered:
-                DirectChatDeliveryStatus.sent;
-          }catch(_){status[entry.id]=DirectChatDeliveryStatus.sent;}
-        }
-        final loaded=<DirectChatMessage>[];
-        for(final entry in history){
-          if(entry.kind=='reaction')continue;
-          final reply=entry.kind=='reply'
-            ?OrbitEncryptedReply.fromText(entry.text):null;
-          final manifest=OrbitEncryptedChatMedia.tryParse(entry.text);
-          var type=entry.senderId==owner
-            ?DirectChatMessageType.sentText:DirectChatMessageType.receivedText;
-          String? text=entry.text;
-          if(reply!=null){
-            final original=history.where((e)=>e.id==reply.targetId).toList();
-            final quote=original.isEmpty?'Original message'
-              :original.first.text;
-            text='↪ '+(quote.length>60?quote.substring(0,60)+'…':quote)+
-              '\n'+reply.text;
-          }
-          Uint8List? bytes;
-          Duration? audioLength;
-          if(manifest!=null){
-            try{
-              if(manifest.kind!='video'){
-                bytes=await _media.open(manifest);
-              }
-              if(manifest.kind=='image'){
-                type=entry.senderId==owner
-                  ?DirectChatMessageType.sentImage:DirectChatMessageType.receivedImage;
-              }else if(manifest.kind=='voice'){
-                type=entry.senderId==owner
-                  ?DirectChatMessageType.sentAudio:DirectChatMessageType.receivedAudio;
-                audioLength=Duration(milliseconds:manifest.durationMs??1000);
-              }else {
-                type=DirectChatMessageType.futureVideo;
-              }
-              text=null;
-            }catch(_){
-              // Never render a private storage path, raw media manifest or
-              // public URL when recipient access or key is revoked.
-              type=entry.senderId==owner
-                ?DirectChatMessageType.sentText:DirectChatMessageType.receivedText;
-              text='Encrypted media is no longer available.';
-            }
-          }
-          loaded.add(DirectChatMessage(
-            id:entry.id,conversationId:thread.id,
-            readEnvelopeId:entry.envelopeId,
-            type:type,senderId:entry.senderId,
-            senderName:entry.senderId==owner?'You':widget.peerName,
-            isMine:entry.senderId==owner,text:text,
-            audioBytes:manifest?.kind=='voice'?bytes:null,
-            audioDuration:audioLength,
-            imageBytes:manifest?.kind=='image'?bytes:null,
-            videoMediaId:manifest?.kind=='video'?manifest!.mediaId:null,
-            reactions:reactionState[entry.id]?.counts??const <String,int>{},
-            selectedReaction:reactionState[entry.id]?.selected,
-            timestamp:_time(entry.createdAt),createdAt:entry.createdAt,
-            showDeliveryStatus:entry.senderId==owner,
-            deliveryStatus:entry.senderId==owner
-              ?status[entry.id]??DirectChatDeliveryStatus.sent
-              :DirectChatDeliveryStatus.delivered));
-        }
-        next=loaded;
+        next=await _renderHistory(history,thread,owner);
+        final ids=next.map((item)=>item.id).toSet();
+        next=[..._olderMessages.where((item)=>!ids.contains(item.id)),
+          ...next]..sort((a,b)=>a.createdAt.compareTo(b.createdAt));
       }
       if(!mounted||epoch!=_epoch)return;
       setState((){
@@ -180,6 +108,7 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
       setState((){
         _loading=false;_cryptoReady=false;_thread=null;
         _messages=const [];
+        _olderMessages=const [];
         _error='An encrypted message could not be verified. '
           'It was not acknowledged or deleted. Reconnect to retry safely.';
       });
@@ -188,11 +117,111 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
       setState((){
         _loading=false;_cryptoReady=false;_thread=null;
         _messages=const [];
+        _olderMessages=const [];
         _error='This conversation is unavailable. Reconnect to verify friendship, '
           'device trust and privacy settings.';
       });
     }
   }
+  Future<List<DirectChatMessage>> _renderHistory(
+      List<OrbitLocalDecryptedMessage> history,
+      OrbitConversation thread,String owner) async {
+    final reactionState=OrbitReactionReducer.fold(history,localUser:owner);
+    // Only the newest few sent messages need receipt polling on shared
+    // hosting. Sender acknowledgements remain different from device
+    // delivered and explicit recipient-opt-in read acknowledgements.
+    final status=<String,DirectChatDeliveryStatus>{};
+    final newest=history.where((e)=>e.senderId==owner &&
+      (e.kind=='text'||e.kind=='reply')).toList().reversed.take(5);
+    for(final entry in newest){
+      try{
+        final r=await _api.receipts(thread.id,entry.id);
+        final reads=(r['read_users'] as num?)?.toInt()??0;
+        final delivered=(r['delivered_devices'] as num?)?.toInt()??0;
+        status[entry.id]=reads>0?DirectChatDeliveryStatus.read:
+          delivered>0?DirectChatDeliveryStatus.delivered:
+            DirectChatDeliveryStatus.sent;
+      }catch(_){status[entry.id]=DirectChatDeliveryStatus.sent;}
+    }
+    final loaded=<DirectChatMessage>[];
+    for(final entry in history){
+      if(entry.kind=='reaction')continue;
+      final reply=entry.kind=='reply'
+        ?OrbitEncryptedReply.fromText(entry.text):null;
+      final manifest=OrbitEncryptedChatMedia.tryParse(entry.text);
+      var type=entry.senderId==owner
+        ?DirectChatMessageType.sentText:DirectChatMessageType.receivedText;
+      String? text=entry.text;
+      if(reply!=null){
+        final original=history.where((e)=>e.id==reply.targetId).toList();
+        final quote=original.isEmpty?'Original message'
+          :original.first.text;
+        text='↪ '+(quote.length>60?quote.substring(0,60)+'…':quote)+
+          '\n'+reply.text;
+      }
+      Uint8List? bytes;
+      Duration? audioLength;
+      if(manifest!=null){
+        try{
+          if(manifest.kind!='video'){
+            bytes=await _media.open(manifest);
+          }
+          if(manifest.kind=='image'){
+            type=entry.senderId==owner
+              ?DirectChatMessageType.sentImage:DirectChatMessageType.receivedImage;
+          }else if(manifest.kind=='voice'){
+            type=entry.senderId==owner
+              ?DirectChatMessageType.sentAudio:DirectChatMessageType.receivedAudio;
+            audioLength=Duration(milliseconds:manifest.durationMs??1000);
+          }else {
+            type=DirectChatMessageType.futureVideo;
+          }
+          text=null;
+        }catch(_){
+          // Never render a private storage path, raw media manifest or
+          // public URL when recipient access or key is revoked.
+          type=entry.senderId==owner
+            ?DirectChatMessageType.sentText:DirectChatMessageType.receivedText;
+          text='Encrypted media is no longer available.';
+        }
+      }
+      loaded.add(DirectChatMessage(
+        id:entry.id,conversationId:thread.id,
+        readEnvelopeId:entry.envelopeId,
+        type:type,senderId:entry.senderId,
+        senderName:entry.senderId==owner?'You':widget.peerName,
+        isMine:entry.senderId==owner,text:text,
+        audioBytes:manifest?.kind=='voice'?bytes:null,
+        audioDuration:audioLength,
+        imageBytes:manifest?.kind=='image'?bytes:null,
+        videoMediaId:manifest?.kind=='video'?manifest!.mediaId:null,
+        reactions:reactionState[entry.id]?.counts??const <String,int>{},
+        selectedReaction:reactionState[entry.id]?.selected,
+        timestamp:_time(entry.createdAt),createdAt:entry.createdAt,
+        showDeliveryStatus:entry.senderId==owner,
+        deliveryStatus:entry.senderId==owner
+          ?status[entry.id]??DirectChatDeliveryStatus.sent
+          :DirectChatDeliveryStatus.delivered));
+    }
+    return loaded;
+  }
+
+  Future<List<DirectChatMessage>> _loadOlder() async {
+    final thread=_thread;
+    final owner=_owner;
+    if(thread==null||owner==null||!_cryptoReady){
+      return const <DirectChatMessage>[];
+    }
+    final raw=await _messenger.loadOlder(thread);
+    if(!mounted||raw.isEmpty)return const <DirectChatMessage>[];
+    final rendered=await _renderHistory(raw,thread,owner);
+    final known={..._olderMessages.map((item)=>item.id),
+      ..._messages.map((item)=>item.id)};
+    _olderMessages=[...rendered.where((item)=>!known.contains(item.id)),
+      ..._olderMessages];
+    return rendered;
+  }
+
   Future<void> _playVideo(String mediaId) async {
     try{
       final bytes=await _media.open(OrbitEncryptedChatMedia(
@@ -330,6 +359,8 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
     onSendMessage:_send,
     onReactionChanged:_react,
     liveMode:true,encryptedTransportReady:_cryptoReady,
-    hasMoreOlder:false,
+    hasMoreOlder:_cryptoReady && _owner!=null && _thread!=null &&
+      _messenger.hasOlderMessages(_owner!,_thread!.id),
+    onLoadOlder:_loadOlder,
   );
 }
