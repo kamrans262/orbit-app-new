@@ -106,6 +106,13 @@ class OrbitUnconfiguredMessagingCipher implements OrbitMessagingCipher {
     required Map<String,OrbitMessagingKeyDirectory> recipients,
   }) async => _notReady();
   @override
+  Future<void> confirmDeviceRegistration() async => _notReady();
+  @override
+  Future<void> refreshGroupKeys(String conversationId,int groupEpoch) async
+    => _notReady();
+  @override
+  Future<void> confirmStoredDecryption(String envelopeId) async => _notReady();
+  @override
   Future<void> purgeForOwner(String owner) async {}
 }
 
