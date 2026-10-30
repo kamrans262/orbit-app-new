@@ -55,6 +55,9 @@ class _Pages extends OrbitMessagingApi {
 class _DecryptForTest extends OrbitUnconfiguredMessagingCipher {
   _DecryptForTest();
   int decryptCount=0;
+  @override
+  Future<void> confirmStoredDecryption(String envelopeId) async {}
+
 
   @override
   bool get independentlyVerified=>true;
