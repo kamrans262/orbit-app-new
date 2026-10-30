@@ -13,6 +13,7 @@ import '../../../ping/data/orbit_ping_repository.dart';
 import '../../../ping/data/orbit_ping_notification_preferences.dart';
 import '../../../ping/presentation/navigation/orbit_ping_navigation.dart';
 import '../../../check_in/presentation/navigation/orbit_check_in_navigation.dart';
+import '../../../check_in/data/orbit_check_in_repository.dart';
 import '../../../moments/data/orbit_m7_rollout.dart';
 import '../../../moments/data/orbit_moment_push_runtime.dart';
 import '../../../moments/presentation/screens/orbit_live_moment_viewer.dart';
@@ -50,6 +51,7 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
   late final OrbitMomentRepository _moments=widget.moments??
       OrbitMomentRepository(identity:_identity);
   late final OrbitPingRepository _pings=OrbitPingRepository(identity:_identity);
+  late final OrbitCheckInRepository _checkins=OrbitCheckInRepository(identity:_identity);
 
   List<MomentData> _recent=const [];
   List<FavoritePersonData> _people=const [];
@@ -91,6 +93,7 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
     unawaited(_reload());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if(mounted)unawaited(_refreshPings());
+      if(mounted)unawaited(_checkins.flushPending().catchError((Object _){}));
     });
   }
 
@@ -196,6 +199,7 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
       unawaited(_reload());
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if(mounted)unawaited(_refreshPings());
+        if(mounted)unawaited(_checkins.flushPending().catchError((Object _){}));
       });
     }
   }
