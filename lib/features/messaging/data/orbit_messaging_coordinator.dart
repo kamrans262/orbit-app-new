@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -32,6 +33,27 @@ class OrbitMessagingCoordinator {
   // Account-scoped server cursors. Repeated foreground refreshes must not
   // reset the older-message paging position to the newest messages.
   final Map<String,String?> _olderCursors=<String,String?>{};
+
+  // Serialize durable decryption and cursor advancement across ALL active
+  // chat coordinators in one process. Concurrent poll/resume/scroll callbacks
+  // must not advance the same per-device ratchet twice.
+  static final Map<String,Future<void>> _mailboxLocks={};
+  Future<T> _serialMailbox<T>(String owner,String conversation,
+      Future<T> Function() operation) async {
+    final key=_pageKey(owner,conversation);
+    final previous=_mailboxLocks[key];
+    final completer=Completer<void>();
+    _mailboxLocks[key]=completer.future;
+    try {
+      if(previous!=null)await previous;
+      return await operation();
+    }finally {
+      completer.complete();
+      if(identical(_mailboxLocks[key],completer.future)){
+        _mailboxLocks.remove(key);
+      }
+    }
+  }
   String _pageKey(String owner,String conversation)=>'$owner|$conversation';
 
   bool hasOlderMessages(String owner,String conversation){
@@ -243,11 +265,13 @@ class OrbitMessagingCoordinator {
       OrbitConversation thread,{int limit=200}) async {
     await requireSecure();
     final owner=await api.owner;
-    final page=await api.sync(thread.id,limit:limit.clamp(1,200));
-    _olderCursors.putIfAbsent(
-      _pageKey(owner,thread.id),()=>page.nextCursor);
-    await _commitPage(thread,owner,page);
-    return vault.history(thread.id,limit:limit);
+    return _serialMailbox(owner,thread.id,() async {
+      final page=await api.sync(thread.id,limit:limit.clamp(1,200));
+      _olderCursors.putIfAbsent(
+        _pageKey(owner,thread.id),()=>page.nextCursor);
+      await _commitPage(thread,owner,page);
+      return vault.history(thread.id,limit:limit);
+    });
   }
 
   /// Decrypt at most one older page through the same verified ratchet provider,
@@ -263,17 +287,19 @@ class OrbitMessagingCoordinator {
       // Initialize a cursor without pretending older messages are absent.
       await refresh(thread);
     }
-    final cursor=_olderCursors[key];
-    if(cursor==null)return const <OrbitLocalDecryptedMessage>[];
-    final page=await api.envelopes(
-      thread.id,cursor:cursor,limit:limit.clamp(1,50));
-    final items=await _commitPage(thread,owner,page);
-    if(await api.owner!=owner){
-      throw OrbitMessagingSecurityException(
-        'Account changed while retrieving older messages.',401);
-    }
-    _olderCursors[key]=page.nextCursor;
-    return items..sort((a,b)=>a.createdAt.compareTo(b.createdAt));
+    return _serialMailbox(owner,thread.id,() async {
+      final cursor=_olderCursors[key];
+      if(cursor==null)return const <OrbitLocalDecryptedMessage>[];
+      final page=await api.envelopes(
+        thread.id,cursor:cursor,limit:limit.clamp(1,50));
+      final items=await _commitPage(thread,owner,page);
+      if(await api.owner!=owner){
+        throw OrbitMessagingSecurityException(
+          'Account changed while retrieving older messages.',401);
+      }
+      _olderCursors[key]=page.nextCursor;
+      return items..sort((a,b)=>a.createdAt.compareTo(b.createdAt));
+    });
   }
 
   Future<List<OrbitLocalDecryptedMessage>> _commitPage(
