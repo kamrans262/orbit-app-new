@@ -99,14 +99,26 @@ fn handle(v: &Value) -> CryptoResult<Value> {
                start < 25 || start > u32::MAX as u64 - count {
                 return Err("invalid_prekey_replenishment_bounds");
             }
-            // Only add a few new unpublished Curve25519 keys, preserving
-            // the device's original signing identity and existing sessions.
-            a.generate_one_time_keys(count as usize);
+            // vodozemac discards the OLDEST published-but-not-yet-used
+            // prekeys if the local store fills. Those may still be visible
+            // in Laravel's directory, so NEVER generate beyond capacity.
+            // This protects existing remote session handshakes.
+            let available = a.max_number_of_one_time_keys()
+                .saturating_sub(a.stored_one_time_key_count());
+            let safe_count = count.min(available as u64);
+            if safe_count == 0 {
+                return Err("native_prekey_capacity_exceeded");
+            }
+            let outcome = a.generate_one_time_keys(safe_count as usize);
+            if !outcome.discarded.is_empty() {
+                // Should be unreachable because of the capacity guard.
+                return Err("published_prekey_would_be_evicted");
+            }
             let mut keys: Vec<String> = a.one_time_keys().values()
                 .map(|p| BASE64.encode(p.to_bytes())).collect();
             keys.sort();
-            if keys.len() != count as usize {
-                return Err("native_prekey_capacity_exceeded");
+            if keys.len() != safe_count as usize {
+                return Err("native_prekey_generation_mismatch");
             }
             let published: Vec<Value> = keys.iter().enumerate()
                 .map(|(i, p)| json!({
@@ -117,7 +129,7 @@ fn handle(v: &Value) -> CryptoResult<Value> {
             Ok(json!({
                 "account_pickle":a.pickle().encrypt(&k),
                 "one_time_prekeys":published,
-                "next_key_id":start + count,
+                "next_key_id":start + safe_count,
             }))
         }
         "session_outbound" => {
