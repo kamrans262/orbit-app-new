@@ -176,6 +176,7 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
         content:Text('Encrypted Circle message queued, not yet delivered.')));
       throw OrbitIdentityException('Queued, not acknowledged.',503);
     }
+    _refreshAfterConfirmedSend();
   }
   Future<void> _sendReply(String targetId,String text) async {
     final thread=_thread;
@@ -185,6 +186,7 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
       thread,targetId:targetId,text:text);
     if(!outcome.accepted||outcome.queued)throw OrbitIdentityException(
       'Encrypted reply is queued but not acknowledged.',503);
+    _refreshAfterConfirmedSend();
   }
 
   Future<void> _sendAttachment(File file,String kind,int? duration) async {
@@ -196,6 +198,7 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
     final outcome=await _messenger.sendMedia(thread,manifest);
     if(outcome.queued)throw OrbitIdentityException(
       'Encrypted media is pending delivery, not yet acknowledged.',503);
+    _refreshAfterConfirmedSend();
   }
 
   Future<void> _react(String messageId,String? selected,
@@ -207,6 +210,12 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
       thread,targetId:messageId,selected:selected);
     if(!result.accepted||result.queued)throw OrbitIdentityException(
       'Encrypted reaction was queued but not delivered.',503);
+  }
+
+  void _refreshAfterConfirmedSend(){
+    if(mounted)WidgetsBinding.instance.addPostFrameCallback((_){
+      if(mounted)unawaited(_load());
+    });
   }
 
   void _videoUnavailable(){

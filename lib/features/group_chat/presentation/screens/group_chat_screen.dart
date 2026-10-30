@@ -268,7 +268,11 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   }
 
   void _chooseReply(GroupChatMessage message){
-    if(widget.liveMode && !widget.encryptedTransportReady)return;
+    if(widget.liveMode && (message.id.startsWith('local-') ||
+        !widget.encryptedTransportReady)){
+      _sendError('The encrypted message must finish syncing before replying.');
+      return;
+    }
     setState(()=>_replyTo=message);
     _messageFocusNode.requestFocus();
   }
@@ -514,6 +518,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     ChatReactionKind? selected,
     Map<ChatReactionKind, int> counts,
   ) async {
+    if(widget.liveMode && message.id.startsWith('local-')){
+      _sendError('Wait until the encrypted message is synced.');
+      throw StateError('Local message ID is not a server message ID.');
+    }
     if(widget.liveMode && widget.onMessageReactionChanged==null){
       _sendError('Encrypted reactions are not yet available.');
       throw StateError('Encrypted reaction callback is unavailable.');

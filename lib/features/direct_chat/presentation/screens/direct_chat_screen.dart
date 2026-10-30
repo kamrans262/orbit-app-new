@@ -280,7 +280,11 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
   }
 
   void _chooseReply(DirectChatMessage message){
-    if(!widget.encryptedTransportReady && widget.liveMode)return;
+    if(widget.liveMode && (message.id.startsWith('local-') ||
+        !widget.encryptedTransportReady)){
+      _showError('The encrypted message must finish syncing before replying.');
+      return;
+    }
     setState(()=>_replyTo=message);
     _messageFocusNode.requestFocus();
   }
@@ -666,6 +670,10 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     ChatReactionKind? selected,
     Map<ChatReactionKind, int> counts,
   ) async {
+    if(widget.liveMode && message.id.startsWith('local-')){
+      _showError('Wait for the encrypted message to finish syncing.');
+      throw StateError('A local message has no server recipient ID.');
+    }
     if(widget.liveMode && widget.onReactionChanged==null){
       _showError('Encrypted reactions are not yet available.');
       throw StateError('Encrypted reaction callback is unavailable.');

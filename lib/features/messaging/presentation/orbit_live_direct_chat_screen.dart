@@ -190,6 +190,11 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
         content:Text('Encrypted message queued offline; not yet delivered.')));
       throw OrbitIdentityException('Queued, not acknowledged.',503);
     }
+    // Replace the temporary bubble with canonical encrypted server message IDs,
+    // making reply/reaction targets valid across every approved device.
+    if(mounted)WidgetsBinding.instance.addPostFrameCallback((_){
+      if(mounted)unawaited(_load());
+    });
   }
 
   Future<void> _react(String id,String? selected,Map<String,int> counts) async {
