@@ -99,6 +99,7 @@ class DirectChatMessage {
   final DateTime createdAt;
 
   DirectChatMessage copyWith({
+    String? id,
     String? text,
     Map<String, int>? reactions,
     String? selectedReaction,
@@ -106,7 +107,7 @@ class DirectChatMessage {
     DirectChatDeliveryStatus? deliveryStatus,
   }) {
     return DirectChatMessage(
-      id: id,
+      id: id ?? this.id,
       conversationId: conversationId,
       type: type,
       senderId: senderId,
