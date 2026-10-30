@@ -47,6 +47,7 @@ class OrbitMessagingVodozemacCipher implements OrbitMessagingCipher {
   final OrbitMessagingDeviceSource _source;
   final Ed25519 _ed25519=Ed25519();
   static const String protocolName='orbit-m13-olm-megolm-v1';
+  final Map<String,DateTime> _lastPrekeyCheck=<String,DateTime>{};
   // Change ONLY in a source-reviewed release after native binary, licensing,
   // cross-device ratchet and media/session tests have all passed.
   static const bool releaseCertified=false;
@@ -82,10 +83,56 @@ class OrbitMessagingVodozemacCipher implements OrbitMessagingCipher {
     await _save(s);
   }
 
+  /// Replenish without rotating Ed25519/Curve25519 identity. A crash after
+  /// preparing the new prekeys retries the SAME signed public key batch;
+  /// a confirmed registration clears it. The server controls how many
+  /// unclaimed keys remain and validates every key ID.
+  Future<void> _replenishIfNeeded(_NativeState s) async {
+    if(s.data['published']!=true)return;
+    final public=Map<String,dynamic>.from(s.data['public'] as Map);
+    if((public['one_time_prekeys'] as List).isNotEmpty)return;
+    final id='${s.owner}|${s.device}';
+    final now=DateTime.now();
+    final previous=_lastPrekeyCheck[id];
+    if(previous!=null &&
+        now.difference(previous)<const Duration(minutes:10))return;
+    final directory=await _api.myDevices();
+    final rows=directory['devices'];
+    if(rows is! List)throw OrbitMessagingSecurityException(
+      'Trusted device prekey directory is not available.',409);
+    final local=rows.whereType<Map>().map(
+      (v)=>Map<String,dynamic>.from(v)).where(
+      (v)=>v['id']==s.device).toList();
+    if(local.length!=1||local.single['trusted']!=true ||
+        local.single['messaging_keys_registered']!=true) {
+      throw OrbitMessagingSecurityException(
+        'Trusted messaging device registration is missing.',409);
+    }
+    final remaining=local.single['available_one_time_prekeys'];
+    if(remaining is! num)throw OrbitMessagingSecurityException(
+      'Device prekey inventory was not returned.',409);
+    _lastPrekeyCheck[id]=now;
+    if(remaining>=8)return;
+    final nextId=(s.data['next_prekey_id'] as num?)?.toInt()??25;
+    final updated=_native.invoke({
+      'op':'account_replenish_prekeys',
+      'pickle_key_b64':s.key,'account_pickle':s.data['account'],
+      'start_id':nextId,'count':24,
+    });
+    s.data['account']=updated['account_pickle'];
+    s.data['next_prekey_id']=updated['next_key_id'];
+    public['one_time_prekeys']=updated['one_time_prekeys'];
+    s.data['public']=public;
+    s.data['published']=false;
+    // Account pickle and new public batch must survive a failed request.
+    await _save(s);
+  }
+
   @override
   Future<OrbitMessagingPublicKeyBundle> setupDevice() async {
     final s=await _open();
     await _ensureAccount(s);
+    await _replenishIfNeeded(s);
     final p=Map<String,dynamic>.from(s.data['public'] as Map);
     final raw=p['one_time_prekeys'] as List;
     return OrbitMessagingPublicKeyBundle(
@@ -678,6 +725,8 @@ class OrbitMessagingVodozemacCipher implements OrbitMessagingCipher {
   }
 
   @override
-  Future<void> purgeForOwner(String owner) =>
-    _store.purgeOwner(owner);
+  Future<void> purgeForOwner(String owner) async {
+    _lastPrekeyCheck.removeWhere((key,_)=>key.startsWith('$owner|'));
+    await _store.purgeOwner(owner);
+  }
 }
