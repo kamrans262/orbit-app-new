@@ -393,6 +393,18 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
       SnackBar(content:Text(message)));
   }
+  void _showQueuedAttachment(String kind,String clientId){
+    if(!mounted)return;
+    final now=DateTime.now();
+    setState(()=>_messages.add(GroupChatMessage(
+      id:'local-'+clientId,
+      type:GroupChatMessageType.sentText,
+      senderId:widget.currentUserId,senderName:'You',isMine:true,
+      isQueued:true,
+      text:'Encrypted '+kind+' waiting for connection',
+      timestamp:_formatTime(now),createdAt:now)));
+    _scheduleScrollToBottom();
+  }
 
   Future<void> _changeReaction(
     GroupChatMessage message,
@@ -435,6 +447,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         senderName:'You',isMine:true,images:[image.path],
         timestamp:_formatTime(now),createdAt:now)));
       _scheduleScrollToBottom();
+    }on OrbitQueuedMessageException catch(queued){
+      _showQueuedAttachment('image',queued.clientId);
     }catch(_){
       if(mounted)_sendError('Encrypted image was not confirmed as sent.');
     }
@@ -463,6 +477,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
           timestamp:_formatTime(now),createdAt:now)));
       }
       _scheduleScrollToBottom();
+    }on OrbitQueuedMessageException catch(queued){
+      _showQueuedAttachment('image',queued.clientId);
     }catch(_){
       if(mounted)_sendError('One or more encrypted images were not confirmed.');
     }
@@ -499,6 +515,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         senderId:widget.currentUserId,senderName:'You',
         isMine:true,timestamp:_formatTime(now),createdAt:now)));
       _scheduleScrollToBottom();
+    }on OrbitQueuedMessageException catch(queued){
+      _showQueuedAttachment('video',queued.clientId);
     }catch(_){
       if(mounted)_sendError('Encrypted video was not confirmed as sent.');
     }finally{
@@ -515,11 +533,13 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     final recording=await OrbitChatVoiceRecorder.open(context);
     if(recording==null||!mounted)return;
     try{
+      // The live encrypted upload discards the temporary source file when
+      // it finishes. Load preview bytes before that cleanup occurs.
+      final bytes=Uint8List.fromList(await recording.file.readAsBytes());
       if(widget.liveMode){
         await widget.onSendMedia!(recording.file,'voice',recording.durationMs);
       }
       if(!mounted)return;
-      final bytes=Uint8List.fromList(await recording.file.readAsBytes());
       final now=DateTime.now();
       setState(()=>_messages.add(GroupChatMessage(
         id:'voice-'+now.microsecondsSinceEpoch.toString(),
@@ -528,6 +548,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         audioBytes:bytes,audioDuration:Duration(milliseconds:recording.durationMs),
         timestamp:_formatTime(now),createdAt:now)));
       _scheduleScrollToBottom();
+    }on OrbitQueuedMessageException catch(queued){
+      _showQueuedAttachment('voice',queued.clientId);
     }catch(_){
       if(mounted)_sendError('Encrypted voice was not confirmed as sent.');
     }finally{
@@ -575,7 +597,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     final now = DateTime.now();
     if(widget.liveMode){
       try{await widget.onSendMessage!(sticker);}
-      catch(_){if(mounted)_sendError('Encrypted sticker was not sent.');return;}
+      on OrbitQueuedMessageException catch(queued){
+        _showQueuedAttachment('sticker',queued.clientId);
+        return;
+      }catch(_){if(mounted)_sendError('Encrypted sticker was not sent.');return;}
       if(!mounted)return;
     }
     setState(() {
