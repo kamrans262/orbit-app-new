@@ -487,8 +487,15 @@ class OrbitMessagingVodozemacCipher implements OrbitMessagingCipher {
     final groups=s.bucket('groups_out');
     final ready=groups[conversationId] is Map
       ?Map<String,dynamic>.from(groups[conversationId] as Map):null;
+    final created=ready?['created_at'] is String
+      ?DateTime.tryParse(ready!['created_at'] as String)
+      :null;
+    final expired=created==null ||
+      !created.isAfter(DateTime.now().toUtc().subtract(
+        const Duration(hours:24)));
+    final limitReached=((ready?['sent_count'] as num?)?.toInt()??500)>=500;
     if(ready!=null && ready['epoch']==groupEpoch &&
-        ready['roster']==fingerprint &&
+        ready['roster']==fingerprint && !expired && !limitReached &&
         !s.bucket('group_pending').containsKey(conversationId)){
       return;
     }
@@ -531,6 +538,8 @@ class OrbitMessagingVodozemacCipher implements OrbitMessagingCipher {
       final clientId=const Uuid().v4();
       packet={
         'client_id':clientId,'epoch':groupEpoch,'roster':fingerprint,
+        'created_at':DateTime.now().toUtc().toIso8601String(),
+        'sent_count':0,
         'group_pickle':group['group_pickle'],
         'session_id':group['session_id'],
         'session_key':group['session_key'],
@@ -559,6 +568,8 @@ class OrbitMessagingVodozemacCipher implements OrbitMessagingCipher {
     }
     groups[conversationId]={
       'epoch':groupEpoch,'roster':fingerprint,
+      'created_at':packet['created_at'],
+      'sent_count':0,
       'group_pickle':packet['group_pickle'],
       'session_id':packet['session_id'],
       'session_key':packet['session_key'],
@@ -606,6 +617,7 @@ class OrbitMessagingVodozemacCipher implements OrbitMessagingCipher {
       'plaintext_b64':base64Encode(utf8.encode(jsonEncode(payload))),
     });
     group['group_pickle']=encrypted['group_pickle'];
+    group['sent_count']=((group['sent_count'] as num?)?.toInt()??0)+1;
     groups[conversationId]=group;s.put('groups_out',groups);
     await _save(s);
     final header=base64Encode(utf8.encode(jsonEncode({
@@ -769,6 +781,29 @@ class OrbitMessagingVodozemacCipher implements OrbitMessagingCipher {
       throw OrbitMessagingSecurityException(
         'Decrypted Circle content is not bound to current participants.',409);
     }
+    // Megolm itself permits decrypting the same ratchet index repeatedly.
+    // Persist a per-sender-session replay fence before acknowledging
+    // ciphertext; a new envelope ID must not resurrect an old index.
+    final rawIndex=result['message_index'];
+    if(rawIndex is! num || rawIndex.toInt()<0 ||
+        rawIndex.toInt()!=rawIndex){
+      throw OrbitMessagingSecurityException(
+        'Authenticated Circle ratchet index is invalid.',409);
+    }
+    final indices=stored['seen_indices'] is Map
+      ?Map<String,dynamic>.from(stored['seen_indices'] as Map)
+      :<String,dynamic>{};
+    final indexKey=rawIndex.toInt().toString();
+    if(indices.containsKey(indexKey)){
+      throw OrbitMessagingSecurityException(
+        'Repeated Circle sender-key ratchet index rejected.',409);
+    }
+    if(indices.length>=1024){
+      throw OrbitMessagingSecurityException(
+        'Sender-key history limit reached. Rotate group keys.',409);
+    }
+    indices[indexKey]=envelope.id;
+    stored['seen_indices']=indices;
     stored['pickle']=result['inbound_pickle'];
     groups[id]=stored;s.put('groups_in',groups);
     pending[envelope.id]={
