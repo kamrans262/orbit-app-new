@@ -53,6 +53,8 @@ class GroupChatMessage {
     this.reactions=const <String,int>{},
     this.selectedReaction,
     this.readEnvelopeId,
+    this.readRecipientNames=const <String>[],
+    this.deliveredDevices=0,
   });
 
   final String id;
@@ -75,6 +77,10 @@ class GroupChatMessage {
   final Map<String,int> reactions;
   final String? selectedReaction;
   final String? readEnvelopeId;
+  // Server-filtered per-recipient acknowledgements only. Names are resolved
+  // locally from the currently authorized Circle roster.
+  final List<String> readRecipientNames;
+  final int deliveredDevices;
   final DateTime createdAt;
 
   GroupChatMessage copyWith({ChatReactionState? reactionState, String? text}) {
@@ -98,6 +104,8 @@ class GroupChatMessage {
       reactionState: reactionState ?? this.reactionState,
       reactions:reactions,selectedReaction:selectedReaction,
       readEnvelopeId:readEnvelopeId,
+      readRecipientNames:readRecipientNames,
+      deliveredDevices:deliveredDevices,
       createdAt: createdAt,
     );
   }
