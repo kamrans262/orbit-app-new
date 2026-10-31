@@ -277,37 +277,8 @@ class OrbitMediaRepository {
        maxPlainBytes<=0 || maxPlainBytes>64*1024*1024) {
       throw const FormatException('Invalid encrypted chat media key metadata.');
     }
-    final scope='/media/'+Uri.encodeComponent(mediaId);
-    final access=await control('POST',scope+'/access',
-      body:{'variant':variant,'device_id':deviceId});
-    late final Uint8List ciphertext;
-    if(access['download_mode']=='authenticated') {
-      final path=access['download_path'];
-      if(path is! String || !path.startsWith('/media/') ||
-          path.contains('..') || path.contains('://')) {
-        throw const FormatException('Invalid private ciphertext route.');
-      }
-      ciphertext=await _identity.mediaBinaryRequest('GET',path,
-        maxResponseBytes:maxPlainBytes+262144);
-    }else{
-      final raw=access['ciphertext_url'];
-      final url=raw is String?Uri.tryParse(raw):null;
-      if(url==null||url.scheme!='https'||url.host.isEmpty||
-          url.userInfo.isNotEmpty) {
-        throw const FormatException('Invalid signed chat media URL.');
-      }
-      final response=await _http.get(url).timeout(const Duration(seconds:60));
-      if(response.statusCode!=200 ||
-         response.bodyBytes.length>maxPlainBytes+262144) {
-        throw StateError('Encrypted chat attachment unavailable.');
-      }
-      ciphertext=response.bodyBytes;
-    }
-    final expectedHash=access['sha256_ciphertext'];
-    if(expectedHash is! String ||
-       digest.sha256.convert(ciphertext).toString()!=expectedHash) {
-      throw StateError('Encrypted chat attachment checksum mismatch.');
-    }
+    final ciphertext=await _fetchChatCiphertext(
+      mediaId,deviceId,maxPlainBytes+262144);
     final clear=await (crypto??OrbitMediaCrypto()).openInMemory(ciphertext,
       key:contentKey,noncePrefix:noncePrefix,
       ownerId:ownerId,transferId:transferId,
@@ -316,6 +287,78 @@ class OrbitMediaRepository {
       throw const FormatException('Encrypted chat attachment length mismatch.');
     }
     return clear;
+  }
+
+  /// Authenticated ciphertext-only transfer. Signed responses are streamed
+  /// with an explicit byte ceiling; no unbounded GET response is buffered.
+  Future<Uint8List> _fetchChatCiphertext(
+      String mediaId,String deviceId,int maxCipherBytes) async {
+    final scope='/media/'+Uri.encodeComponent(mediaId);
+    final access=await control('POST',scope+'/access',
+      body:{'variant':'original','device_id':deviceId});
+    late final Uint8List ciphertext;
+    if(access['download_mode']=='authenticated'){
+      final path=access['download_path'];
+      if(path is! String ||!path.startsWith('/media/') ||
+         path.contains('..') ||path.contains('://')){
+        throw const FormatException('Invalid private ciphertext route.');
+      }
+      ciphertext=await _identity.mediaBinaryRequest('GET',path,
+        maxResponseBytes:maxCipherBytes);
+    }else{
+      final raw=access['ciphertext_url'];
+      final url=raw is String?Uri.tryParse(raw):null;
+      if(url==null ||url.scheme!='https' ||url.host.isEmpty ||
+         url.userInfo.isNotEmpty){
+        throw const FormatException('Invalid signed private media URL.');
+      }
+      final response=await _http.send(http.Request('GET',url))
+        .timeout(const Duration(seconds:90));
+      if(response.statusCode!=200 ||
+         (response.contentLength??0)>maxCipherBytes){
+        throw StateError('Encrypted chat attachment is unavailable.');
+      }
+      final builder=BytesBuilder(copy:false);
+      var received=0;
+      await for(final chunk in response.stream){
+        received+=chunk.length;
+        if(received>maxCipherBytes){
+          throw StateError('Encrypted private-media size exceeded.');
+        }
+        builder.add(chunk);
+      }
+      ciphertext=builder.toBytes();
+    }
+    final expectedHash=access['sha256_ciphertext'];
+    if(expectedHash is! String ||
+       digest.sha256.convert(ciphertext).toString()!=expectedHash){
+      throw StateError('Private encrypted attachment checksum mismatch.');
+    }
+    return ciphertext;
+  }
+
+  /// Decrypt large chat videos to a short-lived app-private file rather
+  /// than assembling up to 250 MiB of plaintext in memory. Caller deletes
+  /// the file after playback; unsuccessful decryptions erase partial output.
+  Future<File> downloadMessageVideoToFile(String mediaId,{
+    required String deviceId,required Uint8List contentKey,
+    required Uint8List noncePrefix,required String ownerId,
+    required String transferId,required int expectedPlainBytes,
+    required File destination,OrbitMediaCrypto? crypto,
+  }) async {
+    if(contentKey.length!=32 ||noncePrefix.length!=8 ||
+       expectedPlainBytes<=0 ||
+       expectedPlainBytes>OrbitMediaFormat.videoLimit){
+      throw const FormatException('Invalid encrypted video key metadata.');
+    }
+    final ciphertext=await _fetchChatCiphertext(
+      mediaId,deviceId,OrbitMediaFormat.videoLimit+262144);
+    return (crypto??OrbitMediaCrypto()).openToPrivateFile(ciphertext,
+      destination:destination,key:contentKey,noncePrefix:noncePrefix,
+      ownerId:ownerId,transferId:transferId,
+      purpose:'message',variant:'original',
+      expectedPlainBytes:expectedPlainBytes,
+      maxPlainBytes:OrbitMediaFormat.videoLimit);
   }
 
   /// Authenticated short-lived URL plus current device envelope; no public URL
