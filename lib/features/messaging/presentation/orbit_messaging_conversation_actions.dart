@@ -139,7 +139,8 @@ class OrbitMessagingConversationActions {
   Future<void> openDirect(BuildContext context,{
     required OrbitConversation thread,required String peerId,
     required VoidCallback onClose,bool showEncryptionReview=false,
-    List<OrbitReportableMessage> evidenceCandidates=const []}) async {
+    List<OrbitReportableMessage> evidenceCandidates=const [],
+    bool showFailedReview=false,VoidCallback? onFailedCleared}) async {
     if(thread.kind!='direct'||thread.peerId!=peerId)return;
     await showOrbitCircleSheet<void>(context:context,
       title:'Conversation Options',
@@ -177,6 +178,25 @@ class OrbitMessagingConversationActions {
             Navigator.of(sheet).pop();
             _report(context,thread,evidenceCandidates);
           }),
+        if(showFailedReview)...[
+          const SizedBox(height:10),
+          OrbitCircleSheetAction(
+            title:'Discard failed encrypted drafts',
+            icon:Icons.delete_outline,destructive:true,
+            onTap:() async{
+              Navigator.of(sheet).pop();
+              if(!await _confirm(context,'Discard Failed Messages?',
+                'Only permanently rejected encrypted drafts will be '
+                'discarded. Copy any text you want to keep before '
+                'continuing. Offline Waiting messages are preserved.',
+                'Discard Failed Drafts',destructive:true))return;
+              if(!context.mounted)return;
+              await _mutate(context,() async{
+                await coordinator.discardFailedQueued(thread);
+                if(context.mounted)onFailedCleared?.call();
+              },'Rejected ciphertext drafts discarded.');
+            }),
+        ],
         const SizedBox(height:10),
         OrbitCircleSheetAction(title:'Archive conversation',
           icon:Icons.archive_outlined,
@@ -211,7 +231,8 @@ class OrbitMessagingConversationActions {
 
   Future<void> openCircle(BuildContext context,{
     required OrbitConversation thread,required VoidCallback onClose,
-    List<OrbitReportableMessage> evidenceCandidates=const []}) async{
+    List<OrbitReportableMessage> evidenceCandidates=const [],
+    bool showFailedReview=false,VoidCallback? onFailedCleared}) async{
     if(thread.kind!='circle')return;
     await showOrbitCircleSheet<void>(context:context,
       title:'Circle Chat Options',
@@ -240,6 +261,25 @@ class OrbitMessagingConversationActions {
             Navigator.of(sheet).pop();
             _report(context,thread,evidenceCandidates);
           }),
+        if(showFailedReview)...[
+          const SizedBox(height:10),
+          OrbitCircleSheetAction(
+            title:'Discard failed encrypted drafts',
+            icon:Icons.delete_outline,destructive:true,
+            onTap:() async{
+              Navigator.of(sheet).pop();
+              if(!await _confirm(context,'Discard Failed Messages?',
+                'Only permanently rejected encrypted drafts will be '
+                'discarded. Copy any text you want to keep before '
+                'continuing. Offline Waiting messages are preserved.',
+                'Discard Failed Drafts',destructive:true))return;
+              if(!context.mounted)return;
+              await _mutate(context,() async{
+                await coordinator.discardFailedQueued(thread);
+                if(context.mounted)onFailedCleared?.call();
+              },'Rejected ciphertext drafts discarded.');
+            }),
+        ],
         const SizedBox(height:10),
         OrbitCircleSheetAction(title:'Leave this Circle',
           icon:Icons.logout_rounded,destructive:true,
