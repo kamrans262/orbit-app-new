@@ -34,14 +34,17 @@ class OrbitConversationPage {
 class OrbitMessagingCapabilities {
   const OrbitMessagingCapabilities({required this.available,
     required this.e2eeClientVerified,required this.circleEnabled,
-    required this.realtimeAvailable,required this.pushAvailable});
+    required this.realtimeAvailable,required this.pushAvailable,
+    this.canSendMessages=true});
   final bool available,e2eeClientVerified,circleEnabled,realtimeAvailable,pushAvailable;
+  final bool canSendMessages;
   factory OrbitMessagingCapabilities.fromJson(Map<String,dynamic> j)=>
     OrbitMessagingCapabilities(available:j['available']==true,
       e2eeClientVerified:j['e2ee_client_verified']==true,
       circleEnabled:j['circle_enabled']==true,
       realtimeAvailable:j['realtime_available']==true,
-      pushAvailable:j['push_available']==true);
+      pushAvailable:j['push_available']==true,
+      canSendMessages:j['can_send_messages']!=false);
 }
 class OrbitCipherEnvelope {
   const OrbitCipherEnvelope({required this.deviceId,
