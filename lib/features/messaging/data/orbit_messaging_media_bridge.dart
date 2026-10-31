@@ -257,12 +257,29 @@ class OrbitMessagingMediaBridge {
         cleaned++;
       }catch(_){ /* Never delete an unrecognized local file. */ }
     }
-    // A process kill between sealing and storing the secure checkpoint may
-    // leave an unreferenced ciphertext file. Never touch other app files.
+    // A process kill between sealing and the secure checkpoint can leave
+    // unreferenced ciphertext. Only our exact owned file pattern is pruned.
     if(await root.exists()){
       final owned=RegExp(
         r'^orbit_m13_[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-'
-        r'[a-f0-9]{4}-[a-f0-9]{12}\\.cipher(String owner) async {
+        r'[a-f0-9]{4}-[a-f0-9]{12}\.cipher$');
+      await for(final item in root.list(followLinks:false)){
+        if(item is! File ||
+           !owned.hasMatch(item.uri.pathSegments.last))continue;
+        try{
+          final stat=await item.stat();
+          if(stat.type==FileSystemEntityType.file &&
+             stat.modified.toUtc().isBefore(expiry)){
+            await item.delete();
+            cleaned++;
+          }
+        }on FileSystemException{ /* Best-effort owned-file cleanup. */ }
+      }
+    }
+    return cleaned;
+  }
+
+  static Future<void> purgePendingForOwner(String owner) async {
     if(owner.isEmpty)return;
     final all=await _pendingStorage.readAll();
     final home=await getApplicationSupportDirectory();
@@ -281,7 +298,7 @@ class OrbitMessagingMediaBridge {
             'orbit_m13_'+transfer+'.cipher');
           if(await file.exists())await file.delete();
         }
-      }catch(_){ /* Keep unknown files; no broad directory deletion. */ }
+      }catch(_){ /* Preserve unrecognized local files. */ }
     }
   }
 
