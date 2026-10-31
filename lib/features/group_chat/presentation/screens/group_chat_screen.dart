@@ -21,6 +21,8 @@ import '../widgets/chat_input_bar.dart';
 import '../../../messaging/presentation/orbit_chat_voice_recorder.dart';
 import '../../../messaging/presentation/orbit_message_visibility_observer.dart';
 import '../../../messaging/data/orbit_messaging_models.dart';
+import '../../../messaging/data/orbit_messaging_stickers.dart';
+import '../../../messaging/presentation/orbit_chat_expression_picker.dart';
 import '../widgets/group_chat_header.dart';
 import '../widgets/received_image_message.dart';
 import '../widgets/received_text_message.dart';
@@ -637,66 +639,32 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   }
 
   Future<void> _pickSticker() async {
-    if(widget.liveMode && (!widget.encryptedTransportReady || widget.onSendMessage==null)){
+    if(widget.liveMode &&
+       (!widget.encryptedTransportReady||widget.onSendMessage==null)){
       _sendError('Verified encryption is required for stickers.');return;
     }
-    final sticker = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (sheetContext) => SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: <Widget>[
-              _GroupSticker(
-                value: '\u{2764}\u{FE0F}',
-                icon: Icons.favorite_rounded,
-              ),
-              _GroupSticker(value: '\u{1F44D}', icon: Icons.thumb_up_rounded),
-              _GroupSticker(
-                value: '\u{1F602}',
-                icon: Icons.sentiment_very_satisfied_rounded,
-              ),
-              _GroupSticker(
-                value: '\u{1F389}',
-                icon: Icons.celebration_rounded,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (!mounted || sticker == null) return;
-    final now = DateTime.now();
+    final selected=await showOrbitChatExpressionPicker(context);
+    if(!mounted||selected==null)return;
+    final isSticker=OrbitChatSticker.tryParse(selected)!=null;
+    final now=DateTime.now();
     if(widget.liveMode){
-      try{await widget.onSendMessage!(sticker);}
-      on OrbitQueuedMessageException catch(queued){
-        _showQueuedAttachment('sticker',queued.clientId,
-        needsReview:queued.needsReview);
+      try{
+        await widget.onSendMessage!(selected);
+      }on OrbitQueuedMessageException catch(queued){
+        _showQueuedAttachment(isSticker?'sticker':'emoji',queued.clientId,
+          needsReview:queued.needsReview);
         return;
-      }catch(_){if(mounted)_sendError('Encrypted sticker was not sent.');return;}
+      }catch(_){
+        if(mounted)_sendError('Encrypted expression was not sent.');
+        return;
+      }
       if(!mounted)return;
     }
-    setState(() {
-      _messages.add(
-        GroupChatMessage(
-          id: 'sticker-${now.microsecondsSinceEpoch}',
-          type: GroupChatMessageType.sentText,
-          senderId: widget.currentUserId,
-          senderName: 'You',
-          isMine: true,
-          text: sticker,
-          timestamp: _formatTime(now),
-          createdAt: now,
-        ),
-      );
-    });
+    setState(()=>_messages.add(GroupChatMessage(
+      id:'expression-${now.microsecondsSinceEpoch}',
+      type:GroupChatMessageType.sentText,
+      senderId:widget.currentUserId,senderName:'You',isMine:true,
+      text:selected,timestamp:_formatTime(now),createdAt:now)));
     _scheduleScrollToBottom();
   }
 
@@ -889,6 +857,13 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   }
 
   Widget _buildMessage(GroupChatMessage message) {
+    final sticker=OrbitChatSticker.tryParse(message.text);
+    if(sticker!=null){
+      return Padding(
+        padding:const EdgeInsets.symmetric(vertical:5,horizontal:8),
+        child:OrbitStickerArtwork(id:sticker.id));
+    }
+
     switch (message.type) {
       case GroupChatMessageType.receivedText:
         return ReceivedTextMessage(message: message);
@@ -964,30 +939,6 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     final minute = time.minute.toString().padLeft(2, '0');
     final suffix = time.hour >= 12 ? 'PM' : 'AM';
     return '$hour:$minute $suffix';
-  }
-}
-
-class _GroupSticker extends StatelessWidget {
-  const _GroupSticker({required this.value, required this.icon});
-
-  final String value;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: () => Navigator.pop(context, value),
-      borderRadius: BorderRadius.circular(24),
-      child: Container(
-        width: 48,
-        height: 48,
-        decoration: const BoxDecoration(
-          shape: BoxShape.circle,
-          color: Color(0x1FA576F6),
-        ),
-        child: Icon(icon, color: const Color(0xFF7C3AED)),
-      ),
-    );
   }
 }
 
