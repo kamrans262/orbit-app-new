@@ -287,9 +287,8 @@ class OrbitMessagingMediaBridge {
   static Future<int> purgePrivateVideoPreviews() async {
     final directory=await getTemporaryDirectory();
     final owned=RegExp(
-      r'^orbit_m13_private_video_[0-9a-f]{8}-[0-9a-f]{4}-'
-      r'[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.mp4'
-      r'(\\.cipher)?$');
+      r'^orbit_m13_private_video_[0-9a-f]{8}(-[0-9a-f]{4}){3}-'
+      r'[0-9a-f]{12}[.]mp4([.]cipher)?$');
     var removed=0;
     await for(final entity in directory.list(followLinks:false)){
       if(entity is! File ||
