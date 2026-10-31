@@ -2,6 +2,9 @@ import 'dart:typed_data';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../../../circles/presentation/widgets/orbit_circle_sheet.dart';
+import '../../../circles/presentation/widgets/orbit_circle_confirmation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
 import 'dart:io';
@@ -65,6 +68,7 @@ class DirectChatScreen extends StatefulWidget {
     this.onOpenVideo,
     this.onTypingChanged,
     this.onMessageViewed,
+    this.onDeleteMessage,
     this.liveMode = false,
     this.encryptedTransportReady = false,
     super.key,
@@ -208,6 +212,7 @@ class DirectChatScreen extends StatefulWidget {
   final ValueChanged<String>? onOpenVideo;
   final ValueChanged<bool>? onTypingChanged;
   final ValueChanged<String>? onMessageViewed;
+  final FutureOr<void> Function(String messageId)? onDeleteMessage;
   final bool liveMode;
   final bool encryptedTransportReady;
 
@@ -860,6 +865,58 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     );
   }
 
+  /// Long-press retains the approved reaction picker; its Message options
+  /// action opens the existing Orbit white sheet rather than a native alert.
+  Future<void> _messageOptions(DirectChatMessage message) async{
+    if(!mounted)return;
+    final allowedCopy=message.text!=null &&
+      message.text!.trim().isNotEmpty &&
+      message.text!.length<=22000;
+    final allowedDelete=widget.liveMode && message.isMine &&
+      !message.id.startsWith('local-') &&
+      widget.encryptedTransportReady &&
+      widget.onDeleteMessage!=null;
+    if(!allowedCopy&&!allowedDelete)return;
+    await showOrbitCircleSheet<void>(
+      context:context,title:'Message Options',
+      builder:(sheet)=>Column(
+        mainAxisSize:MainAxisSize.min,
+        children:[
+          if(allowedCopy)
+            OrbitCircleSheetAction(title:'Copy text',
+              icon:Icons.copy_outlined,onTap:() async{
+                Navigator.of(sheet).pop();
+                await Clipboard.setData(ClipboardData(text:message.text!));
+              }),
+          if(allowedDelete)...[
+            if(allowedCopy)const SizedBox(height:10),
+            OrbitCircleSheetAction(title:'Delete my message',
+              icon:Icons.delete_outline,destructive:true,
+              onTap:() async{
+                Navigator.of(sheet).pop();
+                if(!mounted)return;
+                final approved=await showOrbitCircleConfirmation(
+                  context:context,title:'Delete Message?',
+                  description:'Delete your encrypted message from the '
+                    'authorized server mailbox? Already decrypted copies '
+                    'on another device cannot be erased remotely.',
+                  confirmLabel:'Delete Message',
+                  cancelLabel:'Cancel',destructive:true);
+                if(!approved||!mounted)return;
+                try{
+                  await widget.onDeleteMessage!(message.id);
+                  if(mounted)setState(()=>_messages.removeWhere(
+                    (m)=>m.id==message.id));
+                }catch(_){
+                  if(mounted)_showError('Encrypted message was not deleted.');
+                }
+              }),
+          ],
+        ],
+      ),
+    );
+  }
+
   void _showError(String text) {
     ScaffoldMessenger.maybeOf(context)
         ?.showSnackBar(SnackBar(content: Text(text)));
@@ -1056,6 +1113,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                     child: MessageReactionRegion(
                     messageId: message.id,
                     isMine: message.isMine,
+                    onMessageOptions:()=>_messageOptions(message),
                     initialSelected: _reactionFromBackend(
                       message.selectedReaction,
                     ),
