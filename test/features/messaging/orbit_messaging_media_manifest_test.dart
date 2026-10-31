@@ -9,7 +9,7 @@ import 'package:orbit_ui/features/messaging/data/orbit_messaging_models.dart';
 
 void main(){
   const id='4ec493c1-d21a-4eea-a09e-91566cbd5936';
-  test('Encrypted media manifest contains no URL, local path or media key',(){
+  test('Legacy encrypted media manifest contains no URL or local path',(){
     const image=OrbitEncryptedChatMedia(
       mediaId:id,kind:'image',mime:'image/jpeg',durationMs:null);
     final data=image.encode();
@@ -23,6 +23,32 @@ void main(){
     expect(OrbitEncryptedChatMedia.tryParse('{"media_id":"bad"}'),isNull);
     expect(OrbitEncryptedChatMedia.tryParse('{"v":1,"type":"orbit_m13_media","kind":"file","mime":"text/plain","media_id":"'+id+'"}'),isNull);
     expect(OrbitEncryptedChatMedia.tryParse('Just regular chat text'),isNull);
+  });
+
+  test('V2 content key round trips inside the encrypted messaging body',(){
+    final material=OrbitChatMediaContentKey(
+      key:Uint8List.fromList(List<int>.generate(32,(i)=>i+1)),
+      noncePrefix:Uint8List.fromList(List<int>.generate(8,(i)=>i+11)),
+      owner:'owner-id',transfer:id,plainBytes:125);
+    final manifest=OrbitEncryptedChatMedia(
+      mediaId:id,kind:'image',mime:'image/jpeg',durationMs:null,
+      contentKey:material);
+    final encoded=manifest.encode();
+    final body=jsonDecode(encoded) as Map<String,dynamic>;
+    expect(body['v'],2);
+    expect(body.keys,isNot(contains('local_path')));
+    expect(body.keys,isNot(contains('ciphertext_url')));
+    expect(body['content_key'],isA<Map>());
+    final parsed=OrbitEncryptedChatMedia.tryParse(encoded);
+    expect(parsed?.contentKey?.key,orderedEquals(material.key));
+    expect(parsed?.contentKey?.noncePrefix,orderedEquals(material.noncePrefix));
+    expect(parsed?.contentKey?.plainBytes,125);
+    expect(parsed?.contentKey?.transfer,id);
+    // A tampered/missing key cannot silently downgrade v2 to M6 unwrapping.
+    (body['content_key'] as Map)['purpose']='moment';
+    expect(OrbitEncryptedChatMedia.tryParse(jsonEncode(body)),isNull);
+    body['content_key']=null;
+    expect(OrbitEncryptedChatMedia.tryParse(jsonEncode(body)),isNull);
   });
 
   test('Encrypted private-media ID can travel only inside a device envelope',(){
