@@ -18,6 +18,7 @@ import '../../moments/data/orbit_m7_background_retry.dart';
 import '../../moments/data/orbit_moment_audience_memory.dart';
 import '../../messaging/data/orbit_messaging_local_vault.dart';
 import '../../messaging/data/orbit_messaging_cipher.dart';
+import '../../messaging/data/orbit_messaging_vodozemac_store.dart';
 
 enum OrbitRestoreState { signedOut, authenticated, deviceRegistration, deletionPending, offlineProfile }
 
@@ -255,6 +256,10 @@ class OrbitIdentityClient {
           // A new account must never inherit the prior user's local chat keys.
           try { await OrbitMessagingLocalVault().purge(lastUser); }catch(_){}
           try { await OrbitMessagingCipherRegistry.instance.purge(lastUser); }catch(_){}
+          // Independently wipe the OS-protected native ratchet snapshot even
+          // when an app update has the E2EE release gate disabled and the
+          // active cipher registry is therefore unconfigured.
+          try { await OrbitVodozemacStateStore().purgeOwner(lastUser); }catch(_){}
         }
         await OrbitPresenceRuntime.instance.stop();
         await OrbitM5FirebaseChangeSource.instance.stop();
@@ -388,6 +393,10 @@ class OrbitIdentityClient {
       try { await OrbitMomentAudienceMemory().purge(oldMediaOwner); }catch(_){}
       try { await OrbitMessagingLocalVault().purge(oldMediaOwner); }catch(_){}
       try { await OrbitMessagingCipherRegistry.instance.purge(oldMediaOwner); }catch(_){}
+          // Independently wipe the OS-protected native ratchet snapshot even
+          // when an app update has the E2EE release gate disabled and the
+          // active cipher registry is therefore unconfigured.
+          try { await OrbitVodozemacStateStore().purgeOwner(oldMediaOwner); }catch(_){}
     }
     abandonStandardSignup();
     _access = null;
