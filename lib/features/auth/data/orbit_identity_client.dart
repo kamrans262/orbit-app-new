@@ -780,6 +780,7 @@ class OrbitIdentityClient {
     }
     final output=await destination.open(mode:FileMode.write);
     var total=0;
+    var completed=false;
     try{
       await for(final chunk in response.stream.timeout(
           const Duration(seconds:90))){
@@ -791,12 +792,11 @@ class OrbitIdentityClient {
       }
       if(total==0)throw const FormatException('Empty ciphertext download.');
       await output.flush();
+      completed=true;
       return total;
-    }catch(_){
-      if(await destination.exists())await destination.delete();
-      rethrow;
     }finally{
       await output.close();
+      if(!completed && await destination.exists())await destination.delete();
     }
   }
 
