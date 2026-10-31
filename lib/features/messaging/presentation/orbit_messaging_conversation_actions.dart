@@ -8,6 +8,9 @@ import '../data/orbit_messaging_models.dart';
 import '../data/orbit_messaging_coordinator.dart';
 import '../../../core/widgets/app_primary_button.dart';
 
+/// Optional explicit report evidence; never collected from messages automatically.
+typedef OrbitReportableMessage=({String id,String text});
+
 /// Reuses Orbit's full-width white sheets, current action rows and popup
 /// confirmation. Reports do not share private message content by default.
 class OrbitMessagingConversationActions {
@@ -135,7 +138,8 @@ class OrbitMessagingConversationActions {
 
   Future<void> openDirect(BuildContext context,{
     required OrbitConversation thread,required String peerId,
-    required VoidCallback onClose,bool showEncryptionReview=false}) async {
+    required VoidCallback onClose,bool showEncryptionReview=false,
+    List<OrbitReportableMessage> evidenceCandidates=const []}) async {
     if(thread.kind!='direct'||thread.peerId!=peerId)return;
     await showOrbitCircleSheet<void>(context:context,
       title:'Conversation Options',
@@ -171,7 +175,7 @@ class OrbitMessagingConversationActions {
           icon:Icons.flag_outlined,
           onTap:(){
             Navigator.of(sheet).pop();
-            _report(context,thread);
+            _report(context,thread,evidenceCandidates);
           }),
         const SizedBox(height:10),
         OrbitCircleSheetAction(title:'Archive conversation',
@@ -206,7 +210,8 @@ class OrbitMessagingConversationActions {
   }
 
   Future<void> openCircle(BuildContext context,{
-    required OrbitConversation thread,required VoidCallback onClose}) async{
+    required OrbitConversation thread,required VoidCallback onClose,
+    List<OrbitReportableMessage> evidenceCandidates=const []}) async{
     if(thread.kind!='circle')return;
     await showOrbitCircleSheet<void>(context:context,
       title:'Circle Chat Options',
@@ -233,7 +238,7 @@ class OrbitMessagingConversationActions {
           icon:Icons.flag_outlined,
           onTap:(){
             Navigator.of(sheet).pop();
-            _report(context,thread);
+            _report(context,thread,evidenceCandidates);
           }),
         const SizedBox(height:10),
         OrbitCircleSheetAction(title:'Leave this Circle',
@@ -253,36 +258,93 @@ class OrbitMessagingConversationActions {
       ]));
   }
 
-  Future<void> _report(BuildContext context,OrbitConversation thread) async{
+  /// Default report contains only a reason. A specific, already accepted
+  /// message's plaintext is shared only after two explicit selections.
+  Future<void> _report(BuildContext context,OrbitConversation thread,
+      List<OrbitReportableMessage> evidenceCandidates) async{
     if(!context.mounted)return;
     const reasons=<String,String>{
       'spam':'Spam','abuse':'Abuse','harassment':'Harassment',
       'impersonation':'Impersonation','other':'Other',
     };
+    final eligible=evidenceCandidates.where((message)=>
+      RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(message.id) &&
+      message.text.trim().isNotEmpty && message.text.length<=600
+    ).take(15).toList(growable:false);
     await showOrbitCircleSheet<void>(context:context,
       title:'Report Conversation',builder:(sheet)=>Column(
         crossAxisAlignment:CrossAxisAlignment.stretch,
         children:[
-          const Text('Select a reason. The report contains routing metadata '
-            'and your selected reason only; no decrypted message content '
-            'is shared without separate, explicit consent.'),
+          const Text('Select a reason. Private message content is never '
+            'shared by default. You can separately select one message '
+            'and explicitly approve sharing its exact text.'),
           const SizedBox(height:12),
           ...reasons.entries.map((entry)=>Padding(
             padding:const EdgeInsets.only(bottom:10),
             child:OrbitCircleSheetAction(title:entry.value,
-              icon:Icons.flag_outlined,onTap:() async{
+              icon:Icons.flag_outlined,onTap:(){
                 Navigator.of(sheet).pop();
-                if(!await _confirm(context,'Submit Report?',
-                  'Send this '+entry.value.toLowerCase()+
-                  ' report without sharing private message content?',
-                  'Submit Report'))return;
-                if(!context.mounted)return;
-                await _mutate(context,() async{
-                  await api.report(thread.id,reason:entry.key);
-                },'Your report was submitted.');
+                _reportDetails(context,thread,entry.key,entry.value,eligible);
               }),
           )),
         ],
       ));
+  }
+
+  Future<void> _reportDetails(BuildContext context,OrbitConversation thread,
+      String reason,String label,
+      List<OrbitReportableMessage> eligible) async{
+    if(!context.mounted)return;
+    await showOrbitCircleSheet<void>(context:context,
+      title:'Report Details',builder:(sheet)=>Column(
+        crossAxisAlignment:CrossAxisAlignment.stretch,
+        children:[
+          const Text('Report without sharing message content, or choose '
+            'one specific message. Evidence is optional.'),
+          const SizedBox(height:12),
+          OrbitCircleSheetAction(
+            title:'Report without message evidence',
+            icon:Icons.lock_outline,onTap:(){
+              Navigator.of(sheet).pop();
+              _submitReport(context,thread,reason,label);
+            }),
+          if(eligible.isNotEmpty)...[
+            const SizedBox(height:16),
+            const Text('Optional: select a message to share'),
+            const SizedBox(height:10),
+            ...eligible.map((message)=>Padding(
+              padding:const EdgeInsets.only(bottom:8),
+              child:OrbitCircleSheetAction(
+                title:message.text.length>65
+                  ?'${message.text.substring(0,65)}…':message.text,
+                icon:Icons.chat_bubble_outline,onTap:(){
+                  Navigator.of(sheet).pop();
+                  _submitReport(context,thread,reason,label,selected:message);
+                },
+              ),
+            )),
+          ],
+        ],
+      ));
+  }
+
+  Future<void> _submitReport(BuildContext context,OrbitConversation thread,
+      String reason,String label,{OrbitReportableMessage? selected}) async{
+    if(!context.mounted)return;
+    final hasEvidence=selected!=null;
+    final description=hasEvidence
+      ?'Share this exact decrypted message with authorized moderators '
+        'as evidence?\n\n"${selected.text}"\n\n'
+        'This choice cannot be undone.'
+      :'Send this ${label.toLowerCase()} report with only the reason and '
+        'routing metadata? No private message content will be shared.';
+    if(!await _confirm(context,hasEvidence?'Share Message Evidence?':
+        'Submit Report?',description,
+        hasEvidence?'Share and Report':'Submit Report'))return;
+    if(!context.mounted)return;
+    await _mutate(context,() async{
+      await api.report(thread.id,reason:reason,message:selected?.id,
+        sharedEvidence:selected?.text,confirmed:hasEvidence);
+    },'Your report was submitted.');
   }
 }
