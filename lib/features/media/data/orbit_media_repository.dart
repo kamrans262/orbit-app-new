@@ -25,6 +25,37 @@ class OrbitMediaRepository {
         _http = client ?? http.Client();
   final OrbitIdentityClient _identity;
   final http.Client _http;
+  /// Original §7.4: up to five bounded ciphertext-only attempts per part.
+  /// Only network, 408/429/5xx and transient storage errors are retried;
+  /// authentication, consent and malformed signed-URL errors fail closed.
+  /// The existing upload ID and SHA-256 checksum stay unchanged.
+  static Duration encryptedPartRetryDelay(int failedAttempt){
+    final n=failedAttempt<0?0:failedAttempt>4?4:failedAttempt;
+    return Duration(seconds:min(30,1<<n));
+  }
+
+  Future<T> _retryEncryptedPart<T>(Future<T> Function() operation) async{
+    for(var attempt=0;attempt<5;attempt++){
+      try{
+        return await operation();
+      }on OrbitIdentityException catch(error){
+        final code=error.statusCode;
+        if(code!=null && code!=408 && code!=429 && code<500)rethrow;
+        if(attempt==4)rethrow;
+      }on TimeoutException {
+        if(attempt==4)rethrow;
+      }on SocketException {
+        if(attempt==4)rethrow;
+      }on http.ClientException {
+        if(attempt==4)rethrow;
+      }on StateError {
+        if(attempt==4)rethrow;
+      }
+      await Future<void>.delayed(encryptedPartRetryDelay(attempt));
+    }
+    throw StateError('Ciphertext upload exhausted retry budget.');
+  }
+
 
   Future<Map<String, dynamic>> control(String method, String path,
       {Map<String, Object?>? body, String? idempotencyKey}) async {
@@ -107,6 +138,7 @@ class OrbitMediaRepository {
             'Ciphertext file changed during transfer.');
         var etag = uploaded[index];
         if (etag == null) {
+          etag=await _retryEncryptedPart(() async {
           final checksumBytes = digest.sha256.convert(bytes).bytes;
           if (mode=='local_chunked') {
             final raw=await _identity.mediaBinaryRequest('PUT',
@@ -151,13 +183,23 @@ class OrbitMediaRepository {
               .timeout(const Duration(seconds:90));
           await response.stream.drain<void>();
           if (response.statusCode < 200 || response.statusCode >= 300) {
-            throw StateError('Encrypted part upload failed; safe to retry.');
+            if(response.statusCode!=408 && response.statusCode!=429 &&
+               response.statusCode<500){
+              throw const FormatException('Private storage rejected a signed ciphertext part.');
+            }
+            throw StateError('Temporary encrypted part upload failure.');
           }
           etag = response.headers['etag'];
           if (etag == null || etag.isEmpty) {
             throw StateError('Storage server did not acknowledge ciphertext.');
           }
           }
+
+            if(etag==null || etag!.isEmpty){
+              throw StateError('Encrypted part was not acknowledged.');
+            }
+            return etag!;
+          });
         }
         pieces.add({'part_number':index,'etag':etag});
         offset += size;
