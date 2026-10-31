@@ -319,6 +319,11 @@ class OrbitMessagingMediaBridge {
       throw StateError('Encrypted upload is already finishing.');
     }
     try{
+    final capability=await _api.capabilities();
+    if(!capability.canSendMessages){
+      throw OrbitMessagingSecurityException(
+        'Messaging is restricted for this account.',403);
+    }
     final fresh=conversation.kind=='circle'
       ?await _api.circle(conversation.circleId!)
       :await _api.direct(conversation.peerId!);
@@ -393,6 +398,11 @@ class OrbitMessagingMediaBridge {
     }
     final owner=await _identity.currentLocalSocialOwner();
     if(owner==null)throw OrbitIdentityException('Sign in first.',401);
+    final capability=await _api.capabilities();
+    if(!capability.canSendMessages){
+      throw OrbitMessagingSecurityException(
+        'Messaging is restricted for this account.',403);
+    }
     final fresh=conversation.kind=='circle'
       ?await _api.circle(conversation.circleId!)
       :await _api.direct(conversation.peerId!);
@@ -456,6 +466,8 @@ class OrbitMessagingMediaBridge {
       OrbitConversation conversation) async {
     final owner=await _identity.currentLocalSocialOwner();
     if(owner==null)return const [];
+    final capability=await _api.capabilities();
+    if(!capability.canSendMessages)return const [];
     final records=await _pendingStorage.readAll();
     final recovered=<OrbitEncryptedChatMedia>[];
     for(final entry in records.entries){
