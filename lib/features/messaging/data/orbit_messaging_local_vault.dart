@@ -275,6 +275,46 @@ class OrbitMessagingLocalVault {
     });
   }
 
+  /// Only explicitly rejected ciphertext can be discarded, and only
+  /// after an Orbit confirmation popup. Waiting/offline ciphertext is never
+  /// removed by this action. Preserve the owner's other conversations.
+  Future<int> discardReviewRequired(String conversation) async{
+    final owner=await _owner();
+    final conversationIndex=await _index(owner,conversation);
+    return _db(owner,(db) async {
+      final rows=await db.query('outbox',
+        columns:['client_id','blob_enc'],
+        where:'conversation_id = ? AND requires_review = 1',
+        whereArgs:[conversationIndex]);
+      final pending=<({String packet,String preview})>[];
+      for(final row in rows){
+        final packetIndex=row['client_id'] as String;
+        final decoded=await _unseal(owner,packetIndex,
+          row['blob_enc'] as String);
+        final record=OrbitQueuedCiphertext.fromJson(
+          Map<String,dynamic>.from(jsonDecode(decoded) as Map));
+        if(record.conversationId!=conversation){
+          throw OrbitMessagingSecurityException(
+            'Cannot discard another conversation ciphertext.',409);
+        }
+        pending.add((packet:packetIndex,
+          preview:await _index(owner,'local-${record.clientId}')));
+      }
+      await _sameOwner(owner);
+      await db.transaction((txn) async {
+        for(final entry in pending){
+          await txn.delete('outbox',
+            where:'client_id = ? AND requires_review = 1',
+            whereArgs:[entry.packet]);
+          await txn.delete('history',
+            where:'message_id = ? AND conversation_id = ?',
+            whereArgs:[entry.preview,conversationIndex]);
+        }
+      });
+      return pending.length;
+    });
+  }
+
   Future<void> acknowledge(String clientId) async {
     final owner=await _owner();
     final index=await _index(owner,clientId);
