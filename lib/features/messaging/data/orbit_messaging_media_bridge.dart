@@ -14,30 +14,89 @@ import '../../media/data/orbit_media_repository.dart';
 import 'orbit_messaging_api.dart';
 import 'orbit_messaging_models.dart';
 
+/// Key material is encoded ONLY inside the already-authenticated and
+/// encrypted M13 message body or the device's encrypted local chat history.
+/// Never put these values in server-visible metadata or an HTTP request.
+class OrbitChatMediaContentKey {
+  const OrbitChatMediaContentKey({
+    required this.key,required this.noncePrefix,
+    required this.owner,required this.transfer,
+    required this.plainBytes,
+  });
+  final Uint8List key,noncePrefix;
+  final String owner,transfer;
+  final int plainBytes;
+
+  factory OrbitChatMediaContentKey.fromSealed(OrbitSealedMedia media)=>
+    OrbitChatMediaContentKey(key:media.key,
+      noncePrefix:media.noncePrefix,owner:media.ownerId,
+      transfer:media.transferId,plainBytes:media.plainBytes);
+
+  Map<String,Object?> toJson()=>{
+    'key_b64':base64Encode(key),'nonce_b64':base64Encode(noncePrefix),
+    'owner_id':owner,'transfer_id':transfer,'plain_bytes':plainBytes,
+    'purpose':'message','variant':'original',
+  };
+
+  static OrbitChatMediaContentKey parse(Map value){
+    final key=base64Decode(value['key_b64'] as String);
+    final nonce=base64Decode(value['nonce_b64'] as String);
+    final owner=value['owner_id'];
+    final transfer=value['transfer_id'];
+    final size=value['plain_bytes'];
+    if(key.length!=32||nonce.length!=8||
+       owner is! String||owner.isEmpty||
+       transfer is! String||
+       !RegExp(r'^[a-f0-9-]{36}$').hasMatch(transfer)||
+       size is! int||size<=0||size>64*1024*1024||
+       value['purpose']!='message'||value['variant']!='original') {
+      throw const FormatException('Invalid E2EE chat attachment key.');
+    }
+    return OrbitChatMediaContentKey(key:Uint8List.fromList(key),
+      noncePrefix:Uint8List.fromList(nonce),owner:owner,
+      transfer:transfer,plainBytes:size);
+  }
+}
+
 class OrbitEncryptedChatMedia {
-  const OrbitEncryptedChatMedia({required this.mediaId,
-    required this.kind,required this.mime,required this.durationMs});
+  const OrbitEncryptedChatMedia({
+    required this.mediaId,required this.kind,
+    required this.mime,required this.durationMs,this.contentKey,
+  });
   final String mediaId,kind,mime;
   final int? durationMs;
+  final OrbitChatMediaContentKey? contentKey;
+
   String encode()=>jsonEncode({
-    'v':1,'type':'orbit_m13_media','media_id':mediaId,
+    'v':contentKey==null?1:2,
+    'type':'orbit_m13_media','media_id':mediaId,
     'kind':kind,'mime':mime,
     if(durationMs!=null)'duration_ms':durationMs,
+    if(contentKey!=null)'content_key':contentKey!.toJson(),
   });
+
   static OrbitEncryptedChatMedia? tryParse(String text){
     try{
       final value=jsonDecode(text);
-      if(value is! Map||value['v']!=1||
+      if(value is! Map ||
+          (value['v']!=1 && value['v']!=2) ||
           value['type']!='orbit_m13_media'||
           value['media_id'] is! String||
           !const ['image','voice','video'].contains(value['kind'])||
           value['mime'] is! String)return null;
       final id=value['media_id'] as String;
       if(!RegExp(r'^[a-f0-9-]{36}$').hasMatch(id))return null;
+      final version=value['v'] as int;
+      if(version==1 && value.containsKey('content_key'))return null;
+      if(version==2 && value['content_key'] is! Map)return null;
+      final contentKey=version==2
+        ?OrbitChatMediaContentKey.parse(value['content_key'] as Map)
+        :null;
       return OrbitEncryptedChatMedia(
         mediaId:id,kind:value['kind'] as String,
         mime:value['mime'] as String,
-        durationMs:(value['duration_ms'] as num?)?.toInt());
+        durationMs:(value['duration_ms'] as num?)?.toInt(),
+        contentKey:contentKey);
     }catch(_){return null;}
   }
 }
@@ -176,7 +235,8 @@ class OrbitMessagingMediaBridge {
         throw OrbitIdentityException('Account changed during upload.',401);
       }
       return OrbitEncryptedChatMedia(
-        mediaId:receipt.mediaId,kind:kind,mime:mime,durationMs:durationMs);
+        mediaId:receipt.mediaId,kind:kind,mime:mime,durationMs:durationMs,
+        contentKey:OrbitChatMediaContentKey.fromSealed(sealed));
     }finally{
       if(await encrypted.exists())await encrypted.delete();
     }
@@ -215,13 +275,24 @@ class OrbitMessagingMediaBridge {
 
   Future<Uint8List> open(OrbitEncryptedChatMedia manifest) async {
     final device=await _identity.trustedMediaDevice();
+    final maxBytes=switch(manifest.kind){
+      'image'=>OrbitMediaFormat.imageLimit,
+      'voice'=>OrbitMediaFormat.audioLimit,
+      'video'=>64*1024*1024,
+      _=>0,
+    };
+    final key=manifest.contentKey;
+    if(key!=null){
+      return _media.downloadMessageMedia(manifest.mediaId,
+        deviceId:device.id,contentKey:key.key,noncePrefix:key.noncePrefix,
+        ownerId:key.owner,transferId:key.transfer,
+        purpose:'message',variant:'original',
+        expectedPlainBytes:key.plainBytes,maxPlainBytes:maxBytes);
+    }
+    // Legacy v1 messages may still have an M6 device-wrapped key. New chat
+    // attachments MUST use v2 with per-message content keys in the ratchet.
     return _media.downloadPhoto(manifest.mediaId,deviceId:device.id,
       privateKey:device.privateKey,publicKey:device.publicKey,
-      maxPlainBytes:switch(manifest.kind){
-        'image'=>OrbitMediaFormat.imageLimit,
-        'voice'=>OrbitMediaFormat.audioLimit,
-        'video'=>64*1024*1024,
-        _=>0,
-      });
+      maxPlainBytes:maxBytes);
   }
 }
