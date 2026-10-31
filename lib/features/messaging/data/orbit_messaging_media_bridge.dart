@@ -167,10 +167,11 @@ class OrbitMessagingMediaBridge {
   }
 
   String _pendingIndex(String owner,String conversation,String kind,
-      String source,int bytes,int modifiedMs,int? durationMs) =>
+      String source,int bytes,int modifiedMs,int? durationMs,
+      String sourceSha256) =>
     _pendingPrefix+hashes.sha256.convert(utf8.encode(
-      '$owner|$conversation|$kind|$source|$bytes|$modifiedMs|$durationMs'))
-      .toString();
+      '$owner|$conversation|$kind|$source|$bytes|$modifiedMs|'
+      '$durationMs|$sourceSha256')).toString();
 
   /// The ciphertext stays inside the application's private support directory.
   /// Its content key and resume metadata stay in OS secure storage. This is
@@ -255,6 +256,253 @@ class OrbitMessagingMediaBridge {
         if(await file.exists())await file.delete();
         cleaned++;
       }catch(_){ /* Never delete an unrecognized local file. */ }
+    }
+    // A process kill between sealing and storing the secure checkpoint may
+    // leave an unreferenced ciphertext file. Never touch other app files.
+    if(await root.exists()){
+      final owned=RegExp(
+        r'^orbit_m13_[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-'
+        r'[a-f0-9]{4}-[a-f0-9]{12}\\.cipher(String owner) async {
+    if(owner.isEmpty)return;
+    final all=await _pendingStorage.readAll();
+    final home=await getApplicationSupportDirectory();
+    final root=Directory(home.path+Platform.pathSeparator+
+      'orbit_m13_pending_ciphertext');
+    for(final entry in all.entries) {
+      if(!entry.key.startsWith(_pendingPrefix))continue;
+      try{
+        final data=Map<String,dynamic>.from(jsonDecode(entry.value) as Map);
+        if(data['owner']!=owner)continue;
+        await _pendingStorage.delete(key:entry.key);
+        final transfer=data['transfer'];
+        if(transfer is String &&
+           RegExp(r'^[a-f0-9-]{36}$').hasMatch(transfer)){
+          final file=File(root.path+Platform.pathSeparator+
+            'orbit_m13_'+transfer+'.cipher');
+          if(await file.exists())await file.delete();
+        }
+      }catch(_){ /* Keep unknown files; no broad directory deletion. */ }
+    }
+  }
+
+  Future<OrbitEncryptedChatMedia> _complete({
+    required OrbitConversation conversation,
+    required String owner,
+    required OrbitSealedMedia sealed,
+    required String pendingIndex,
+    required String kind,
+    required String mime,
+    int? durationMs,
+  }) async {
+    final fresh=conversation.kind=='circle'
+      ?await _api.circle(conversation.circleId!)
+      :await _api.direct(conversation.peerId!);
+    if(fresh.id!=conversation.id||fresh.groupEpoch!=conversation.groupEpoch ||
+       sealed.ownerId!=owner||sealed.purpose!='message') {
+      throw OrbitIdentityException('Conversation permissions changed.',409);
+    }
+    final recipients=await _eligibleRecipients(fresh,owner);
+    final ownDevices=await _keys.discover(audienceKind:'only_me',
+      purpose:'message',recipientIds:[owner]);
+    final userDevices=<OrbitMediaRecipient>[];
+    for(final peer in recipients) {
+      userDevices.addAll(await _keys.discover(
+        audienceKind:fresh.kind=='circle'?'selected_circles':'selected_friends',
+        purpose:'message',
+        circleId:fresh.kind=='circle'?fresh.circleId:null,
+        recipientIds:[peer]));
+    }
+    final receipt=await _media.upload(sealed,
+      kind:kind=='voice'?'audio':kind,mime:mime,durationMs:durationMs);
+    if(!receipt.ready)throw StateError('Private ciphertext still verifying.');
+    final ownKeys=await _keys.encryptEnvelopes(sealed,ownDevices);
+    await _media.createGrants(receipt.mediaId,
+      audience:'only_me',recipients:const [],
+      keyEnvelopes:ownKeys,idempotencyKey:const Uuid().v4());
+    final sharingKeys=await _keys.encryptEnvelopes(sealed,userDevices);
+    await _media.createGrants(receipt.mediaId,
+      audience:fresh.kind=='circle'?'selected_circles':'selected_friends',
+      recipients:fresh.kind=='circle'?[fresh.circleId!]:recipients,
+      keyEnvelopes:sharingKeys,idempotencyKey:const Uuid().v4());
+    if(await _identity.currentLocalSocialOwner()!=owner) {
+      throw OrbitIdentityException('Account changed during upload.',401);
+    }
+    final result=OrbitEncryptedChatMedia(
+      mediaId:receipt.mediaId,kind:kind,mime:mime,durationMs:durationMs,
+      contentKey:OrbitChatMediaContentKey.fromSealed(sealed));
+    await _discardPending(pendingIndex,sealed);
+    return result;
+  }
+
+  Future<OrbitEncryptedChatMedia> stage({
+    required OrbitConversation conversation,
+    required File original,
+    required String kind,
+    int? durationMs,
+  }) async {
+    unawaited(pruneOrphanedCiphertext().then<void>((_) {},
+      onError:(_){ /* Best-effort old temp cleanup. */ }));
+    unawaited(prunePendingCiphertext().then<void>((_) {},
+      onError:(_){ /* Retain unrecognized pending uploads. */ }));
+    if(!const ['image','voice','video'].contains(kind)) {
+      throw ArgumentError.value(kind,'kind','Unsupported encrypted media');
+    }
+    final owner=await _identity.currentLocalSocialOwner();
+    if(owner==null)throw OrbitIdentityException('Sign in first.',401);
+    final fresh=conversation.kind=='circle'
+      ?await _api.circle(conversation.circleId!)
+      :await _api.direct(conversation.peerId!);
+    if(fresh.id!=conversation.id||fresh.groupEpoch!=conversation.groupEpoch){
+      throw OrbitIdentityException('Conversation permissions changed.',409);
+    }
+    final stat=await original.stat();
+    final bytes=stat.size;
+    final limit=switch(kind){
+      'image'=>OrbitMediaFormat.imageLimit,
+      'voice'=>OrbitMediaFormat.audioLimit,
+      'video'=>OrbitMediaFormat.videoLimit,
+      _=>0,
+    };
+    if((kind=='video' && (durationMs==null || durationMs<1 ||
+        durationMs>60000)) || bytes<=0||bytes>limit){
+      throw const FormatException('Media exceeds encrypted upload limit.');
+    }
+    // The same path/size/mtime may be reused for different source bytes.
+    // A content fingerprint prevents resuming the wrong ciphertext session.
+    final sourceHash=(await hashes.sha256.bind(original.openRead()).first)
+      .toString();
+    final index=_pendingIndex(owner,conversation.id,kind,original.path,
+      bytes,stat.modified.millisecondsSinceEpoch,durationMs,sourceHash);
+    var sealed=await _restore(index,owner,conversation.id,
+      conversation.groupEpoch,kind,durationMs);
+    if(sealed==null) {
+      final transfer=const Uuid().v4();
+      final folder=await _pendingDirectory();
+      final encrypted=File(folder.path+Platform.pathSeparator+
+        'orbit_m13_'+transfer+'.cipher');
+      try {
+        if(kind=='image') {
+          final clean=OrbitMediaCrypto.preparePhoto(
+            Uint8List.fromList(await original.readAsBytes()));
+          sealed=await _crypto.sealBytes(clean.jpeg,
+            destination:encrypted,ownerId:owner,
+            transferId:transfer,purpose:'message');
+        }else{
+          sealed=await _crypto.sealFile(original,
+            destination:encrypted,ownerId:owner,
+            transferId:transfer,purpose:'message',maxInputBytes:limit);
+        }
+        await _savePending(index,sealed,conversation.id,
+          conversation.groupEpoch,kind,durationMs);
+      }catch(_){
+        if(await encrypted.exists())await encrypted.delete();
+        rethrow;
+      }
+    }
+    return _complete(conversation:conversation,owner:owner,sealed:sealed,
+      pendingIndex:index,kind:kind,
+      mime:kind=='image'?'image/jpeg':
+        kind=='voice'?'audio/mp4':'video/mp4',durationMs:durationMs);
+  }
+
+  /// Retry unfinished encrypted uploads even when the original voice capture
+  /// has been removed, without re-reading plaintext or generating new keys.
+  /// Only the current authorized Circle epoch can complete the transfer.
+  Future<List<OrbitEncryptedChatMedia>> resumePending(
+      OrbitConversation conversation) async {
+    final owner=await _identity.currentLocalSocialOwner();
+    if(owner==null)return const [];
+    final records=await _pendingStorage.readAll();
+    final recovered=<OrbitEncryptedChatMedia>[];
+    for(final entry in records.entries){
+      if(!entry.key.startsWith(_pendingPrefix))continue;
+      try {
+        final meta=Map<String,dynamic>.from(jsonDecode(entry.value) as Map);
+        if(meta['owner']!=owner||
+           meta['conversation']!=conversation.id)continue;
+        final kind=meta['kind'] as String;
+        final duration=meta['duration_ms'] as int?;
+        final sealed=await _restore(entry.key,owner,conversation.id,
+          conversation.groupEpoch,kind,duration);
+        if(sealed==null)continue;
+        recovered.add(await _complete(conversation:conversation,owner:owner,
+          sealed:sealed,pendingIndex:entry.key,kind:kind,
+          mime:kind=='image'?'image/jpeg':
+            kind=='voice'?'audio/mp4':'video/mp4',durationMs:duration));
+      }catch(_){
+        // Leave ciphertext and its stable upload ID for a later authenticated
+        // retry. Never claim successful delivery or reveal any private data.
+      }
+    }
+    return recovered;
+  }
+
+  Future<List<String>> _eligibleRecipients(
+      OrbitConversation thread,String owner) async {
+    if(thread.kind=='direct'){
+      final peer=thread.peerId;
+      if(peer==null)throw OrbitIdentityException('Recipient unavailable.',409);
+      // Eligibility lookup must not spend a one-time ratchet prekey.
+      await _api.discoverKeys(peer,consumeOneTimePrekey:false);
+      return [peer];
+    }
+    final circle=thread.circleId;
+    if(circle==null)throw OrbitIdentityException('Circle unavailable.',409);
+    final eligible=<String>[];
+    for(var page=1;page<=10;page++){
+      final result=await _circles.members(circle,page:page);
+      for(final p in result.items){
+        if(p.id==owner||p.role=='restricted')continue;
+        try{
+          await _api.discoverKeys(p.id,consumeOneTimePrekey:false);
+          eligible.add(p.id);
+        }on OrbitIdentityException catch(err){
+          if(err.statusCode!=404)rethrow;
+        }
+      }
+      if(!result.hasMore)break;
+    }
+    if(eligible.isEmpty){
+      throw OrbitIdentityException('No consenting Circle recipients.',409);
+    }
+    return eligible;
+  }
+
+  Future<Uint8List> open(OrbitEncryptedChatMedia manifest) async {
+    final device=await _identity.trustedMediaDevice();
+    final maxBytes=switch(manifest.kind){
+      'image'=>OrbitMediaFormat.imageLimit,
+      'voice'=>OrbitMediaFormat.audioLimit,
+      'video'=>64*1024*1024,
+      _=>0,
+    };
+    final key=manifest.contentKey;
+    if(key!=null){
+      return _media.downloadMessageMedia(manifest.mediaId,
+        deviceId:device.id,contentKey:key.key,noncePrefix:key.noncePrefix,
+        ownerId:key.owner,transferId:key.transfer,
+        purpose:'message',variant:'original',
+        expectedPlainBytes:key.plainBytes,maxPlainBytes:maxBytes);
+    }
+    // Legacy v1 messages may still have an M6 device-wrapped key. New chat
+    // attachments MUST use v2 with per-message content keys in the ratchet.
+    return _media.downloadPhoto(manifest.mediaId,deviceId:device.id,
+      privateKey:device.privateKey,publicKey:device.publicKey,
+      maxPlainBytes:maxBytes);
+  }
+}
+);
+      await for(final item in root.list(followLinks:false)){
+        if(item is! File || !owned.hasMatch(item.uri.pathSegments.last))continue;
+        try{
+          final stat=await item.stat();
+          if(stat.type==FileSystemEntityType.file &&
+             stat.modified.toUtc().isBefore(expiry)){
+            await item.delete();
+            cleaned++;
+          }
+        }on FileSystemException{ /* Device storage cleanup is best effort. */ }
+      }
     }
     return cleaned;
   }
@@ -364,8 +612,12 @@ class OrbitMessagingMediaBridge {
         durationMs>60000)) || bytes<=0||bytes>limit){
       throw const FormatException('Media exceeds encrypted upload limit.');
     }
+    // The same path/size/mtime may be reused for different source bytes.
+    // A content fingerprint prevents resuming the wrong ciphertext session.
+    final sourceHash=(await hashes.sha256.bind(original.openRead()).first)
+      .toString();
     final index=_pendingIndex(owner,conversation.id,kind,original.path,
-      bytes,stat.modified.millisecondsSinceEpoch,durationMs);
+      bytes,stat.modified.millisecondsSinceEpoch,durationMs,sourceHash);
     var sealed=await _restore(index,owner,conversation.id,
       conversation.groupEpoch,kind,durationMs);
     if(sealed==null) {
