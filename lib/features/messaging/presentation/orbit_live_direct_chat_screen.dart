@@ -220,8 +220,11 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
           ?'Sticker unavailable.':entry.text;
       if(reply!=null){
         final original=history.where((e)=>e.id==reply.targetId).toList();
-        final quote=original.isEmpty?'Original message'
-          :original.first.text;
+        final source=original.isEmpty?null:original.first;
+        final quote=source==null?'Original message'
+          :source.kind=='sticker'?'Sticker'
+          :const ['image','video','voice'].contains(source.kind)
+            ?'Encrypted attachment':source.text;
         text='↪ '+(quote.length>60?quote.substring(0,60)+'…':quote)+
           '\n'+reply.text;
       }
