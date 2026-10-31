@@ -444,6 +444,15 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
     onOpenVideo:_playVideo,
     onTypingChanged:_setTyping,
     onMessageViewed:_viewed,
+    onDeleteMessage:(messageId) async {
+      final thread=_thread;
+      if(thread==null||!_cryptoReady){
+        throw OrbitMessagingSecurityException(
+          'Verified encrypted deletion is unavailable.',503);
+      }
+      await _messenger.redactOwn(thread,messageId);
+      if(mounted)unawaited(_load());
+    },
     typingNotice:_typingCount>0
       ?(_typingCount==1?'A member is typing…':'Members are typing…')
       :null,
