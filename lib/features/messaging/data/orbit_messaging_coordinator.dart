@@ -386,18 +386,27 @@ class OrbitMessagingCoordinator {
       final displayLimit=limit.clamp(1,200);
       final available=await vault.history(thread.id,limit:displayLimit+1);
       final key=_pageKey(owner,thread.id);
-      _hasLocalOlder[key]=available.length>displayLimit;
       final visible=available.length>displayLimit
         ?available.sublist(available.length-displayLimit):available;
+      final previous=_localOldest[key];
       if(visible.isNotEmpty){
-        final current=_localOldest[key];
         final oldest=visible.first;
-        if(current==null||
-           oldest.createdAt.isBefore(current.createdAt)||
-           (oldest.createdAt==current.createdAt &&
-            oldest.id.compareTo(current.id)<0)){
+        if(previous==null||
+           oldest.createdAt.isBefore(previous.createdAt)||
+           (oldest.createdAt==previous.createdAt &&
+            oldest.id.compareTo(previous.id)<0)){
           _localOldest[key]=oldest;
         }
+      }
+      if(previous==null) {
+        _hasLocalOlder[key]=available.length>displayLimit;
+      }else{
+        // Do not repeatedly offer already-exhausted local pages after
+        // the next 25-second HTTPS refresh.
+        final anchor=_localOldest[key];
+        _hasLocalOlder[key]=anchor!=null &&
+          (await vault.historyBefore(thread.id,before:anchor.createdAt,
+            beforeId:anchor.id,limit:1)).isNotEmpty;
       }
       return visible;
     });
