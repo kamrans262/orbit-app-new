@@ -77,7 +77,27 @@ class OrbitMessagingMediaBridge {
       const Duration(days:90));
     final owned=RegExp(
       r'^orbit_m13_[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-'
-      r'[a-f0-9]{4}-[a-f0-9]{12}\\.cipher
+      r'[a-f0-9]{4}-[a-f0-9]{12}\.cipher$');
+    var deleted=0;
+    await for(final item in temp.list(followLinks:false)){
+      if(item is! File)continue;
+      final name=item.uri.pathSegments.last;
+      if(!owned.hasMatch(name))continue;
+      try{
+        final stat=await item.stat();
+        if(stat.type==FileSystemEntityType.file &&
+            stat.modified.isBefore(cutoff)){
+          await item.delete();
+          deleted++;
+        }
+      }on FileSystemException{
+        // Temporary storage can be concurrently cleaned by the OS.
+      }
+    }
+    return deleted;
+  }
+
+  Future<OrbitEncryptedChatMedia> stage({
     required OrbitConversation conversation,
     required File original,
     required String kind,
