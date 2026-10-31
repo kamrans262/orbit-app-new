@@ -61,9 +61,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Pin dependency graph for focused pre-release validation
+      - name: Generate a reviewable dependency lock only if absent
         working-directory: native/orbit_vodozemac
-        run: cargo generate-lockfile
+        run: |
+          if [ ! -f Cargo.lock ]; then cargo generate-lockfile; fi
+          cargo metadata --locked --no-deps --format-version 1 >/dev/null
+      - name: Emit native dependency lock for one-time reproducibility review
+        working-directory: native/orbit_vodozemac
+        run: |
+          echo BEGIN_ORBIT_M13_CARGO_LOCK
+          base64 -w0 Cargo.lock
+          echo
+          echo END_ORBIT_M13_CARGO_LOCK
       - name: Check audited-core bridge and run unit tests
         working-directory: native/orbit_vodozemac
         run: |
