@@ -43,6 +43,36 @@ class _VerifiedPrivateUploadApi extends OrbitMediaRepository {
   }
 }
 
+/// Simulates a new process reusing a previously uploaded ciphertext part.
+class _ResumedPrivateUploadApi extends OrbitMediaRepository {
+  _ResumedPrivateUploadApi(http.Client client):super(client:client);
+  @override
+  Future<Map<String,dynamic>> control(String method,String path,{
+    Map<String,Object?>? body,String? idempotencyKey,
+  }) async {
+    if(method=='POST' && path=='/media/uploads') {
+      return {
+        'media_id':'4ec493c1-d21a-4eea-a09e-91566cbd5936',
+        'upload_id':'resume-upload','state':'uploading',
+        'storage_mode':'multipart',
+        'part_size_bytes':OrbitMediaFormat.partBytes,
+      };
+    }
+    if(method=='GET' && path=='/media/uploads/resume-upload') {
+      return {'state':'uploading','uploaded_parts':[
+        {'part_number':1,'etag':'already-verified-ciphertext'}
+      ]};
+    }
+    if(method=='POST' && path=='/media/uploads/resume-upload/complete') {
+      expect(body?['parts'],[
+        {'part_number':1,'etag':'already-verified-ciphertext'},
+      ]);
+      return {'state':'ready'};
+    }
+    throw StateError('Unexpected resume transfer request: $method $path');
+  }
+}
+
 void main(){
   test('Temporary storage 503 retries the same encrypted multipart data',() async {
     var sent=0;
@@ -76,4 +106,30 @@ void main(){
       if(await temp.exists())await temp.delete(recursive:true);
     }
   });
+  test('Resume reuses confirmed ciphertext part without reuploading bytes',() async {
+    var unexpectedPuts=0;
+    final client=MockClient((request) async {
+      unexpectedPuts++;
+      return http.Response('must not PUT a confirmed part',500);
+    });
+    final temp=await Directory.systemTemp.createTemp('orbit_resume_test_');
+    try {
+      final file=File('${temp.path}/sealed.cipher');
+      await file.writeAsBytes([12,24,36],flush:true);
+      final sealed=OrbitSealedMedia(
+        file:file,key:Uint8List(32),noncePrefix:Uint8List(8),
+        plainBytes:3,bytes:3,
+        sha256:digest.sha256.convert([12,24,36]).toString(),
+        ownerId:'owner',transferId:'4ec493c1-d21a-4eea-a09e-91566cbd5936',
+        purpose:'message',variant:'original');
+      final receipt=await _ResumedPrivateUploadApi(client).upload(
+        sealed,kind:'image',mime:'image/jpeg');
+      expect(receipt.ready,isTrue);
+      expect(unexpectedPuts,0);
+    }finally{
+      client.close();
+      if(await temp.exists())await temp.delete(recursive:true);
+    }
+  });
+
 }
