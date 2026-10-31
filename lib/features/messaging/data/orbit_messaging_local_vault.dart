@@ -137,14 +137,15 @@ class OrbitMessagingLocalVault {
   Future<T> _db<T>(String owner,Future<T> Function(Database db) job) async {
     await _sameOwner(owner);
     final path=await _path(owner);
-    final db=await openDatabase(path,version:1,
+    final db=await openDatabase(path,version:2,
       onConfigure:(db) async {
         await db.execute('PRAGMA synchronous = FULL');
       },
       onCreate:(db,version) async {
         await db.execute('CREATE TABLE outbox('
           'client_id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL,'
-          'blob_enc TEXT NOT NULL,created_at INTEGER NOT NULL)');
+          'blob_enc TEXT NOT NULL,created_at INTEGER NOT NULL,'
+          'requires_review INTEGER NOT NULL DEFAULT 0)');
         await db.execute('CREATE INDEX outbox_created ON outbox(created_at)');
         await db.execute('CREATE TABLE history('
           'message_id TEXT PRIMARY KEY,conversation_id TEXT NOT NULL,'
@@ -152,6 +153,14 @@ class OrbitMessagingLocalVault {
           'blob_enc TEXT NOT NULL,created_at INTEGER NOT NULL)');
         await db.execute('CREATE INDEX history_by_conversation '
           'ON history(conversation_id,created_at DESC)');
+      },
+      onUpgrade:(db,oldVersion,newVersion) async{
+        if(oldVersion<2){
+          // Additive migration; preserve all pre-existing sealed envelopes
+          // and their device-bound keys across app upgrades.
+          await db.execute('ALTER TABLE outbox ADD COLUMN '
+            'requires_review INTEGER NOT NULL DEFAULT 0');
+        }
       },
     );
     try {
@@ -219,6 +228,50 @@ class OrbitMessagingLocalVault {
       }
       await _sameOwner(owner);
       return result;
+    });
+  }
+
+  /// Non-retryable 4xx/epoch/consent rejections remain encrypted locally,
+  /// with a durable failure flag. Do not silently re-send old ciphertext
+  /// after an identity, Circle roster or consent revocation.
+  Future<void> markNeedsReview(String clientId) async{
+    final owner=await _owner();
+    final index=await _index(owner,clientId);
+    await _db(owner,(db)=>db.update('outbox',
+      {'requires_review':1},where:'client_id = ?',whereArgs:[index]));
+  }
+
+  Future<bool> requiresReview(String clientId) async{
+    final owner=await _owner();
+    final index=await _index(owner,clientId);
+    return _db(owner,(db) async{
+      final rows=await db.query('outbox',columns:['requires_review'],
+        where:'client_id = ?',whereArgs:[index],limit:1);
+      return rows.isNotEmpty && rows.first['requires_review']==1;
+    });
+  }
+
+  Future<Set<String>> reviewRequiredMessageIds(String conversation) async{
+    final owner=await _owner();
+    final conversationIndex=await _index(owner,conversation);
+    return _db(owner,(db) async{
+      final rows=await db.query('outbox',
+        columns:['client_id','blob_enc'],
+        where:'conversation_id = ? AND requires_review = 1',
+        whereArgs:[conversationIndex],limit:200);
+      final ids=<String>{};
+      for(final row in rows){
+        final index=row['client_id'] as String;
+        final decoded=await _unseal(owner,index,row['blob_enc'] as String);
+        final queued=OrbitQueuedCiphertext.fromJson(
+          Map<String,dynamic>.from(jsonDecode(decoded) as Map));
+        if(queued.conversationId!=conversation){
+          throw OrbitMessagingSecurityException(
+            'Encrypted retry review scope mismatch.',409);
+        }
+        ids.add('local-${queued.clientId}');
+      }
+      return ids;
     });
   }
 
