@@ -13,6 +13,7 @@ import '../data/orbit_messaging_local_vault.dart';
 import '../data/orbit_messaging_models.dart';
 import '../data/orbit_messaging_media_bridge.dart';
 import '../data/orbit_messaging_reactions.dart';
+import '../data/orbit_messaging_stickers.dart';
 import '../data/orbit_messaging_replies.dart';
 import '../../../core/navigation/app_fade_slide_page_route.dart';
 import 'orbit_chat_voice_recorder.dart';
@@ -204,6 +205,8 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
       final reply=entry.kind=='reply'
         ?OrbitEncryptedReply.fromText(entry.text):null;
       final manifest=OrbitEncryptedChatMedia.tryParse(entry.text);
+      final validSticker=entry.kind=='sticker' &&
+        OrbitChatSticker.tryParse(entry.text)!=null;
       final malformedMedia=manifest==null &&
         const ['image','voice','video'].contains(entry.kind);
       if(manifest!=null && manifest.kind=='video'){
@@ -212,7 +215,9 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
       var type=entry.senderId==owner
         ?DirectChatMessageType.sentText:DirectChatMessageType.receivedText;
       String? text=malformedMedia
-        ?'Encrypted media is unavailable.':entry.text;
+        ?'Encrypted media is unavailable.'
+        :entry.kind=='sticker' && !validSticker
+          ?'Sticker unavailable.':entry.text;
       if(reply!=null){
         final original=history.where((e)=>e.id==reply.targetId).toList();
         final quote=original.isEmpty?'Original message'
@@ -420,7 +425,10 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
       result=await _messenger.sendReply(thread,
         targetId:message.replyToId!,text:message.text??'');
     }else{
-      result=await _messenger.sendText(thread,message.text??'');
+      final sticker=OrbitChatSticker.tryParse(message.text);
+      result=sticker==null
+        ?await _messenger.sendText(thread,message.text??'')
+        :await _messenger.sendSticker(thread,sticker);
     }
     if(result.queued){
       if(mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
