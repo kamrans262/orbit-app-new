@@ -78,6 +78,7 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
   @override
   void dispose(){
     _epoch++;
+    _videoManifests.clear();
     _timer?.cancel();
     _typingTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
@@ -170,6 +171,7 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
       if(!mounted||epoch!=_epoch)return;
       setState((){
         _thread=null;_participants=const [];_messages=const [];
+        _videoManifests.clear();
         _olderMessages=const [];
         _loading=false;_cryptoReady=false;
         _error='A Circle message could not be verified. '
@@ -219,10 +221,13 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
       final reply=entry.kind=='reply'
         ?OrbitEncryptedReply.fromText(entry.text):null;
       final manifest=OrbitEncryptedChatMedia.tryParse(entry.text);
+      final malformedMedia=manifest==null &&
+        const ['image','voice','video'].contains(entry.kind);
       if(manifest?.kind=='video')_videoManifests[manifest!.mediaId]=manifest;
       var type=entry.senderId==owner
         ?GroupChatMessageType.sentText:GroupChatMessageType.receivedText;
-      String? text=entry.text;
+      String? text=malformedMedia
+        ?'Encrypted media is unavailable.':entry.text;
       if(reply!=null){
         final original=history.where((e)=>e.id==reply.targetId).toList();
         final quote=original.isEmpty?'Original message':original.first.text;
