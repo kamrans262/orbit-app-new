@@ -3,6 +3,9 @@ import 'dart:typed_data';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../../../circles/presentation/widgets/orbit_circle_sheet.dart';
+import '../../../circles/presentation/widgets/orbit_circle_confirmation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
 
@@ -69,6 +72,7 @@ class GroupChatScreen extends StatefulWidget {
     this.onOpenVideo,
     this.onTypingChanged,
     this.onMessageViewed,
+    this.onDeleteMessage,
     this.typingNotice,
     this.liveMode = false,
     this.encryptedTransportReady = false,
@@ -179,6 +183,7 @@ class GroupChatScreen extends StatefulWidget {
   final ValueChanged<String>? onOpenVideo;
   final ValueChanged<bool>? onTypingChanged;
   final ValueChanged<String>? onMessageViewed;
+  final FutureOr<void> Function(String messageId)? onDeleteMessage;
   final String? typingNotice;
   final bool liveMode;
   final bool encryptedTransportReady;
@@ -403,6 +408,60 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       if(mounted)_sendError('Message could not be sent.');
     }
   }
+  /// Reuse the approved Circle sheet after long-press reactions.
+  /// Deletion is enabled only on the authenticated owner's acknowledged
+  /// encrypted message and only after Laravel confirms removal.
+  Future<void> _messageOptions(GroupChatMessage message) async{
+    if(!mounted)return;
+    final canCopy=message.text!=null &&
+      message.text!.trim().isNotEmpty && message.text!.length<=22000;
+    final canDelete=widget.liveMode && message.isMine &&
+      !message.id.startsWith('local-') &&
+      widget.encryptedTransportReady &&
+      widget.onDeleteMessage!=null;
+    if(!canCopy&&!canDelete)return;
+    await showOrbitCircleSheet<void>(
+      context:context,title:'Message Options',
+      builder:(sheet)=>Column(
+        mainAxisSize:MainAxisSize.min,
+        children:[
+          if(canCopy)
+            OrbitCircleSheetAction(title:'Copy text',
+              icon:Icons.copy_outlined,onTap:() async{
+                Navigator.of(sheet).pop();
+                await Clipboard.setData(ClipboardData(text:message.text!));
+              }),
+          if(canDelete)...[
+            if(canCopy)const SizedBox(height:10),
+            OrbitCircleSheetAction(
+              title:'Delete my message',
+              icon:Icons.delete_outline,
+              destructive:true,
+              onTap:() async{
+                Navigator.of(sheet).pop();
+                if(!mounted)return;
+                final approved=await showOrbitCircleConfirmation(
+                  context:context,title:'Delete Message?',
+                  description:'Remove your encrypted Circle message from '
+                    'the authorized mailbox? Devices that already decrypted '
+                    'their own copies may retain them.',
+                  confirmLabel:'Delete Message',
+                  cancelLabel:'Cancel',destructive:true);
+                if(!approved||!mounted)return;
+                try{
+                  await widget.onDeleteMessage!(message.id);
+                  if(mounted)setState(()=>_messages.removeWhere(
+                    (m)=>m.id==message.id));
+                }catch(_){
+                  if(mounted)_sendError('Encrypted message was not deleted.');
+                }
+              }),
+          ],
+        ],
+      ),
+    );
+  }
+
   void _sendError(String message){
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
       SnackBar(content:Text(message)));
@@ -769,6 +828,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                 child: MessageReactionRegion(
                 messageId: message.id,
                 isMine: message.isMine,
+                onMessageOptions:()=>_messageOptions(message),
                 initialSelected:_reactionFromValue(message.selectedReaction),
                 initialCounts:_reactionCountValues(message.reactions),
                 onChanged: (id, selected, counts) =>
