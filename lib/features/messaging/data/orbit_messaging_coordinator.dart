@@ -306,9 +306,12 @@ class OrbitMessagingCoordinator {
         return OrbitMessagingSendResult(
           accepted:false,queued:true,clientId:outgoing.clientId);
       }
-      // Keep the ciphertext intent for explicit review. A 403/409 can mean
-      // revoked consent or a changed device/group epoch: never auto-rekey.
-      rethrow;
+      // Never auto-rekey or retry a permanently revoked recipient/epoch.
+      // The persisted flag ensures "Failed" survives app restarts and
+      // prevents an obsolete ciphertext from leaving after another poll.
+      await vault.markNeedsReview(outgoing.clientId);
+      throw OrbitQueuedMessageException(outgoing.clientId,
+        needsReview:true);
     }
   }
 
@@ -322,6 +325,11 @@ class OrbitMessagingCoordinator {
     var needsReview=0;
     for(final pending in await vault.pending()){
       if(await api.owner!=owner)break;
+      if(await vault.requiresReview(pending.clientId)){
+        needsReview++;
+        // Preserve send order and require explicit owner review.
+        break;
+      }
       try {
         final result=await api.publish(pending.conversationId,
           clientId:pending.clientId,kind:pending.kind,
@@ -335,6 +343,7 @@ class OrbitMessagingCoordinator {
         if(error.statusCode==null || error.statusCode==408 ||
             error.statusCode==429 || error.statusCode==502 ||
             error.statusCode==503 || error.statusCode==504)break;
+        await vault.markNeedsReview(pending.clientId);
         needsReview++;
         // Preserve send order when the oldest ciphertext needs re-approval;
         // do not deliver later messages ahead of a revoked-key envelope.
