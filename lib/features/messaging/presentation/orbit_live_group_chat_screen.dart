@@ -356,13 +356,21 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
       final manifest=_videoManifests[mediaId];
       if(manifest==null)throw const FormatException(
         'Encrypted video key is unavailable in this chat.');
-      final bytes=await _media.open(manifest);
-      if(!mounted)return;
-      await Navigator.of(context).push<void>(AppFadeSlidePageRoute<void>(
-        builder:(_)=>OrbitPrivateChatVideoViewer(bytes:bytes)));
+      final videoFile=await _media.openVideo(manifest);
+      if(!mounted){
+        if(await videoFile.exists())await videoFile.delete();
+        return;
+      }
+      try{
+        await Navigator.of(context).push<void>(AppFadeSlidePageRoute<void>(
+          builder:(_)=>OrbitPrivateChatVideoViewer(file:videoFile)));
+      }finally{
+        // The viewer normally deletes on close; also cover a failed route.
+        if(await videoFile.exists())await videoFile.delete();
+      }
     }catch(_){
       if(mounted)ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(content:Text('Encrypted video is unavailable or exceeds the preview limit.')));
+        const SnackBar(content:Text('Encrypted video could not be verified or played.')));
     }
   }
 
