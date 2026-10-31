@@ -113,6 +113,25 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
     }
   }
 
+  Future<OrbitMessagingSendResult> _commitStagedMedia(
+      OrbitConversation thread,OrbitEncryptedChatMedia manifest) async {
+    // Preserve the staged encrypted upload until the ciphertext outbox is
+    // durably committed, even if the HTTPS acknowledgement is lost.
+    try{
+      final result=await _messenger.sendMedia(thread,manifest);
+      if(result.queued || result.accepted){
+        try{await _media.acknowledgeStaged(manifest);}
+        catch(_){ /* Keep checkpoint for stable-ID retry. */ }
+      }
+      return result;
+    }on OrbitQueuedMessageException {
+      // The failed ciphertext is still preserved in the local outbox.
+      try{await _media.acknowledgeStaged(manifest);}
+      catch(_){ /* Account-bound cleanup can retry later. */ }
+      rethrow;
+    }
+  }
+
   Future<void> _load() async {
     final epoch=++_epoch;
     if(_thread==null && mounted)setState(()=>_loading=true);
@@ -130,7 +149,7 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
             // restart, with fresh Circle/DM authorization and no plaintext.
             for(final pending in await _media.resumePending(thread)){
               try{
-                await _messenger.sendMedia(thread,pending);
+                await _commitStagedMedia(thread,pending);
               }catch(_){
                 // The encrypted outbox already retains a rejected/uncertain
                 // send. Never report a recovered message as delivered.
@@ -401,7 +420,7 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
         'Image is unavailable for encrypted upload.',422);
       final manifest=await _media.stage(conversation:thread,
         original:File(path),kind:'image');
-      result=await _messenger.sendMedia(thread,manifest);
+      result=await _commitStagedMedia(thread,manifest);
     }else if(message.type==DirectChatMessageType.futureVideo){
       final path=message.videoUrl;
       if(path==null||message.videoDuration==null){
@@ -410,7 +429,7 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
       final manifest=await _media.stage(conversation:thread,
         original:File(path),kind:'video',
         durationMs:message.videoDuration!.inMilliseconds);
-      result=await _messenger.sendMedia(thread,manifest);
+      result=await _commitStagedMedia(thread,manifest);
     }else if(message.type==DirectChatMessageType.sentAudio){
       final path=message.audioUrl;
       if(path==null)throw OrbitIdentityException(
@@ -420,7 +439,7 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
         final manifest=await _media.stage(conversation:thread,
           original:recording,kind:'voice',
           durationMs:message.audioDuration?.inMilliseconds);
-        result=await _messenger.sendMedia(thread,manifest);
+        result=await _commitStagedMedia(thread,manifest);
       }finally{
         await OrbitChatVoiceRecorder.discardTemporaryCapture(recording);
       }
