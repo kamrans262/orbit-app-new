@@ -68,11 +68,12 @@ class MessageReactionPicker extends StatelessWidget {
     required BuildContext context,
     required Offset globalPosition,
     required ChatReactionKind? selected,
+    VoidCallback? onMessageOptions,
   }) async {
     final overlay = Overlay.of(context);
     final media = MediaQuery.of(context);
     const pickerWidth = 286.0;
-    const pickerHeight = 56.0;
+    final pickerHeight = onMessageOptions==null?56.0:112.0;
     final left = (globalPosition.dx - (pickerWidth / 2))
         .clamp(8.0, math.max(8.0, media.size.width - pickerWidth - 8))
         .toDouble();
@@ -105,12 +106,41 @@ class MessageReactionPicker extends StatelessWidget {
           Positioned(
             left: left,
             top: top,
-            child: Material(
-              color: Colors.transparent,
-              child: MessageReactionPicker(
-                selected: selected,
-                onSelected: completer.complete,
-              ),
+            child: Column(
+              mainAxisSize:MainAxisSize.min,
+              crossAxisAlignment:CrossAxisAlignment.stretch,
+              children:[
+                Material(color:Colors.transparent,
+                  child:MessageReactionPicker(
+                    selected:selected,onSelected:completer.complete)),
+                if(onMessageOptions!=null)...[
+                  const SizedBox(height:6),
+                  Material(
+                    color:Colors.white,
+                    borderRadius:BorderRadius.circular(22),
+                    elevation:4,
+                    child:InkWell(
+                      borderRadius:BorderRadius.circular(22),
+                      onTap:(){
+                        completer.complete(null);
+                        onMessageOptions();
+                      },
+                      child:const Padding(
+                        padding:EdgeInsets.symmetric(
+                          horizontal:16,vertical:11),
+                        child:Row(
+                          mainAxisSize:MainAxisSize.min,
+                          children:[
+                            Icon(Icons.more_horiz_rounded,size:20),
+                            SizedBox(width:10),
+                            Text('Message options'),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ],
@@ -275,6 +305,7 @@ class _MessageReactionRegionState extends State<MessageReactionRegion> {
       context: context,
       globalPosition: details.globalPosition,
       selected: _selected,
+      onMessageOptions:widget.onMessageOptions,
     );
     if (!mounted || picked == null) return;
 
