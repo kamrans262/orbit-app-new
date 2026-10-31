@@ -737,6 +737,69 @@ class OrbitIdentityClient {
     return buffered.toBytes();
   }
 
+  /// Stream authenticated PRIVATE ciphertext to an app-owned temporary
+  /// file. Unlike mediaBinaryRequest, memory use is bounded by one network
+  /// chunk; no bearer token is ever sent to a signed storage URL.
+  /// A partial file is deleted on an interruption or response-size failure.
+  Future<int> mediaBinaryDownloadToFile(String path,{
+    required File destination,int maxResponseBytes=251*1024*1024,
+    bool retry=true,
+  }) async {
+    if(!path.startsWith('/media/') ||path.startsWith('//') ||
+       path.contains('..') ||path.contains('://') ||
+       maxResponseBytes<=0 ||maxResponseBytes>251*1024*1024){
+      throw ArgumentError.value(path,'path','Unsafe private ciphertext download');
+    }
+    if(_access==null)await refresh();
+    final request=http.Request('GET',Uri.parse('$_origin$path'));
+    request.followRedirects=false;
+    request.headers['Accept']='application/octet-stream';
+    if(_access!=null)request.headers['Authorization']='Bearer $_access';
+    late final http.StreamedResponse response;
+    try{
+      response=await _http.send(request).timeout(const Duration(seconds:90));
+    }catch(_){
+      throw OrbitIdentityException('Private encrypted download unavailable.');
+    }
+    if(response.statusCode==401 && retry){
+      await response.stream.drain<void>();
+      _access=null;
+      await refresh();
+      return mediaBinaryDownloadToFile(path,destination:destination,
+        maxResponseBytes:maxResponseBytes,retry:false);
+    }
+    if(response.statusCode!=200 ||
+       (response.contentLength??0)>maxResponseBytes){
+      await response.stream.drain<void>();
+      throw OrbitIdentityException('Private ciphertext download denied.',
+        response.statusCode);
+    }
+    if(await destination.exists()){
+      await response.stream.drain<void>();
+      throw StateError('Private ciphertext destination already exists.');
+    }
+    final output=await destination.open(mode:FileMode.write);
+    var total=0;
+    try{
+      await for(final chunk in response.stream.timeout(
+          const Duration(seconds:90))){
+        total+=chunk.length;
+        if(total>maxResponseBytes){
+          throw OrbitIdentityException('Private ciphertext download too large.',413);
+        }
+        await output.writeFrom(chunk);
+      }
+      if(total==0)throw const FormatException('Empty ciphertext download.');
+      await output.flush();
+      return total;
+    }catch(_){
+      if(await destination.exists())await destination.delete();
+      rethrow;
+    }finally{
+      await output.close();
+    }
+  }
+
   Future<Map<String, dynamic>> socialRequest(String method, String path,
       {Map<String, Object?>? body, String? idempotencyKey}) {
     if (!path.startsWith('/') || path.startsWith('//') ||
