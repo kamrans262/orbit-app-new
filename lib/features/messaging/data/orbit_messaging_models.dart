@@ -58,11 +58,12 @@ class OrbitMailboxEnvelope {
     required this.senderId,required this.senderDeviceId,required this.kind,
     required this.protocol,required this.groupEpoch,required this.keyVersion,
     required this.ciphertextB64,required this.headerB64,
-    required this.createdAt});
+    required this.createdAt,this.deliveredAt});
   final String id,messageId,senderId,senderDeviceId,kind,protocol;
   final int groupEpoch,keyVersion;
   final String ciphertextB64,headerB64;
   final DateTime createdAt;
+  final DateTime? deliveredAt;
   factory OrbitMailboxEnvelope.fromJson(Map<String,dynamic> j)=>
     OrbitMailboxEnvelope(id:j['id'] as String,
       messageId:j['message_id'] as String,
@@ -73,7 +74,9 @@ class OrbitMailboxEnvelope {
       keyVersion:(j['recipient_key_version'] as num).toInt(),
       ciphertextB64:j['ciphertext_b64'] as String,
       headerB64:j['protocol_header_b64'] as String,
-      createdAt:DateTime.parse(j['created_at'] as String));
+      createdAt:DateTime.parse(j['created_at'] as String),
+      deliveredAt:j['delivered_at'] is String
+        ?DateTime.parse(j['delivered_at'] as String):null);
 }
 class OrbitEnvelopePage {
   const OrbitEnvelopePage(this.items,this.nextCursor,{
