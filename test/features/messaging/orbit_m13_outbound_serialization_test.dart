@@ -7,6 +7,7 @@ import 'package:orbit_ui/features/messaging/data/orbit_messaging_cipher.dart';
 import 'package:orbit_ui/features/messaging/data/orbit_messaging_coordinator.dart';
 import 'package:orbit_ui/features/messaging/data/orbit_messaging_local_vault.dart';
 import 'package:orbit_ui/features/messaging/data/orbit_messaging_models.dart';
+import 'package:orbit_ui/features/messaging/data/orbit_messaging_stickers.dart';
 
 class _OutboundApi extends OrbitMessagingApi {
   int publishes=0;
@@ -217,6 +218,28 @@ void main(){
     expect(vault.packets,isEmpty);
     expect(vault.reviewed,isEmpty);
     expect(vault.previews,isEmpty);
+  });
+
+  test('Sticker sends and reactions remain encrypted device envelopes',() async {
+    final api=_OutboundApi();
+    final vault=_CiphertextVault();
+    final thread=OrbitConversation(
+      id:'sticker-thread',kind:'direct',peerId:'peer',groupEpoch:1,
+      createdAt:DateTime.utc(2026));
+    final messenger=OrbitMessagingCoordinator(
+      api:api,cipher:_CountingProvider(),vault:vault);
+    final sent=await messenger.sendSticker(
+      thread,const OrbitChatSticker('orbit-heart'));
+    expect(sent.accepted,isTrue);
+    expect(vault.packets.single.kind,'sticker');
+    expect(OrbitChatSticker.tryParse(vault.previews.single.text)?.id,
+      'orbit-heart');
+    expect(vault.packets.single.envelopes.length,2);
+    expect(vault.packets.single.toJson().keys, isNot(contains('id')));
+    final reaction=await messenger.sendReaction(
+      thread,targetId:'message-id',selected:'❤️');
+    expect(reaction.accepted,isTrue);
+    expect(vault.packets.last.kind,'reaction');
   });
 
 }
