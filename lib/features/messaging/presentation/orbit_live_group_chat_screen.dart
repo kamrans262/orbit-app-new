@@ -308,7 +308,15 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
     final thread=_thread;
     if(thread==null)return;
     await const OrbitMessagingConversationActions().openCircle(context,
-      thread:thread,onClose:()=>Navigator.of(context).maybePop());
+      thread:thread,
+      evidenceCandidates:_messages.where((message)=>
+        !message.id.startsWith('local-') &&
+        (message.type==GroupChatMessageType.receivedText ||
+         message.type==GroupChatMessageType.sentText) &&
+        message.text!=null && message.text!.trim().isNotEmpty
+      ).map<OrbitReportableMessage>((message)=>(
+        id:message.id,text:message.text!.trim())).toList(growable:false),
+      onClose:()=>Navigator.of(context).maybePop());
   }
 
   void _viewed(String envelopeId){
