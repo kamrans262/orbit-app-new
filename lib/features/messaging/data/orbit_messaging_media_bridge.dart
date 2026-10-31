@@ -313,71 +313,84 @@ class OrbitMessagingMediaBridge {
     required String mime,
     int? durationMs,
   }) async {
-    // A foreground tap and a background HTTPS resume must never grant and
-    // publish the same staged upload concurrently.
     if(!_uploadsInFlight.add(pendingIndex)){
       throw StateError('Encrypted upload is already finishing.');
     }
     try{
-    final capability=await _api.capabilities();
-    if(!capability.canSendMessages){
-      throw OrbitMessagingSecurityException(
-        'Messaging is restricted for this account.',403);
-    }
-    final fresh=conversation.kind=='circle'
-      ?await _api.circle(conversation.circleId!)
-      :await _api.direct(conversation.peerId!);
-    if(fresh.id!=conversation.id||fresh.groupEpoch!=conversation.groupEpoch ||
-       sealed.ownerId!=owner||sealed.purpose!='message') {
-      throw OrbitIdentityException('Conversation permissions changed.',409);
-    }
-    // Grant work can be retried safely after a crash. Once M6 has finished
-    // access grants, do not upload the ciphertext or create grants a second
-    // time just to resume the pending M13 send.
-    final savedRaw=await _pendingStorage.read(key:pendingIndex);
-    if(savedRaw==null){
-      throw StateError('Private upload checkpoint was lost.');
-    }
-    final saved=Map<String,dynamic>.from(jsonDecode(savedRaw) as Map);
-    if(saved['owner']!=owner || saved['transfer']!=sealed.transferId ||
-       saved['epoch']!=conversation.groupEpoch){
-      throw OrbitIdentityException('Encrypted upload owner or epoch changed.',409);
-    }
-    final readyId=saved['ready_media_id'];
-    if(readyId is String &&
-       RegExp(r'^[0-9a-f-]{36}
-      purpose:'message',recipientIds:[owner]);
-    final userDevices=<OrbitMediaRecipient>[];
-    for(final peer in recipients) {
-      userDevices.addAll(await _keys.discover(
-        audienceKind:fresh.kind=='circle'?'selected_circles':'selected_friends',
-        purpose:'message',
-        circleId:fresh.kind=='circle'?fresh.circleId:null,
-        recipientIds:[peer]));
-    }
-    final receipt=await _media.upload(sealed,
-      kind:kind=='voice'?'audio':kind,mime:mime,durationMs:durationMs);
-    if(!receipt.ready)throw StateError('Private ciphertext still verifying.');
-    final ownKeys=await _keys.encryptEnvelopes(sealed,ownDevices);
-    await _media.createGrants(receipt.mediaId,
-      audience:'only_me',recipients:const [],
-      keyEnvelopes:ownKeys,idempotencyKey:const Uuid().v4());
-    final sharingKeys=await _keys.encryptEnvelopes(sealed,userDevices);
-    await _media.createGrants(receipt.mediaId,
-      audience:fresh.kind=='circle'?'selected_circles':'selected_friends',
-      recipients:fresh.kind=='circle'?[fresh.circleId!]:recipients,
-      keyEnvelopes:sharingKeys,idempotencyKey:const Uuid().v4());
-    if(await _identity.currentLocalSocialOwner()!=owner) {
-      throw OrbitIdentityException('Account changed during upload.',401);
-    }
-    saved['ready_media_id']=receipt.mediaId;
-    // Persist the authorization checkpoint BEFORE the coordinator attempts
-    // encryption. We retain the ciphertext until the encrypted outbox
-    // has been durably committed (or the send was acknowledged).
-    await _pendingStorage.write(key:pendingIndex,value:jsonEncode(saved));
-    return OrbitEncryptedChatMedia(
-      mediaId:receipt.mediaId,kind:kind,mime:mime,durationMs:durationMs,
-      contentKey:OrbitChatMediaContentKey.fromSealed(sealed));
+      final capabilities=await _api.capabilities();
+      if(!capabilities.canSendMessages){
+        throw OrbitMessagingSecurityException(
+          'Messaging is restricted for this account.',403);
+      }
+      final fresh=conversation.kind=='circle'
+        ?await _api.circle(conversation.circleId!)
+        :await _api.direct(conversation.peerId!);
+      if(fresh.id!=conversation.id ||
+         fresh.groupEpoch!=conversation.groupEpoch ||
+         sealed.ownerId!=owner || sealed.purpose!='message'){
+        throw OrbitIdentityException('Conversation permissions changed.',409);
+      }
+      final savedRaw=await _pendingStorage.read(key:pendingIndex);
+      if(savedRaw==null){
+        throw StateError('Encrypted upload checkpoint was lost.');
+      }
+      final saved=Map<String,dynamic>.from(jsonDecode(savedRaw) as Map);
+      if(saved['owner']!=owner ||
+         saved['transfer']!=sealed.transferId ||
+         saved['epoch']!=conversation.groupEpoch){
+        throw OrbitIdentityException('Encrypted upload owner or epoch changed.',409);
+      }
+      final readyId=saved['ready_media_id'];
+      final validReady=readyId is String &&readyId.length==36 &&
+         RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-'
+           r'[0-9a-f]{4}-[0-9a-f]{12}').hasMatch(readyId);
+      if(validReady){
+        return OrbitEncryptedChatMedia(
+          mediaId:readyId as String,kind:kind,mime:mime,
+          durationMs:durationMs,
+          contentKey:OrbitChatMediaContentKey.fromSealed(sealed));
+      }
+      // All recipient identities and Circle consent are refreshed before
+      // distributing any encrypted media-access envelopes.
+      final recipients=await _eligibleRecipients(fresh,owner);
+      final ownDevices=await _keys.discover(audienceKind:'only_me',
+        purpose:'message',recipientIds:[owner]);
+      final userDevices=<OrbitMediaRecipient>[];
+      for(final peer in recipients){
+        userDevices.addAll(await _keys.discover(
+          audienceKind:fresh.kind=='circle'
+            ?'selected_circles':'selected_friends',
+          purpose:'message',
+          circleId:fresh.kind=='circle'?fresh.circleId:null,
+          recipientIds:[peer]));
+      }
+      final receipt=await _media.upload(sealed,
+        kind:kind=='voice'?'audio':kind,mime:mime,durationMs:durationMs);
+      if(!receipt.ready){
+        throw StateError('Private ciphertext is still verifying.');
+      }
+      final ownKeys=await _keys.encryptEnvelopes(sealed,ownDevices);
+      await _media.createGrants(receipt.mediaId,
+        audience:'only_me',recipients:const [],
+        keyEnvelopes:ownKeys,idempotencyKey:const Uuid().v4());
+      final sharingKeys=await _keys.encryptEnvelopes(sealed,userDevices);
+      await _media.createGrants(receipt.mediaId,
+        audience:fresh.kind=='circle'
+          ?'selected_circles':'selected_friends',
+        recipients:fresh.kind=='circle'?[fresh.circleId!]:recipients,
+        keyEnvelopes:sharingKeys,idempotencyKey:const Uuid().v4());
+      if(await _identity.currentLocalSocialOwner()!=owner){
+        throw OrbitIdentityException('Account changed during upload.',401);
+      }
+      saved['ready_media_id']=receipt.mediaId;
+      // Never discard the staged ciphertext here. The calling chat
+      // coordinator releases it only after encrypted outbox persistence.
+      await _pendingStorage.write(key:pendingIndex,
+        value:jsonEncode(saved));
+      return OrbitEncryptedChatMedia(
+        mediaId:receipt.mediaId,kind:kind,mime:mime,
+        durationMs:durationMs,
+        contentKey:OrbitChatMediaContentKey.fromSealed(sealed));
     }finally{
       _uploadsInFlight.remove(pendingIndex);
     }
