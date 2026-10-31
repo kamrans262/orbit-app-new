@@ -373,7 +373,9 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
         final index=_messages.indexWhere((m)=>m.id==message.id);
         final waiting=message.copyWith(
           id:'local-'+queued.clientId,
-          deliveryStatus:DirectChatDeliveryStatus.waiting);
+          deliveryStatus:queued.needsReview
+            ?DirectChatDeliveryStatus.failed
+            :DirectChatDeliveryStatus.waiting);
         setState((){
           if(index>=0){_messages[index]=waiting;}
           else{_messages.add(waiting);}
@@ -407,13 +409,17 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     }
   }
 
-  void _showQueuedAttachment(String kind,String clientId){
+  void _showQueuedAttachment(String kind,String clientId,
+      {bool needsReview=false}){
     if(!mounted)return;
     final message=_newMine(type:DirectChatMessageType.sentText,
-      text:'Encrypted '+kind+' waiting for connection');
+      text:'Encrypted '+kind+
+        (needsReview?' failed · review required':' waiting for connection'));
     setState(()=>_messages.add(message.copyWith(
       id:'local-'+clientId,
-      deliveryStatus:DirectChatDeliveryStatus.sending)));
+      deliveryStatus:needsReview
+        ?DirectChatDeliveryStatus.failed
+        :DirectChatDeliveryStatus.waiting)));
     _scrollToLatest();
   }
 
@@ -516,7 +522,8 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
       }
       _scrollToLatest();
     } on OrbitQueuedMessageException catch(queued){
-      _showQueuedAttachment('image',queued.clientId);
+      _showQueuedAttachment('image',queued.clientId,
+        needsReview:queued.needsReview);
     } catch (_) {
       if (mounted) _showError('Encrypted image could not be sent.');
     }
@@ -551,7 +558,8 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
       }
       _scrollToLatest();
     } on OrbitQueuedMessageException catch(queued){
-      _showQueuedAttachment('image',queued.clientId);
+      _showQueuedAttachment('image',queued.clientId,
+        needsReview:queued.needsReview);
     } catch (_) {
       if (mounted) _showError('One or more encrypted images were not sent.');
     }
@@ -610,7 +618,8 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
       setState(()=>_messages.add(message));
       _scrollToLatest();
     }on OrbitQueuedMessageException catch(queued){
-      _showQueuedAttachment('sticker',queued.clientId);
+      _showQueuedAttachment('sticker',queued.clientId,
+        needsReview:queued.needsReview);
     }catch(_){
       if(mounted)_showError('Encrypted sticker was not confirmed.');
     }
@@ -649,7 +658,8 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
       }
       _scrollToLatest();
     }on OrbitQueuedMessageException catch(queued){
-      _showQueuedAttachment('video',queued.clientId);
+      _showQueuedAttachment('video',queued.clientId,
+        needsReview:queued.needsReview);
     }catch(_){
       if(mounted)_showError('Video was not confirmed as encrypted and sent.');
     }finally{
@@ -680,7 +690,8 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
         deliveryStatus:DirectChatDeliveryStatus.sent)));
       _scrollToLatest();
     }on OrbitQueuedMessageException catch(queued){
-      _showQueuedAttachment('voice',queued.clientId);
+      _showQueuedAttachment('voice',queued.clientId,
+        needsReview:queued.needsReview);
     }catch(_){
       if(mounted)_showError('Encrypted voice message was not confirmed.');
     }finally{
