@@ -14,6 +14,7 @@ import '../data/orbit_messaging_local_vault.dart';
 import '../data/orbit_messaging_models.dart';
 import '../data/orbit_messaging_media_bridge.dart';
 import '../data/orbit_messaging_reactions.dart';
+import '../data/orbit_messaging_stickers.dart';
 import '../data/orbit_messaging_replies.dart';
 import '../../../core/navigation/app_fade_slide_page_route.dart';
 import 'orbit_chat_voice_recorder.dart';
@@ -221,6 +222,8 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
       final reply=entry.kind=='reply'
         ?OrbitEncryptedReply.fromText(entry.text):null;
       final manifest=OrbitEncryptedChatMedia.tryParse(entry.text);
+      final validSticker=entry.kind=='sticker' &&
+        OrbitChatSticker.tryParse(entry.text)!=null;
       final malformedMedia=manifest==null &&
         const ['image','voice','video'].contains(entry.kind);
       if(manifest!=null && manifest.kind=='video'){
@@ -229,7 +232,9 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
       var type=entry.senderId==owner
         ?GroupChatMessageType.sentText:GroupChatMessageType.receivedText;
       String? text=malformedMedia
-        ?'Encrypted media is unavailable.':entry.text;
+        ?'Encrypted media is unavailable.'
+        :entry.kind=='sticker' && !validSticker
+          ?'Sticker unavailable.':entry.text;
       if(reply!=null){
         final original=history.where((e)=>e.id==reply.targetId).toList();
         final quote=original.isEmpty?'Original message':original.first.text;
@@ -389,7 +394,10 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
     final thread=_thread;
     if(thread==null || !_cryptoReady)throw OrbitIdentityException(
       'Verified group encryption is required.',503);
-    final result=await _messenger.sendText(thread,text);
+    final sticker=OrbitChatSticker.tryParse(text);
+    final result=sticker==null
+      ?await _messenger.sendText(thread,text)
+      :await _messenger.sendSticker(thread,sticker);
     if(result.queued){
       if(mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content:Text('Encrypted Circle message queued, not yet delivered.')));
