@@ -416,7 +416,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   Future<void> _messageOptions(GroupChatMessage message) async{
     if(!mounted)return;
     final canCopy=message.text!=null &&
-      message.text!.trim().isNotEmpty && message.text!.length<=22000;
+      message.text!.trim().isNotEmpty && message.text!.length<=22000 &&
+      OrbitChatSticker.tryParse(message.text)==null;
     final canDelete=widget.liveMode && message.isMine &&
       !message.id.startsWith('local-') &&
       widget.encryptedTransportReady &&
