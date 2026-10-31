@@ -44,12 +44,14 @@ class _OutboundApi extends OrbitMessagingApi {
 class _TransientApi extends _OutboundApi {
   _TransientApi(this.code);
   final int code;
+  int attempts=0;
 
   @override
   Future<OrbitMessageAccepted> publish(String conversation,{
     required String clientId,required String kind,
     required String protocol,required int groupEpoch,
     required List<OrbitCipherEnvelope> envelopes}) async {
+    attempts++;
     throw OrbitIdentityException('Transient messaging transport',code);
   }
 }
@@ -100,12 +102,40 @@ class _CiphertextVault extends OrbitMessagingLocalVault {
   final queued=<String>[];
   final acknowledged=<String>[];
   final previews=<OrbitLocalDecryptedMessage>[];
+  final packets=<OrbitQueuedCiphertext>[];
+  final reviewed=<String>{};
+
 
   @override
   Future<void> queue(OrbitQueuedCiphertext item,{
       OrbitLocalDecryptedMessage? preview}) async {
     queued.add(item.clientId);
+    packets.add(item);
     if(preview!=null)previews.add(preview);
+  }
+
+  @override
+  Future<void> markNeedsReview(String clientId) async{
+    reviewed.add(clientId);
+  }
+
+  @override
+  Future<bool> requiresReview(String clientId) async=>
+    reviewed.contains(clientId);
+
+  @override
+  Future<List<OrbitQueuedCiphertext>> pending({int limit=40}) async=>
+    packets.take(limit).toList(growable:false);
+
+  @override
+  Future<int> discardReviewRequired(String conversation) async{
+    final failed=packets.where((p)=>p.conversationId==conversation &&
+      reviewed.contains(p.clientId)).toList(growable:false);
+    packets.removeWhere((p)=>failed.contains(p));
+    reviewed.removeAll(failed.map((p)=>p.clientId));
+    previews.removeWhere((p)=>failed.any(
+      (v)=>p.id=='local-${v.clientId}'));
+    return failed.length;
   }
 
   @override
@@ -154,6 +184,38 @@ void main(){
       expect(vault.previews.single.id,'local-'+result.clientId!);
       expect(vault.previews.single.text,'Offline private text');
     }
+  });
+
+  test('Permanent epoch rejection is Failed, never silently retried, and '
+      'requires explicit discard',() async {
+    final api=_TransientApi(409);
+    final vault=_CiphertextVault();
+    final coordinator=OrbitMessagingCoordinator(
+      api:api,cipher:_CountingProvider(),vault:vault);
+    final thread=OrbitConversation(
+      id:'rejected-conversation',kind:'direct',peerId:'peer',groupEpoch:1,
+      createdAt:DateTime.utc(2026));
+    late OrbitQueuedMessageException failed;
+    try{
+      await coordinator.sendText(thread,'Must not be silently resent');
+      fail('409 must never appear delivered');
+    }on OrbitQueuedMessageException catch(error){
+      failed=error;
+    }
+    expect(failed.needsReview,isTrue);
+    expect(vault.reviewed,{failed.clientId});
+    expect(vault.acknowledged,isEmpty);
+    expect(vault.previews.single.text,'Must not be silently resent');
+    expect(api.attempts,1);
+
+    final retry=await coordinator.retryPending();
+    expect(retry.sent,0);
+    expect(retry.needsReview,1);
+    expect(api.attempts,1,'Old epoch ciphertext must not be resent');
+    expect(await coordinator.discardFailedQueued(thread),1);
+    expect(vault.packets,isEmpty);
+    expect(vault.reviewed,isEmpty);
+    expect(vault.previews,isEmpty);
   });
 
 }
