@@ -223,7 +223,9 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
       final manifest=OrbitEncryptedChatMedia.tryParse(entry.text);
       final malformedMedia=manifest==null &&
         const ['image','voice','video'].contains(entry.kind);
-      if(manifest?.kind=='video')_videoManifests[manifest!.mediaId]=manifest;
+      if(manifest!=null && manifest.kind=='video'){
+        _videoManifests[manifest.mediaId]=manifest;
+      }
       var type=entry.senderId==owner
         ?GroupChatMessageType.sentText:GroupChatMessageType.receivedText;
       String? text=malformedMedia
