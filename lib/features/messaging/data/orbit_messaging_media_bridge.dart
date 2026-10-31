@@ -101,7 +101,8 @@ class OrbitMessagingMediaBridge {
     int? durationMs,
   }) async {
     // Opportunistic cleanup of orphaned encrypted uploads, never of user media.
-    unawaited(pruneOrphanedCiphertext().catchError((_)=>0));
+    unawaited(pruneOrphanedCiphertext().then<void>((_) {},
+      onError:(_){ /* OS temp-file cleanup is best effort. */ }));
     if(!const ['image','voice','video'].contains(kind)){
       throw ArgumentError.value(kind,'kind','Unsupported encrypted media');
     }
