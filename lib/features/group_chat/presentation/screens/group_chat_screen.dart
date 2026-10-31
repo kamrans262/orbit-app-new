@@ -370,7 +370,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         if(!mounted)return;
         final index=_messages.indexWhere((m)=>m.id==message.id);
         final waiting=message.copyWith(id:'local-'+queued.clientId,
-          isSending:false,isQueued:true);
+          isSending:false,isQueued:!queued.needsReview,
+          isFailed:queued.needsReview);
         setState((){
           if(index>=0){_messages[index]=waiting;}
           else{_messages.add(waiting);}
@@ -406,15 +407,17 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
       SnackBar(content:Text(message)));
   }
-  void _showQueuedAttachment(String kind,String clientId){
+  void _showQueuedAttachment(String kind,String clientId,
+      {bool needsReview=false}){
     if(!mounted)return;
     final now=DateTime.now();
     setState(()=>_messages.add(GroupChatMessage(
       id:'local-'+clientId,
       type:GroupChatMessageType.sentText,
       senderId:widget.currentUserId,senderName:'You',isMine:true,
-      isQueued:true,
-      text:'Encrypted '+kind+' waiting for connection',
+      isQueued:!needsReview,isFailed:needsReview,
+      text:'Encrypted '+kind+
+        (needsReview?' failed · review required':' waiting for connection'),
       timestamp:_formatTime(now),createdAt:now)));
     _scheduleScrollToBottom();
   }
@@ -461,7 +464,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         timestamp:_formatTime(now),createdAt:now)));
       _scheduleScrollToBottom();
     }on OrbitQueuedMessageException catch(queued){
-      _showQueuedAttachment('image',queued.clientId);
+      _showQueuedAttachment('image',queued.clientId,
+        needsReview:queued.needsReview);
     }catch(_){
       if(mounted)_sendError('Encrypted image was not confirmed as sent.');
     }
@@ -491,7 +495,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       }
       _scheduleScrollToBottom();
     }on OrbitQueuedMessageException catch(queued){
-      _showQueuedAttachment('image',queued.clientId);
+      _showQueuedAttachment('image',queued.clientId,
+        needsReview:queued.needsReview);
     }catch(_){
       if(mounted)_sendError('One or more encrypted images were not confirmed.');
     }
@@ -529,7 +534,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         isMine:true,timestamp:_formatTime(now),createdAt:now)));
       _scheduleScrollToBottom();
     }on OrbitQueuedMessageException catch(queued){
-      _showQueuedAttachment('video',queued.clientId);
+      _showQueuedAttachment('video',queued.clientId,
+        needsReview:queued.needsReview);
     }catch(_){
       if(mounted)_sendError('Encrypted video was not confirmed as sent.');
     }finally{
@@ -562,7 +568,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         timestamp:_formatTime(now),createdAt:now)));
       _scheduleScrollToBottom();
     }on OrbitQueuedMessageException catch(queued){
-      _showQueuedAttachment('voice',queued.clientId);
+      _showQueuedAttachment('voice',queued.clientId,
+        needsReview:queued.needsReview);
     }catch(_){
       if(mounted)_sendError('Encrypted voice was not confirmed as sent.');
     }finally{
@@ -611,7 +618,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     if(widget.liveMode){
       try{await widget.onSendMessage!(sticker);}
       on OrbitQueuedMessageException catch(queued){
-        _showQueuedAttachment('sticker',queued.clientId);
+        _showQueuedAttachment('sticker',queued.clientId,
+        needsReview:queued.needsReview);
         return;
       }catch(_){if(mounted)_sendError('Encrypted sticker was not sent.');return;}
       if(!mounted)return;
@@ -786,11 +794,13 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     final bubble=_buildMessage(message);
     if(!widget.liveMode||!message.isMine)return bubble;
     final readers=message.readRecipientNames;
-    if(!message.isQueued && !message.isSending &&
+    if(!message.isQueued && !message.isSending && !message.isFailed &&
        readers.isEmpty && message.deliveredDevices<=0)return bubble;
     final visible=readers.take(3).join(', ');
     final additional=readers.length>3?readers.length-3:0;
-    final receipt=message.isSending
+    final receipt=message.isFailed
+      ?'Failed · review encryption before retry'
+      :message.isSending
       ?'Sending'
       :message.isQueued
         ?'Waiting for connection'
