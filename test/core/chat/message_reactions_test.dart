@@ -20,7 +20,9 @@ void main() {
       ),
     );
 
-    await tester.longPress(find.byKey(const Key('message')));
+    // Press the interactive reaction region, not its non-hit-testable
+    // SizedBox child (Flutter 3.47 warns about direct SizedBox hits).
+    await tester.longPress(find.byType(MessageReactionRegion));
     await tester.pumpAndSettle();
     expect(find.text(ChatReactionKind.heart.backendValue), findsOneWidget);
 
