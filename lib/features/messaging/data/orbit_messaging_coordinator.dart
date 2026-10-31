@@ -354,6 +354,16 @@ class OrbitMessagingCoordinator {
     });
   }
 
+  /// User-confirmed discard only. Never auto-re-encrypt or re-send a
+  /// permanently rejected ciphertext after recipient/key/epoch changes.
+  Future<int> discardFailedQueued(OrbitConversation thread) async{
+    await requireSecure();
+    final owner=await api.owner;
+    return _serialMailbox(owner,'__crypto__',() async{
+      return vault.discardReviewRequired(thread.id);
+    });
+  }
+
   /// Foreground sync of the newest server envelopes. Keep the original
   /// backfill cursor across periodic refreshes instead of returning to page 1.
   Future<List<OrbitLocalDecryptedMessage>> refresh(
