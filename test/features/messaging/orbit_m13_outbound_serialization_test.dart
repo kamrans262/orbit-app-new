@@ -11,15 +11,17 @@ import 'package:orbit_ui/features/messaging/data/orbit_messaging_stickers.dart';
 
 class _OutboundApi extends OrbitMessagingApi {
   int publishes=0;
+  bool canSendMessages=true;
 
   @override
   Future<String> get owner async=>'me';
 
   @override
   Future<OrbitMessagingCapabilities> capabilities() async=>
-    const OrbitMessagingCapabilities(
+    OrbitMessagingCapabilities(
       available:true,e2eeClientVerified:true,circleEnabled:true,
-      realtimeAvailable:false,pushAvailable:false);
+      realtimeAvailable:false,pushAvailable:false,
+      canSendMessages:canSendMessages);
 
   @override
   Future<OrbitMessagingKeyDirectory> discoverKeys(String user,{
@@ -46,6 +48,7 @@ class _TransientApi extends _OutboundApi {
   _TransientApi(this.code);
   final int code;
   int attempts=0;
+  bool failOnPublish=true;
 
   @override
   Future<OrbitMessageAccepted> publish(String conversation,{
@@ -53,7 +56,11 @@ class _TransientApi extends _OutboundApi {
     required String protocol,required int groupEpoch,
     required List<OrbitCipherEnvelope> envelopes}) async {
     attempts++;
-    throw OrbitIdentityException('Transient messaging transport',code);
+    if(failOnPublish){
+      throw OrbitIdentityException('Transient messaging transport',code);
+    }
+    return super.publish(conversation,clientId:clientId,kind:kind,
+      protocol:protocol,groupEpoch:groupEpoch,envelopes:envelopes);
   }
 }
 
@@ -114,6 +121,11 @@ class _CiphertextVault extends OrbitMessagingLocalVault {
     packets.add(item);
     if(preview!=null)previews.add(preview);
   }
+
+  @override
+  Future<bool> containsQueuedClientId(String id) async =>
+    packets.any((packet)=>packet.clientId==id &&
+      !acknowledged.contains(id));
 
   @override
   Future<void> markNeedsReview(String clientId) async{
@@ -218,6 +230,32 @@ void main(){
     expect(vault.packets,isEmpty);
     expect(vault.reviewed,isEmpty);
     expect(vault.previews,isEmpty);
+  });
+
+  test('Temporary messaging restriction pauses queued encrypted sends '
+      'without marking them as failed',() async {
+    final api=_TransientApi(503);
+    final vault=_CiphertextVault();
+    final coordinator=OrbitMessagingCoordinator(
+      api:api,cipher:_CountingProvider(),vault:vault);
+    final thread=OrbitConversation(id:'pending-thread',kind:'direct',
+      peerId:'peer',groupEpoch:1,createdAt:DateTime.utc(2026));
+    final initial=await coordinator.sendText(thread,'Private queued text');
+    expect(initial.queued,isTrue);
+    expect(api.attempts,1);
+    api.canSendMessages=false;
+    final paused=await coordinator.retryPending();
+    expect(paused.sent,0);
+    expect(paused.needsReview,0);
+    expect(api.attempts,1);
+    expect(vault.reviewed,isEmpty);
+    expect(vault.queued,hasLength(1));
+    api.canSendMessages=true;
+    api.failOnPublish=false;
+    final restored=await coordinator.retryPending();
+    expect(restored.sent,1);
+    expect(restored.needsReview,0);
+    expect(vault.acknowledged,contains(initial.clientId));
   });
 
   test('Sticker sends and reactions remain encrypted device envelopes',() async {
