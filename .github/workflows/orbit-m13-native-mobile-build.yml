@@ -1,0 +1,68 @@
+name: Orbit M13 Native Crypto Android and iOS Link Verification
+on:
+  push:
+    branches: [integration/m2-m5-flutter-consolidated-2026-10-24]
+    paths:
+      - '.github/workflows/orbit-m13-native-mobile-build.yml'
+      - 'native/orbit_vodozemac/**'
+      - 'ios/Flutter/**'
+      - 'android/app/build.gradle.kts'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  android-native-linked:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - name: Build native libraries for Android supported ABIs
+        run: |
+          cargo install cargo-ndk --locked
+          bash native/orbit_vodozemac/build_android.sh
+      - name: Build full Orbit APK with actual native cryptography
+        run: |
+          flutter pub get
+          flutter build apk --debug
+      - name: Assert audited native ratchet library packaged in each ABI
+        shell: bash
+        run: |
+          apk=build/app/outputs/flutter-apk/app-debug.apk
+          test -s "$apk"
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            unzip -Z1 "$apk" | grep -Fx "lib/$abi/liborbit_vodozemac.so"
+          done
+  ios-native-linked:
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - name: Build static native Olm and Megolm for device and simulator
+        run: bash native/orbit_vodozemac/build_ios.sh
+      - name: Compile original Flutter iOS app with Rust archive linked
+        run: |
+          flutter pub get
+          flutter build ios --debug --no-codesign
+      - name: Verify native C ABI is linked into the iOS app
+        run: |
+          test -s build/ios/iphoneos/Runner.app/Runner
+          nm -g build/ios/iphoneos/Runner.app/Runner |
+            grep -q '_orbit_vodozemac_call'
+          nm -g build/ios/iphoneos/Runner.app/Runner |
+            grep -q '_orbit_vodozemac_free'
