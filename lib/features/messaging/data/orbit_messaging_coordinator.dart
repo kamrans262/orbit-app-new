@@ -550,7 +550,13 @@ class OrbitMessagingCoordinator {
       if(_redactedByConversation[_pageKey(owner,thread.id)]
           ?.contains(encrypted.messageId)==true)continue;
       if(await vault.hasMessage(thread.id,encrypted.messageId)){
+        // A process/network failure after an encrypted local-vault commit
+        // must not permanently lose the delivery acknowledgement. This
+        // endpoint is idempotent and remains scoped to the recipient device.
         await cipher.confirmStoredDecryption(encrypted.id);
+        if(encrypted.senderId!=owner){
+          await api.delivered(thread.id,encrypted.id);
+        }
         continue;
       }
       try{
