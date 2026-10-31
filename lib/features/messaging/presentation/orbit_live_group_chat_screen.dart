@@ -117,6 +117,25 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
     }
   }
 
+  Future<OrbitMessagingSendResult> _commitStagedMedia(
+      OrbitConversation thread,OrbitEncryptedChatMedia manifest) async {
+    // Preserve the staged encrypted upload until the ciphertext outbox is
+    // durably committed, even if the HTTPS acknowledgement is lost.
+    try{
+      final result=await _messenger.sendMedia(thread,manifest);
+      if(result.queued || result.accepted){
+        try{await _media.acknowledgeStaged(manifest);}
+        catch(_){ /* Keep checkpoint for stable-ID retry. */ }
+      }
+      return result;
+    }on OrbitQueuedMessageException {
+      // The failed ciphertext is still preserved in the local outbox.
+      try{await _media.acknowledgeStaged(manifest);}
+      catch(_){ /* Account-bound cleanup can retry later. */ }
+      rethrow;
+    }
+  }
+
   Future<void> _load() async {
     final epoch=++_epoch;
     if(_thread==null && mounted)setState(()=>_loading=true);
@@ -142,7 +161,7 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
             // restart, with fresh Circle/DM authorization and no plaintext.
             for(final pending in await _media.resumePending(conversation)){
               try{
-                await _messenger.sendMedia(conversation,pending);
+                await _commitStagedMedia(conversation,pending);
               }catch(_){
                 // The encrypted outbox already retains a rejected/uncertain
                 // send. Never report a recovered message as delivered.
@@ -434,7 +453,7 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
     try{
       final manifest=await _media.stage(conversation:thread,original:file,
         kind:kind,durationMs:duration);
-      final outcome=await _messenger.sendMedia(thread,manifest);
+      final outcome=await _commitStagedMedia(thread,manifest);
       if(outcome.queued){
         if(outcome.clientId==null)throw OrbitMessagingSecurityException(
           'Encrypted queue has no stable retry ID.',503);
