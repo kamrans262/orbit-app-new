@@ -157,6 +157,7 @@ class OrbitMessagingMediaBridge {
 
   static const _pendingPrefix='orbit.m13.encryptedUpload.v1.';
   static const FlutterSecureStorage _pendingStorage=FlutterSecureStorage();
+  static final Set<String> _uploadsInFlight=<String>{};
 
   Future<Directory> _pendingDirectory() async {
     final home=await getApplicationSupportDirectory();
@@ -311,6 +312,12 @@ class OrbitMessagingMediaBridge {
     required String mime,
     int? durationMs,
   }) async {
+    // A foreground tap and a background HTTPS resume must never grant and
+    // publish the same staged upload concurrently.
+    if(!_uploadsInFlight.add(pendingIndex)){
+      throw StateError('Encrypted upload is already finishing.');
+    }
+    try{
     final fresh=conversation.kind=='circle'
       ?await _api.circle(conversation.circleId!)
       :await _api.direct(conversation.peerId!);
@@ -349,6 +356,9 @@ class OrbitMessagingMediaBridge {
       contentKey:OrbitChatMediaContentKey.fromSealed(sealed));
     await _discardPending(pendingIndex,sealed);
     return result;
+    }finally{
+      _uploadsInFlight.remove(pendingIndex);
+    }
   }
 
   Future<OrbitEncryptedChatMedia> stage({
@@ -432,7 +442,8 @@ class OrbitMessagingMediaBridge {
     final records=await _pendingStorage.readAll();
     final recovered=<OrbitEncryptedChatMedia>[];
     for(final entry in records.entries){
-      if(!entry.key.startsWith(_pendingPrefix))continue;
+      if(!entry.key.startsWith(_pendingPrefix) ||
+         _uploadsInFlight.contains(entry.key))continue;
       try {
         final meta=Map<String,dynamic>.from(jsonDecode(entry.value) as Map);
         if(meta['owner']!=owner||
