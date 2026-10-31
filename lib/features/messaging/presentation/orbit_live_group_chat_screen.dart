@@ -309,8 +309,11 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
   Future<void> _more() async {
     final thread=_thread;
     if(thread==null)return;
-    await const OrbitMessagingConversationActions().openCircle(context,
+    await OrbitMessagingConversationActions(
+      api:_api,coordinator:_messenger).openCircle(context,
       thread:thread,
+      showFailedReview:_messages.any((m)=>m.isFailed),
+      onFailedCleared:()=>unawaited(_load()),
       evidenceCandidates:_messages.where((message)=>
         !message.id.startsWith('local-') &&
         (message.type==GroupChatMessageType.receivedText ||
