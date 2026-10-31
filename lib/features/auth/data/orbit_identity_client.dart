@@ -17,6 +17,7 @@ import '../../moments/data/orbit_moment_intent_vault.dart';
 import '../../moments/data/orbit_m7_background_retry.dart';
 import '../../moments/data/orbit_moment_audience_memory.dart';
 import '../../messaging/data/orbit_messaging_local_vault.dart';
+import '../../messaging/data/orbit_messaging_media_bridge.dart';
 import '../../messaging/data/orbit_messaging_cipher.dart';
 import '../../messaging/data/orbit_messaging_vodozemac_store.dart';
 
@@ -391,6 +392,10 @@ class OrbitIdentityClient {
       try { await OrbitMomentIntentVault().purge(oldMediaOwner); }catch(_){}
       await OrbitM7BackgroundRetry.cancel();
       try { await OrbitMomentAudienceMemory().purge(oldMediaOwner); }catch(_){}
+      // Account-bound media keys, encrypted resumable uploads and temporary
+      // clear playback previews must never survive a logout.
+      try { await OrbitMessagingMediaBridge.purgePendingForOwner(oldMediaOwner); }
+      catch (_) { /* Best effort private artifact cleanup. */ }
       try { await OrbitMessagingLocalVault().purge(oldMediaOwner); }catch(_){}
       try { await OrbitMessagingCipherRegistry.instance.purge(oldMediaOwner); }catch(_){}
           // Independently wipe the OS-protected native ratchet snapshot even
