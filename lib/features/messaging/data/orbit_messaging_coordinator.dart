@@ -78,10 +78,14 @@ class OrbitMessagingCoordinator {
       _hasLocalOlder[key]==true;
   }
 
-  Future<bool> secureReady() async {
+  Future<bool> secureReady({bool forSend=false}) async {
     if(!cipher.independentlyVerified)return false;
     final capability=await api.capabilities();
     if(!capability.available || !capability.e2eeClientVerified)return false;
+    if(forSend && !capability.canSendMessages){
+      throw OrbitMessagingSecurityException(
+        'Messaging is currently restricted for this account.',403);
+    }
     if(cipher is OrbitMessagingVodozemacCipher) {
       await _ensureReviewedDeviceKeys();
     }
@@ -106,8 +110,8 @@ class OrbitMessagingCoordinator {
     });
   }
 
-  Future<void> requireSecure() async {
-    if(!await secureReady())throw OrbitMessagingSecurityException(
+  Future<void> requireSecure({bool forSend=false}) async {
+    if(!await secureReady(forSend:forSend))throw OrbitMessagingSecurityException(
       OrbitUnconfiguredMessagingCipher.unavailable,503);
   }
 
@@ -595,7 +599,7 @@ class OrbitMessagingRetryResult {
 ).hasMatch(stableClientId)){
       throw const FormatException('Invalid stable media send identifier.');
     }
-    await requireSecure();
+    await requireSecure(forSend:true);
     final account=await api.owner;
     // A single owner-wide lock is conservative but ensures two concurrent
     // chats cannot encrypt against the same recipient device ratchet state.
