@@ -364,13 +364,22 @@ class OrbitMessagingCoordinator {
   /// Foreground HTTPS retry of already-encrypted envelopes only.
   /// Policy/epoch mismatches remain pending and are never silently dropped.
   Future<OrbitMessagingRetryResult> retryPending() async {
+    // Suspension only pauses outgoing work. Never mark already-encrypted
+    // queued messages as permanently failed because an account's temporary
+    // send restriction returned 403. Incoming history stays available.
     await requireSecure();
     final owner=await api.owner;
+    if(!(await api.capabilities()).canSendMessages){
+      return const OrbitMessagingRetryResult(sent:0,needsReview:0);
+    }
     return _serialMailbox(owner,'__crypto__',() async {
       var sent=0;
-    var needsReview=0;
+      var needsReview=0;
     for(final pending in await vault.pending()){
       if(await api.owner!=owner)break;
+      // A moderator may restrict sending after the queue check but before
+      // the next HTTP retry; leave ciphertext intact and pause immediately.
+      if(!(await api.capabilities()).canSendMessages)break;
       if(await vault.requiresReview(pending.clientId)){
         needsReview++;
         // Preserve send order and require explicit owner review.
@@ -386,6 +395,11 @@ class OrbitMessagingCoordinator {
           sent++;
         }
       }on OrbitIdentityException catch(error){
+        // The server may have applied a new moderator decision since the
+        // last capability read. Recheck before classifying an HTTP 403 as a
+        // revoked key or Circle membership change.
+        if(error.statusCode==403 &&
+           !(await api.capabilities()).canSendMessages)break;
         if(error.statusCode==null || error.statusCode==408 ||
             error.statusCode==429 || error.statusCode==502 ||
             error.statusCode==503 || error.statusCode==504)break;
