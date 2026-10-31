@@ -249,6 +249,79 @@ class OrbitMediaCrypto {
     }
   }
 
+  /// True streaming large-video decryption from an already checksum-
+  /// verified ciphertext file. Only one 8 MiB AEAD frame is decrypted at
+  /// a time. Any failed authentication erases the partial private output.
+  Future<File> openFileToPrivateFile(File ciphertextFile,{
+    required File destination,required Uint8List key,
+    required Uint8List noncePrefix,required String ownerId,
+    required String transferId,required String purpose,
+    required String variant,required int expectedPlainBytes,
+    int maxPlainBytes=OrbitMediaFormat.videoLimit,
+  }) async {
+    if(key.length!=32 ||noncePrefix.length!=8 ||
+       expectedPlainBytes<=0 ||expectedPlainBytes>maxPlainBytes ||
+       maxPlainBytes<=0 ||maxPlainBytes>OrbitMediaFormat.videoLimit ||
+       ciphertextFile.absolute.path==destination.absolute.path ||
+       await destination.exists()){
+      throw const FormatException('Encrypted video file metadata is invalid.');
+    }
+    final length=await ciphertextFile.length();
+    if(length<=OrbitMediaFormat.tagBytes ||
+       length>maxPlainBytes+2048){
+      throw const FormatException('Encrypted video file is too large.');
+    }
+    final source=await ciphertextFile.open(mode:FileMode.read);
+    RandomAccessFile? destinationHandle;
+    var completed=false;
+    try{
+      destinationHandle=await destination.open(mode:FileMode.write);
+      var offset=0;
+      var written=0;
+      var index=0;
+      while(offset<length){
+        final size=min(OrbitMediaFormat.partBytes,length-offset);
+        if(size<=OrbitMediaFormat.tagBytes){
+          throw const FormatException('Truncated encrypted video frame.');
+        }
+        final buffer=BytesBuilder(copy:false);
+        var available=0;
+        while(available<size){
+          final bytes=await source.read(size-available);
+          if(bytes.isEmpty){
+            throw const FormatException('Truncated ciphertext download.');
+          }
+          buffer.add(bytes);
+          available+=bytes.length;
+        }
+        final part=buffer.toBytes();
+        final cut=size-OrbitMediaFormat.tagBytes;
+        final box=SecretBox(part.sublist(0,cut),
+          nonce:_nonce(noncePrefix,index),
+          mac:Mac(part.sublist(cut)));
+        final clear=await _cipher.decrypt(box,secretKey:SecretKey(key),
+          aad:_aad(ownerId,transferId,purpose,variant,index));
+        written+=clear.length;
+        if(written>expectedPlainBytes){
+          throw const FormatException('Private video length mismatch.');
+        }
+        await destinationHandle.writeFrom(clear);
+        offset+=size;
+        index++;
+      }
+      if(written!=expectedPlainBytes){
+        throw const FormatException('Private video length mismatch.');
+      }
+      await destinationHandle.flush();
+      completed=true;
+      return destination;
+    }finally{
+      await source.close();
+      if(destinationHandle!=null)await destinationHandle.close();
+      if(!completed && await destination.exists())await destination.delete();
+    }
+  }
+
   /// Device-bound X25519 ECDH + HKDF authenticated key wrapping.
   /// The server sees this envelope but cannot derive the content key.
   Future<String> wrapKey(OrbitSealedMedia media, List<int> recipientPublic) async {
