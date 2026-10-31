@@ -840,7 +840,8 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     if(!mounted)return;
     final allowedCopy=message.text!=null &&
       message.text!.trim().isNotEmpty &&
-      message.text!.length<=22000;
+      message.text!.length<=22000 &&
+      OrbitChatSticker.tryParse(message.text)==null;
     final allowedDelete=widget.liveMode && message.isMine &&
       !message.id.startsWith('local-') &&
       widget.encryptedTransportReady &&
