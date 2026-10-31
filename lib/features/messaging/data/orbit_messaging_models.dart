@@ -208,10 +208,15 @@ class OrbitMessagingKeyDirectory {
 
 /// A protocol error is not an instruction to reset identity/ratchet state.
 class OrbitQueuedMessageException implements Exception {
-  const OrbitQueuedMessageException(this.clientId);
+  const OrbitQueuedMessageException(this.clientId,{this.needsReview=false});
   final String clientId;
+  /// True means a permanent authorization or key-epoch rejection. The
+  /// ciphertext is retained locally but must never be silently re-sent.
+  final bool needsReview;
   @override
-  String toString()=>'Encrypted message is queued, not yet delivered.';
+  String toString()=>needsReview
+    ?'Encrypted message was rejected and needs security review.'
+    :'Encrypted message is queued, not yet delivered.';
 }
 
 class OrbitMessagingSecurityException extends OrbitIdentityException {
