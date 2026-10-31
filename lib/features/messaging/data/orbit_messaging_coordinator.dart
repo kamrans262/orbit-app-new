@@ -35,6 +35,10 @@ class OrbitMessagingCoordinator {
   // reset the older-message paging position to the newest messages.
   final Map<String,String?> _olderCursors=<String,String?>{};
   final Map<String,Set<String>> _redactedByConversation={};
+  // Locally retained encrypted history can outlive the server's 30-day
+  // ciphertext mailbox. Anchors use decrypted timestamps only in RAM.
+  final Map<String,OrbitLocalDecryptedMessage> _localOldest={};
+  final Map<String,bool> _hasLocalOlder={};
 
   Set<String> redactedMessageIds(String owner,String conversation)=>
     Set<String>.unmodifiable(
@@ -69,7 +73,8 @@ class OrbitMessagingCoordinator {
 
   bool hasOlderMessages(String owner,String conversation){
     final key=_pageKey(owner,conversation);
-    return _olderCursors.containsKey(key) && _olderCursors[key]!=null;
+    return (_olderCursors.containsKey(key) && _olderCursors[key]!=null) ||
+      _hasLocalOlder[key]==true;
   }
 
   Future<bool> secureReady() async {
@@ -378,7 +383,23 @@ class OrbitMessagingCoordinator {
       _olderCursors.putIfAbsent(
         _pageKey(owner,thread.id),()=>page.nextCursor);
       await _commitPage(thread,owner,page);
-      return vault.history(thread.id,limit:limit);
+      final displayLimit=limit.clamp(1,200);
+      final available=await vault.history(thread.id,limit:displayLimit+1);
+      final key=_pageKey(owner,thread.id);
+      _hasLocalOlder[key]=available.length>displayLimit;
+      final visible=available.length>displayLimit
+        ?available.sublist(available.length-displayLimit):available;
+      if(visible.isNotEmpty){
+        final current=_localOldest[key];
+        final oldest=visible.first;
+        if(current==null||
+           oldest.createdAt.isBefore(current.createdAt)||
+           (oldest.createdAt==current.createdAt &&
+            oldest.id.compareTo(current.id)<0)){
+          _localOldest[key]=oldest;
+        }
+      }
+      return visible;
     });
   }
 
@@ -396,20 +417,44 @@ class OrbitMessagingCoordinator {
       await refresh(thread);
     }
     return _serialMailbox(owner,'__crypto__',() async {
+      final count=limit.clamp(1,50);
+      final oldest=_localOldest[key];
+      if(_hasLocalOlder[key]==true && oldest!=null){
+        final locally=await vault.historyBefore(thread.id,
+          before:oldest.createdAt,beforeId:oldest.id,limit:count+1);
+        _hasLocalOlder[key]=locally.length>count;
+        if(locally.isNotEmpty){
+          final page=locally.length>count
+            ?locally.sublist(locally.length-count):locally;
+          _localOldest[key]=page.first;
+          return page;
+        }
+      }
       final cursor=_olderCursors[key];
       if(cursor==null)return const <OrbitLocalDecryptedMessage>[];
       if(thread.kind=='circle'){
         await cipher.refreshGroupKeys(thread.id,thread.groupEpoch);
       }
       final page=await api.envelopes(
-        thread.id,cursor:cursor,limit:limit.clamp(1,50));
+        thread.id,cursor:cursor,limit:count);
       final items=await _commitPage(thread,owner,page);
       if(await api.owner!=owner){
         throw OrbitMessagingSecurityException(
           'Account changed while retrieving older messages.',401);
       }
       _olderCursors[key]=page.nextCursor;
-      return items..sort((a,b)=>a.createdAt.compareTo(b.createdAt));
+      if(items.isNotEmpty){
+        items.sort((a,b){
+          final date=a.createdAt.compareTo(b.createdAt);
+          return date!=0?date:a.id.compareTo(b.id);
+        });
+        final previous=_localOldest[key];
+        if(previous==null||
+           items.first.createdAt.isBefore(previous.createdAt)){
+          _localOldest[key]=items.first;
+        }
+      }
+      return items;
     });
   }
 
@@ -494,6 +539,9 @@ class OrbitMessagingCoordinator {
       await cipher.purgeForOwner(owner);
       await vault.purge(owner);
       _olderCursors.removeWhere((key,_)=>key.startsWith('$owner|'));
+      _localOldest.removeWhere((key,_)=>key.startsWith('$owner|'));
+      _hasLocalOlder.removeWhere((key,_)=>key.startsWith('$owner|'));
+      await OrbitMessagingMediaBridge.purgePendingForOwner(owner);
       _redactedByConversation.removeWhere((key,_)=>key.startsWith('$owner|'));
       _registeredNativeIdentities.removeWhere((key)=>key.startsWith('$owner|'));
     });
