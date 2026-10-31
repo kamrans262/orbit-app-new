@@ -161,6 +161,11 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
             // restart, with fresh Circle/DM authorization and no plaintext.
             for(final pending in await _media.resumePending(conversation)){
               try{
+                if(await _messenger.mediaAlreadyQueuedOrPublished(
+                    conversation,pending)){
+                  await _media.acknowledgeStaged(pending);
+                  continue;
+                }
                 await _commitStagedMedia(conversation,pending);
               }catch(_){
                 // The encrypted outbox already retains a rejected/uncertain
