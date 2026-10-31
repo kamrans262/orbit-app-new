@@ -206,7 +206,9 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
       final manifest=OrbitEncryptedChatMedia.tryParse(entry.text);
       final malformedMedia=manifest==null &&
         const ['image','voice','video'].contains(entry.kind);
-      if(manifest?.kind=='video')_videoManifests[manifest!.mediaId]=manifest;
+      if(manifest!=null && manifest.kind=='video'){
+        _videoManifests[manifest.mediaId]=manifest;
+      }
       var type=entry.senderId==owner
         ?DirectChatMessageType.sentText:DirectChatMessageType.receivedText;
       String? text=malformedMedia
