@@ -554,7 +554,7 @@ class OrbitMessagingCoordinator {
         // must not permanently lose the delivery acknowledgement. This
         // endpoint is idempotent and remains scoped to the recipient device.
         await cipher.confirmStoredDecryption(encrypted.id);
-        if(encrypted.senderId!=owner){
+        if(encrypted.senderId!=owner && encrypted.deliveredAt==null){
           await api.delivered(thread.id,encrypted.id);
         }
         continue;
@@ -574,7 +574,7 @@ class OrbitMessagingCoordinator {
         await vault.saveDecrypted(message);
         await cipher.confirmStoredDecryption(encrypted.id);
         saved.add(message);
-        if(encrypted.senderId!=owner){
+        if(encrypted.senderId!=owner && encrypted.deliveredAt==null){
           await api.delivered(thread.id,encrypted.id);
         }
       }catch(error){
