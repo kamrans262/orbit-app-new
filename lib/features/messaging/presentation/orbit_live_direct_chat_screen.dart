@@ -70,6 +70,7 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
   @override
   void dispose(){
     _epoch++;
+    _videoManifests.clear();
     _timer?.cancel();
     _typingTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
@@ -159,6 +160,7 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
         _loading=false;_cryptoReady=false;_thread=null;
         _messages=const [];
         _olderMessages=const [];
+        _videoManifests.clear();
         _error='An encrypted message could not be verified. '
           'It was not acknowledged or deleted. Reconnect to retry safely.';
       });
@@ -168,6 +170,7 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
         _loading=false;_cryptoReady=false;_thread=null;
         _messages=const [];
         _olderMessages=const [];
+        _videoManifests.clear();
         _error='This conversation is unavailable. Reconnect to verify friendship, '
           'device trust and privacy settings.';
       });
@@ -201,10 +204,13 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
       final reply=entry.kind=='reply'
         ?OrbitEncryptedReply.fromText(entry.text):null;
       final manifest=OrbitEncryptedChatMedia.tryParse(entry.text);
+      final malformedMedia=manifest==null &&
+        const ['image','voice','video'].contains(entry.kind);
       if(manifest?.kind=='video')_videoManifests[manifest!.mediaId]=manifest;
       var type=entry.senderId==owner
         ?DirectChatMessageType.sentText:DirectChatMessageType.receivedText;
-      String? text=entry.text;
+      String? text=malformedMedia
+        ?'Encrypted media is unavailable.':entry.text;
       if(reply!=null){
         final original=history.where((e)=>e.id==reply.targetId).toList();
         final quote=original.isEmpty?'Original message'
