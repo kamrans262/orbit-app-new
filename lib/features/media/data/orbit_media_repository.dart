@@ -340,6 +340,9 @@ class OrbitMediaRepository {
   /// Decrypt large chat videos to a short-lived app-private file rather
   /// than assembling up to 250 MiB of plaintext in memory. Caller deletes
   /// the file after playback; unsuccessful decryptions erase partial output.
+  /// Streaming 250 MiB ciphertext transport + chunkwise authenticated
+  /// decryption. Neither a 250 MiB ciphertext buffer nor a full plaintext
+  /// video is ever materialized in RAM. Both temp files are app-private.
   Future<File> downloadMessageVideoToFile(String mediaId,{
     required String deviceId,required Uint8List contentKey,
     required Uint8List noncePrefix,required String ownerId,
@@ -351,14 +354,75 @@ class OrbitMediaRepository {
        expectedPlainBytes>OrbitMediaFormat.videoLimit){
       throw const FormatException('Invalid encrypted video key metadata.');
     }
-    final ciphertext=await _fetchChatCiphertext(
-      mediaId,deviceId,OrbitMediaFormat.videoLimit+262144);
-    return (crypto??OrbitMediaCrypto()).openToPrivateFile(ciphertext,
-      destination:destination,key:contentKey,noncePrefix:noncePrefix,
-      ownerId:ownerId,transferId:transferId,
-      purpose:'message',variant:'original',
-      expectedPlainBytes:expectedPlainBytes,
-      maxPlainBytes:OrbitMediaFormat.videoLimit);
+    final cipherFile=File('${destination.path}.cipher');
+    if(await cipherFile.exists() ||await destination.exists()){
+      throw StateError('Private video playback destination already exists.');
+    }
+    const maxCipher=OrbitMediaFormat.videoLimit+2048;
+    try{
+      final scope='/media/'+Uri.encodeComponent(mediaId);
+      final access=await control('POST',scope+'/access',
+        body:{'variant':'original','device_id':deviceId});
+      if(access['download_mode']=='authenticated'){
+        final path=access['download_path'];
+        if(path is! String ||!path.startsWith('/media/') ||
+           path.startsWith('//') ||path.contains('..') ||
+           path.contains('://')){
+          throw const FormatException('Invalid private ciphertext route.');
+        }
+        await _identity.mediaBinaryDownloadToFile(path,
+          destination:cipherFile,maxResponseBytes:maxCipher);
+      }else{
+        final raw=access['ciphertext_url'];
+        final url=raw is String?Uri.tryParse(raw):null;
+        if(url==null ||url.scheme!='https' ||url.host.isEmpty ||
+           url.userInfo.isNotEmpty){
+          throw const FormatException('Invalid signed video URL.');
+        }
+        final request=http.Request('GET',url)..followRedirects=false;
+        final response=await _http.send(request).timeout(
+          const Duration(seconds:90));
+        if(response.statusCode!=200 ||
+           (response.contentLength??0)>maxCipher){
+          await response.stream.drain<void>();
+          throw StateError('Private encrypted video download failed.');
+        }
+        final output=await cipherFile.open(mode:FileMode.write);
+        var complete=false;
+        var transferred=0;
+        try{
+          await for(final chunk in response.stream.timeout(
+              const Duration(seconds:90))){
+            transferred+=chunk.length;
+            if(transferred>maxCipher){
+              throw const FormatException('Encrypted video exceeds size limit.');
+            }
+            await output.writeFrom(chunk);
+          }
+          if(transferred==0){
+            throw const FormatException('Empty encrypted video download.');
+          }
+          await output.flush();
+          complete=true;
+        }finally{
+          await output.close();
+          if(!complete && await cipherFile.exists())await cipherFile.delete();
+        }
+      }
+      final actualHash=await digest.sha256.bind(cipherFile.openRead()).first;
+      final claimedHash=access['sha256_ciphertext'];
+      if(claimedHash is! String ||actualHash.toString()!=claimedHash){
+        throw StateError('Encrypted video checksum mismatch.');
+      }
+      return (crypto??OrbitMediaCrypto()).openFileToPrivateFile(cipherFile,
+        destination:destination,key:contentKey,noncePrefix:noncePrefix,
+        ownerId:ownerId,transferId:transferId,
+        purpose:'message',variant:'original',
+        expectedPlainBytes:expectedPlainBytes,
+        maxPlainBytes:OrbitMediaFormat.videoLimit);
+    }finally{
+      if(await cipherFile.exists())await cipherFile.delete();
+    }
   }
 
   /// Authenticated short-lived URL plus current device envelope; no public URL
