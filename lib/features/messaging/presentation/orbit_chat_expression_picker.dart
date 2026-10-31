@@ -79,20 +79,28 @@ class _OrbitExpressionChoicesState extends State<_OrbitExpressionChoices> {
     ]);
   }
 
-  Widget _choice(String label,bool active,VoidCallback onTap)=>
-    Material(color:Colors.transparent,
+  Widget _choice(String label,bool active,VoidCallback onTap) {
+    return Material(
+      color:Colors.transparent,
       child:InkWell(
         onTap:onTap,borderRadius:BorderRadius.circular(22),
         child:Container(
           padding:const EdgeInsets.symmetric(vertical:11),
           decoration:BoxDecoration(
             borderRadius:BorderRadius.circular(22),
-            color:active?AppColors.primaryEnd:AppColors.background),
-          child:Center(child:Text(label,style:TextStyle(
-            fontFamily:AppTypography.fontFamily,fontSize:13,
-            fontWeight:FontWeight.w600,
-            color:active?AppColors.white:AppColors.textPrimary))),
-      ));
+            color:active?AppColors.primaryEnd:AppColors.background,
+          ),
+          child:Center(
+            child:Text(label,style:TextStyle(
+              fontFamily:AppTypography.fontFamily,fontSize:13,
+              fontWeight:FontWeight.w600,
+              color:active?AppColors.white:AppColors.textPrimary,
+            )),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// Original vector-based sticker artwork, not an emoji passed off as a
