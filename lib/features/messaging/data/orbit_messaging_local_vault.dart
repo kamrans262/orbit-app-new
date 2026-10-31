@@ -363,32 +363,62 @@ class OrbitMessagingLocalVault {
     },conflictAlgorithm:ConflictAlgorithm.ignore).then((_){}));
   }
 
+  /// Preserve complete local history independently of the server's bounded
+  /// 30-day encrypted-envelope mailbox. Only the requested page of decrypted
+  /// records is retained in memory. SQLite stores neither timestamps nor
+  /// unencrypted message IDs; the sortable timestamp stays AEAD-sealed.
   Future<List<OrbitLocalDecryptedMessage>> history(String conversation,
-      {int limit=50}) async {
+      {int limit=50}) => historyBefore(conversation,limit:limit);
+
+  Future<List<OrbitLocalDecryptedMessage>> historyBefore(
+      String conversation,{
+        DateTime? before,String? beforeId,int limit=50,
+      }) async {
     final owner=await _owner();
-    final index=await _index(owner,conversation);
-    return _db(owner,(db) async{
-      final rows=await db.query('history',
-        where:'conversation_id = ?',whereArgs:[index],
-        orderBy:'rowid DESC',limit:limit.clamp(1,200));
-      final messages=<OrbitLocalDecryptedMessage>[];
-      for(final row in rows) {
-        final hashedId=row['message_id'] as String;
-        final clear=await _unseal(owner,hashedId,row['blob_enc'] as String);
-        final value=Map<String,dynamic>.from(jsonDecode(clear) as Map);
-        if(value['conversation_id']!=conversation){
-          throw const FormatException('Local encrypted chat index mismatch.');
+    final conversationIndex=await _index(owner,conversation);
+    final size=limit.clamp(1,201);
+    return _db(owner,(db) async {
+      final top=<OrbitLocalDecryptedMessage>[];
+      var nextRow=0x7fffffffffffffff; // SQLite signed 64-bit rowid upper bound.
+      while(true) {
+        // Keyset-scanned encrypted rows keep memory bounded even when the
+        // device has years of locally retained, encrypted chat messages.
+        final rows=await db.rawQuery(
+          'SELECT rowid, message_id, blob_enc FROM history '
+          'WHERE conversation_id = ? AND rowid < ? '
+          'ORDER BY rowid DESC LIMIT 128',
+          [conversationIndex,nextRow]);
+        if(rows.isEmpty)break;
+        for(final row in rows){
+          final hashedId=row['message_id'] as String;
+          final clear=await _unseal(owner,hashedId,row['blob_enc'] as String);
+          final value=Map<String,dynamic>.from(jsonDecode(clear) as Map);
+          if(value['conversation_id']!=conversation) {
+            throw const FormatException('Local encrypted chat index mismatch.');
+          }
+          final message=OrbitLocalDecryptedMessage(
+            id:value['message_id'] as String,conversationId:conversation,
+            senderId:value['sender_id'] as String,
+            kind:value['kind'] as String,text:value['text'] as String,
+            envelopeId:value['envelope_id'] as String?,
+            createdAt:DateTime.parse(value['created_at'] as String));
+          if(before!=null){
+            final comparison=message.createdAt.compareTo(before);
+            if(comparison>0 || (comparison==0 &&
+                message.id.compareTo(beforeId??'')>=0))continue;
+          }
+          top.add(message);
+          top.sort((a,b){
+            final date=b.createdAt.compareTo(a.createdAt);
+            return date!=0?date:b.id.compareTo(a.id);
+          });
+          if(top.length>size)top.removeLast();
         }
-        messages.add(OrbitLocalDecryptedMessage(
-          id:value['message_id'] as String,conversationId:conversation,
-          senderId:value['sender_id'] as String,
-          kind:value['kind'] as String,text:value['text'] as String,
-          envelopeId:value['envelope_id'] as String?,
-          createdAt:DateTime.parse(value['created_at'] as String)));
+        nextRow=rows.last['rowid'] as int;
+        if(rows.length<128)break;
       }
       await _sameOwner(owner);
-      messages.sort((a,b)=>a.createdAt.compareTo(b.createdAt));
-      return messages;
+      return top.reversed.toList(growable:false);
     });
   }
 
