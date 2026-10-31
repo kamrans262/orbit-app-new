@@ -89,7 +89,8 @@ class _OrbitPrivateChatVideoViewerState
         if(entity is! File)continue;
         final name=entity.uri.pathSegments.last;
         if(!name.startsWith('orbit_m13_private_video_')||
-           !name.endsWith('.mp4'))continue;
+           !(name.endsWith('.mp4') ||
+             name.endsWith('.mp4.cipher')))continue;
         final changed=await entity.lastModified();
         if(DateTime.now().difference(changed)>const Duration(hours:1)){
           try{await entity.delete();}catch(_){}
