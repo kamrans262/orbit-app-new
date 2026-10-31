@@ -106,7 +106,9 @@ class MessageReactionPicker extends StatelessWidget {
           Positioned(
             left: left,
             top: top,
-            child: Column(
+            child: SizedBox(
+              width:pickerWidth,
+              child:Column(
               mainAxisSize:MainAxisSize.min,
               crossAxisAlignment:CrossAxisAlignment.stretch,
               children:[
@@ -141,6 +143,7 @@ class MessageReactionPicker extends StatelessWidget {
                   ),
                 ],
               ],
+              ),
             ),
           ),
         ],
