@@ -40,6 +40,8 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
     OrbitMessagingCoordinator(api:_api);
   late final OrbitCircleRepository _circles=widget.circles??OrbitCircleRepository();
   final OrbitMessagingMediaBridge _media=OrbitMessagingMediaBridge();
+  final Map<String,OrbitEncryptedChatMedia> _videoManifests={};
+  bool _recoveringMedia=false;
   List<GroupChatMessage> _messages=const [];
   List<GroupChatMessage> _olderMessages=const [];
   List<GroupParticipant> _participants=const [];
@@ -131,6 +133,21 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
       List<GroupChatMessage> next=const [];
       if(ready){
         await _retryQueuedCiphertext();
+        if(!_recoveringMedia){
+          _recoveringMedia=true;
+          try{
+            // Recover the exact same encrypted upload session after app
+            // restart, with fresh Circle/DM authorization and no plaintext.
+            for(final pending in await _media.resumePending(conversation)){
+              try{
+                await _messenger.sendMedia(conversation,pending);
+              }catch(_){
+                // The encrypted outbox already retains a rejected/uncertain
+                // send. Never report a recovered message as delivered.
+              }
+            }
+          }finally{_recoveringMedia=false;}
+        }
         final history=await _messenger.refresh(conversation);
         next=await _renderHistory(history,conversation,owner,names);
         final redacted=_messenger.redactedMessageIds(owner,conversation.id);
@@ -202,6 +219,7 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
       final reply=entry.kind=='reply'
         ?OrbitEncryptedReply.fromText(entry.text):null;
       final manifest=OrbitEncryptedChatMedia.tryParse(entry.text);
+      if(manifest?.kind=='video')_videoManifests[manifest!.mediaId]=manifest;
       var type=entry.senderId==owner
         ?GroupChatMessageType.sentText:GroupChatMessageType.receivedText;
       String? text=entry.text;
@@ -295,8 +313,10 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
 
   Future<void> _playVideo(String mediaId) async {
     try{
-      final bytes=await _media.open(OrbitEncryptedChatMedia(
-        mediaId:mediaId,kind:'video',mime:'video/mp4',durationMs:null));
+      final manifest=_videoManifests[mediaId];
+      if(manifest==null)throw const FormatException(
+        'Encrypted video key is unavailable in this chat.');
+      final bytes=await _media.open(manifest);
       if(!mounted)return;
       await Navigator.of(context).push<void>(AppFadeSlidePageRoute<void>(
         builder:(_)=>OrbitPrivateChatVideoViewer(bytes:bytes)));
