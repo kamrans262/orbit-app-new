@@ -98,6 +98,22 @@ class _MemoryVaultForTest extends OrbitMessagingLocalVault {
       ..sort((a,b)=>a.createdAt.compareTo(b.createdAt));
     return rows.length<=limit?rows:rows.sublist(rows.length-limit);
   }
+  @override
+  Future<List<OrbitLocalDecryptedMessage>> historyBefore(
+      String conversation,{DateTime? before,String? beforeId,
+      int limit=50}) async {
+    final rows=saved.values.where((m){
+      if(m.conversationId!=conversation)return false;
+      if(before==null)return true;
+      final c=m.createdAt.compareTo(before);
+      return c<0 ||(c==0&&m.id.compareTo(beforeId??'')<0);
+    }).toList()..sort((a,b){
+      final d=a.createdAt.compareTo(b.createdAt);
+      return d!=0?d:a.id.compareTo(b.id);
+    });
+    return rows.length<=limit?rows:rows.sublist(rows.length-limit);
+  }
+
 }
 
 class _RedactionPages extends _Pages {
@@ -172,4 +188,34 @@ void main(){
     expect(api.acknowledged,containsAll(['env-newest','env-oldest']));
     expect(api.acknowledged,hasLength(2));
   });
+  test('Offline history backfills older local E2EE records beyond 200',() async {
+    final api=_Pages();
+    final vault=_MemoryVaultForTest();
+    for(var i=0;i<250;i++){
+      final id='older-$i';
+      vault.saved[id]=OrbitLocalDecryptedMessage(
+        id:id,conversationId:'offline-history',senderId:'friend',
+        kind:'text',text:'sealed-$i',
+        createdAt:DateTime.utc(2025,1,1).add(Duration(days:i)));
+    }
+    final messenger=OrbitMessagingCoordinator(
+      api:api,cipher:_DecryptForTest(),vault:vault);
+    final thread=OrbitConversation(
+      id:'offline-history',kind:'direct',groupEpoch:1,peerId:'friend',
+      createdAt:DateTime.utc(2024,12,1));
+    final current=await messenger.refresh(thread,limit:200);
+    expect(current.length,200);
+    expect(current.first.id,'older-51');
+    expect(messenger.hasOlderMessages('owner',thread.id),isTrue);
+    final locally=await messenger.loadOlder(thread,limit:50);
+    expect(locally.length,50);
+    expect(locally.first.id,'older-1');
+    expect(locally.last.id,'older-50');
+    // Local paging must not require a server backfill request.
+    expect(api.olderCursor,isNull);
+    expect(messenger.hasOlderMessages('owner',thread.id),isTrue);
+    final tail=await messenger.loadOlder(thread,limit:50);
+    expect(tail.first.id,'older-0');
+  });
+
 }
