@@ -93,6 +93,18 @@ class OrbitMessagingApi {
       '/conversations/'+segment(conversation)+'/sync',body:{
         'delivered_envelope_ids':delivered,'limit':limit,
       }));
+  /// Fail closed when the server's device-scoped publication receipt is
+  /// unavailable; resuming without this check could duplicate a prior send.
+  Future<bool> wasPublished(String conversation,String clientId) async {
+    final result=await request('GET','/conversations/'+segment(conversation)+
+      '/sent/'+segment(clientId));
+    if(result['ciphertext_only']!=true ||
+       result['published'] is! bool){
+      throw const FormatException('Untrusted encrypted send acknowledgement.');
+    }
+    return result['published'] as bool;
+  }
+
   Future<OrbitMessageAccepted> publish(String conversation,{
     required String clientId,required String kind,required String protocol,
     required int groupEpoch,required List<OrbitCipherEnvelope> envelopes,
