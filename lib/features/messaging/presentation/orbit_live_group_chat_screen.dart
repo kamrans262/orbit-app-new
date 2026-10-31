@@ -173,6 +173,7 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
       List<OrbitLocalDecryptedMessage> history,
       OrbitConversation thread,String owner,Map<String,String> names) async {
     final reactionState=OrbitReactionReducer.fold(history,localUser:owner);
+    final reviewIds=await _messenger.vault.reviewRequiredMessageIds(thread.id);
     final readNames=<String,List<String>>{};
     final deliveredDevices=<String,int>{};
     // Read metadata is filtered on the server against each recipient's
@@ -248,7 +249,8 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
         selectedReaction:reactionState[entry.id]?.selected,
         readRecipientNames:readNames[entry.id]??const <String>[],
         deliveredDevices:deliveredDevices[entry.id]??0,
-        isQueued:entry.id.startsWith('local-'),
+        isQueued:entry.id.startsWith('local-') && !reviewIds.contains(entry.id),
+        isFailed:reviewIds.contains(entry.id),
         timestamp:_time(entry.createdAt),createdAt:entry.createdAt));
     }
     return loaded;
