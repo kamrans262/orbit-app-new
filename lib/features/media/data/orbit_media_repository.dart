@@ -255,6 +255,69 @@ class OrbitMediaRepository {
     return (data['grant_ids'] as List).cast<String>();
   }
 
+  /// Decrypt a chat attachment using the one-time media content key carried
+  /// INSIDE its authenticated M13 E2EE message. Access is still rechecked by
+  /// M6 for the current trusted recipient device; Laravel never sees this key.
+  /// Do not fall back to a URL or a server-fetched key when this path fails.
+  Future<Uint8List> downloadMessageMedia(String mediaId, {
+    required String deviceId,
+    required Uint8List contentKey,
+    required Uint8List noncePrefix,
+    required String ownerId,
+    required String transferId,
+    required String purpose,
+    required String variant,
+    required int expectedPlainBytes,
+    required int maxPlainBytes,
+    OrbitMediaCrypto? crypto,
+  }) async {
+    if(contentKey.length!=32 || noncePrefix.length!=8 ||
+       purpose!='message' || variant!='original' ||
+       expectedPlainBytes<=0 || expectedPlainBytes>maxPlainBytes ||
+       maxPlainBytes<=0 || maxPlainBytes>64*1024*1024) {
+      throw const FormatException('Invalid encrypted chat media key metadata.');
+    }
+    final scope='/media/'+Uri.encodeComponent(mediaId);
+    final access=await control('POST',scope+'/access',
+      body:{'variant':variant,'device_id':deviceId});
+    late final Uint8List ciphertext;
+    if(access['download_mode']=='authenticated') {
+      final path=access['download_path'];
+      if(path is! String || !path.startsWith('/media/') ||
+          path.contains('..') || path.contains('://')) {
+        throw const FormatException('Invalid private ciphertext route.');
+      }
+      ciphertext=await _identity.mediaBinaryRequest('GET',path,
+        maxResponseBytes:maxPlainBytes+262144);
+    }else{
+      final raw=access['ciphertext_url'];
+      final url=raw is String?Uri.tryParse(raw):null;
+      if(url==null||url.scheme!='https'||url.host.isEmpty||
+          url.userInfo.isNotEmpty) {
+        throw const FormatException('Invalid signed chat media URL.');
+      }
+      final response=await _http.get(url).timeout(const Duration(seconds:60));
+      if(response.statusCode!=200 ||
+         response.bodyBytes.length>maxPlainBytes+262144) {
+        throw StateError('Encrypted chat attachment unavailable.');
+      }
+      ciphertext=response.bodyBytes;
+    }
+    final expectedHash=access['sha256_ciphertext'];
+    if(expectedHash is! String ||
+       digest.sha256.convert(ciphertext).toString()!=expectedHash) {
+      throw StateError('Encrypted chat attachment checksum mismatch.');
+    }
+    final clear=await (crypto??OrbitMediaCrypto()).openInMemory(ciphertext,
+      key:contentKey,noncePrefix:noncePrefix,
+      ownerId:ownerId,transferId:transferId,
+      purpose:purpose,variant:variant,maxPlainBytes:maxPlainBytes);
+    if(clear.length!=expectedPlainBytes) {
+      throw const FormatException('Encrypted chat attachment length mismatch.');
+    }
+    return clear;
+  }
+
   /// Authenticated short-lived URL plus current device envelope; no public URL
   /// ever cached. Decrypt only after SHA256 and AEAD verification.
   Future<Uint8List> downloadPhoto(String mediaId, {
