@@ -306,6 +306,9 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
       api:_api,coordinator:_messenger).openDirect(context,
       thread:thread,peerId:widget.peerId,
       showEncryptionReview:_messenger.cipher.independentlyVerified,
+      showFailedReview:_messages.any((m)=>
+        m.deliveryStatus==DirectChatDeliveryStatus.failed),
+      onFailedCleared:()=>unawaited(_load()),
       evidenceCandidates:_messages.where((message)=>
         !message.id.startsWith('local-') &&
         (message.type==DirectChatMessageType.receivedText ||
