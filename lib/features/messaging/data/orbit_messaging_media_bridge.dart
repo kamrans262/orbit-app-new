@@ -50,7 +50,7 @@ class OrbitChatMediaContentKey {
        owner is! String||owner.isEmpty||
        transfer is! String||
        !RegExp(r'^[a-f0-9-]{36}$').hasMatch(transfer)||
-       size is! int||size<=0||size>64*1024*1024||
+       size is! int||size<=0||size>OrbitMediaFormat.videoLimit||
        value['purpose']!='message'||value['variant']!='original') {
       throw const FormatException('Invalid E2EE chat attachment key.');
     }
