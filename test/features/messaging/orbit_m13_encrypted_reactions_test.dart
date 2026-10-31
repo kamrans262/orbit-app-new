@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_ui/features/messaging/data/orbit_messaging_local_vault.dart';
 import 'package:orbit_ui/features/messaging/data/orbit_messaging_reactions.dart';
+import 'package:orbit_ui/features/messaging/data/orbit_messaging_stickers.dart';
 
 OrbitLocalDecryptedMessage _local(String id,String user,String kind,String text,int sec)=>
   OrbitLocalDecryptedMessage(id:id,conversationId:'room',
@@ -43,4 +44,17 @@ void main(){
     final bob=OrbitReactionReducer.fold(events,localUser:'bob');
     expect(bob['msg-1']?.selected,isNull);
   });
+  test('A real sticker bubble accepts encrypted emoji reactions',(){
+    final sticker=const OrbitChatSticker('orbit-star').encode();
+    final reaction=OrbitEncryptedReaction(targetId:'sticker-1',
+      selected:'❤️').encode();
+    final rows=[
+      _local('sticker-1','alice','sticker',sticker,0),
+      _local('reaction-1','bob','reaction',utf8.decode(reaction),1),
+    ];
+    final result=OrbitReactionReducer.fold(rows,localUser:'bob');
+    expect(result['sticker-1']?.counts,{'❤️':1});
+    expect(result['sticker-1']?.selected,'❤️');
+  });
+
 }
