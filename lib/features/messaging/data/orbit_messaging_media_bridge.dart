@@ -104,8 +104,9 @@ class OrbitEncryptedChatMedia {
 }
 
 /// Existing M6 Hostinger-private ciphertext transfer plus M13-specific
-/// message consent. No readable binary, public URL or file key enters chat
-/// metadata: only the server-issued opaque media ID is E2EE-encrypted.
+/// message consent. Public chat routing metadata contains no file key,
+/// readable binary, local path or public URL. New attachment content keys
+/// travel only inside the authenticated M13 E2EE payload and device vault.
 class OrbitMessagingMediaBridge {
   OrbitMessagingMediaBridge({OrbitMessagingApi? messaging,
     OrbitIdentityClient? identity,OrbitMediaCrypto? crypto,
