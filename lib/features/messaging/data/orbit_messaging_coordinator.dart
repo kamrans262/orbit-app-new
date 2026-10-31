@@ -274,6 +274,14 @@ class OrbitMessagingCoordinator {
   Future<OrbitMessagingSendResult> _sendEncryptedLocked(
       OrbitConversation thread,String kind,Uint8List data,
       String account,{String? stableClientId}) async {
+    // A second foreground/composer/background invocation must never
+    // advance the ratchet or republish a different payload under the same
+    // media transfer ID while the first ciphertext is already queued.
+    if(stableClientId!=null &&
+       await vault.containsQueuedClientId(stableClientId)){
+      return OrbitMessagingSendResult(accepted:false,queued:true,
+        clientId:stableClientId);
+    }
     // Server epoch changes on Circle membership/consent/approved-device
     // changes. Requery before every group send; an old epoch is never reused.
     if(thread.kind=='circle'){
