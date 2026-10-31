@@ -160,6 +160,7 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
       List<OrbitLocalDecryptedMessage> history,
       OrbitConversation thread,String owner) async {
     final reactionState=OrbitReactionReducer.fold(history,localUser:owner);
+    final reviewIds=await _messenger.vault.reviewRequiredMessageIds(thread.id);
     // Only the newest few sent messages need receipt polling on shared
     // hosting. Sender acknowledgements remain different from device
     // delivered and explicit recipient-opt-in read acknowledgements.
@@ -235,7 +236,9 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
         showDeliveryStatus:entry.senderId==owner,
         deliveryStatus:entry.senderId==owner
           ?entry.id.startsWith('local-')
-            ?DirectChatDeliveryStatus.waiting
+            ?reviewIds.contains(entry.id)
+              ?DirectChatDeliveryStatus.failed
+              :DirectChatDeliveryStatus.waiting
             :status[entry.id]??DirectChatDeliveryStatus.sent
           :DirectChatDeliveryStatus.delivered));
     }
