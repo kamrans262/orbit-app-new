@@ -1,0 +1,66 @@
+name: Orbit M13 Full Android and iOS Build Audit
+on:
+  push:
+    branches: [integration/m2-m5-flutter-consolidated-2026-10-24]
+    paths:
+      - '.github/workflows/orbit-m13-full-build-audit.yml'
+      - 'android/**'
+      - 'ios/**'
+      - 'lib/**'
+      - 'native/orbit_vodozemac/**'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: orbit-m13-build-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  android-debug-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - name: Flutter dependency resolution
+        run: flutter pub get
+      - name: Verify full Flutter Dart entrypoint
+        run: dart analyze lib/main.dart
+      - name: Build complete debug APK
+        run: flutter build apk --debug
+      - name: Verify Android APK output
+        run: |
+          test -s build/app/outputs/flutter-apk/app-debug.apk
+          ls -lh build/app/outputs/flutter-apk/app-debug.apk
+  ios-no-sign-build:
+    runs-on: macos-15
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - name: Record Apple build environment
+        run: |
+          xcodebuild -version
+          pod --version
+      - name: Resolve Flutter plugins
+        run: flutter pub get
+      - name: Build iOS app without signing or secrets
+        run: flutter build ios --debug --no-codesign
+      - name: Verify unsigned Flutter app
+        run: |
+          test -d build/ios/iphoneos/Runner.app
+          du -sh build/ios/iphoneos/Runner.app
