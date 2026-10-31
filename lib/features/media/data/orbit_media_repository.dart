@@ -190,7 +190,7 @@ class OrbitMediaRepository {
             throw StateError('Temporary encrypted part upload failure.');
           }
           etag = response.headers['etag'];
-          if (etag == null || etag.isEmpty) {
+          if (etag == null || etag!.isEmpty) {
             throw StateError('Storage server did not acknowledge ciphertext.');
           }
           }
@@ -201,7 +201,11 @@ class OrbitMediaRepository {
             return etag!;
           });
         }
-        pieces.add({'part_number':index,'etag':etag});
+        final confirmedEtag=etag;
+        if(confirmedEtag==null||confirmedEtag.isEmpty){
+          throw StateError('Ciphertext part was not acknowledged.');
+        }
+        pieces.add({'part_number':index,'etag':confirmedEtag});
         offset += size;
         onProgress?.call(offset/media.bytes);
       }
