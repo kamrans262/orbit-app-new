@@ -12,6 +12,7 @@ import 'orbit_messaging_local_vault.dart';
 import 'orbit_messaging_models.dart';
 import 'orbit_messaging_media_bridge.dart';
 import 'orbit_messaging_reactions.dart';
+import 'orbit_messaging_stickers.dart';
 import 'orbit_messaging_replies.dart';
 import 'orbit_messaging_vodozemac_cipher.dart';
 
@@ -211,6 +212,12 @@ class OrbitMessagingCoordinator {
     sendEncrypted(thread,kind:media.kind,
       data:Uint8List.fromList(utf8.encode(media.encode())));
 
+  /// Sticker ID is encrypted by the active reviewed ratchet provider before
+  /// a device-scoped envelope is sent. There is no plaintext fallback.
+  Future<OrbitMessagingSendResult> sendSticker(
+      OrbitConversation thread,OrbitChatSticker sticker) =>
+    sendEncrypted(thread,kind:'sticker',data:sticker.encodeBytes());
+
   Future<OrbitMessagingSendResult> sendReaction(
       OrbitConversation thread,{required String targetId,
       required String? selected}) async {
@@ -229,7 +236,7 @@ class OrbitMessagingCoordinator {
   Future<OrbitMessagingSendResult> sendEncrypted(
       OrbitConversation thread,{required String kind,
       required Uint8List data}) async {
-    if(!const ['text','emoji','image','voice','video','reaction','reply']
+    if(!const ['text','emoji','sticker','image','voice','video','reaction','reply']
         .contains(kind)||data.isEmpty||data.length>22000){
       throw OrbitMessagingSecurityException('Unsupported encrypted payload.',422);
     }
