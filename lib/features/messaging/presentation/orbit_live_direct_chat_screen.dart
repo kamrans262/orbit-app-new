@@ -303,6 +303,13 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
       api:_api,coordinator:_messenger).openDirect(context,
       thread:thread,peerId:widget.peerId,
       showEncryptionReview:_messenger.cipher.independentlyVerified,
+      evidenceCandidates:_messages.where((message)=>
+        !message.id.startsWith('local-') &&
+        (message.type==DirectChatMessageType.receivedText ||
+         message.type==DirectChatMessageType.sentText) &&
+        message.text!=null && message.text!.trim().isNotEmpty
+      ).map<OrbitReportableMessage>((message)=>(
+        id:message.id,text:message.text!.trim())).toList(growable:false),
       onClose:()=>Navigator.of(context).maybePop());
   }
 
