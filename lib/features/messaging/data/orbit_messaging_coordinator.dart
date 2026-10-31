@@ -205,12 +205,15 @@ class OrbitMessagingCoordinator {
       utf8.encode(content)));
   }
 
-  /// Attachment manifest contains only an opaque M6 media reference, never
-  /// a readable URL, content key, phone storage path or media plaintext.
+  /// The media access reference and a unique attachment key stay inside
+  /// the authenticated E2EE body, never in server-visible metadata.
+  /// A stable opaque client ID prevents duplicate publication if the process
+  /// dies after Laravel accepts a message but before local cleanup.
   Future<OrbitMessagingSendResult> sendMedia(
       OrbitConversation thread,OrbitEncryptedChatMedia media) =>
     sendEncrypted(thread,kind:media.kind,
-      data:Uint8List.fromList(utf8.encode(media.encode())));
+      data:Uint8List.fromList(utf8.encode(media.encode())),
+      stableClientId:media.contentKey?.transfer);
 
   /// Sticker ID is encrypted by the active reviewed ratchet provider before
   /// a device-scoped envelope is sent. There is no plaintext fallback.
@@ -235,10 +238,350 @@ class OrbitMessagingCoordinator {
 
   Future<OrbitMessagingSendResult> sendEncrypted(
       OrbitConversation thread,{required String kind,
-      required Uint8List data}) async {
+      required Uint8List data,String? stableClientId}) async {
     if(!const ['text','emoji','sticker','image','voice','video','reaction','reply']
         .contains(kind)||data.isEmpty||data.length>22000){
       throw OrbitMessagingSecurityException('Unsupported encrypted payload.',422);
+    }
+    if(stableClientId!=null &&
+       !RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-'
+         r'[0-9a-f]{4}-[0-9a-f]{12}
+    // A single owner-wide lock is conservative but ensures two concurrent
+    // chats cannot encrypt against the same recipient device ratchet state.
+    // Only ciphertext and state durably committed by the reviewed provider
+    // may leave this critical section.
+    return _serialMailbox(account,'__crypto__',
+      ()=>_sendEncryptedLocked(thread,kind,data,account,
+        stableClientId:stableClientId));
+  }
+
+  Future<OrbitMessagingSendResult> _sendEncryptedLocked(
+      OrbitConversation thread,String kind,Uint8List data,
+      String account,{String? stableClientId}) async {
+    // Server epoch changes on Circle membership/consent/approved-device
+    // changes. Requery before every group send; an old epoch is never reused.
+    if(thread.kind=='circle'){
+      if(thread.circleId==null)throw OrbitMessagingSecurityException(
+        'Circle is unavailable.',409);
+      final current=await api.circle(thread.circleId!);
+      if(current.id!=thread.id ||current.groupEpoch!=thread.groupEpoch){
+        throw OrbitMessagingSecurityException(
+          'Circle recipients changed. Refresh keys before sending.',409);
+      }
+    }
+    final devices=await _recipients(thread);
+    if(thread.kind=='circle'){
+      // A server epoch is an access-control fence, not an encryption key.
+      // Require the vetted provider to rotate and distribute actual group
+      // sender keys before this message can be encrypted.
+      await cipher.prepareGroupEpoch(
+        conversationId:thread.id,
+        groupEpoch:thread.groupEpoch,
+        recipients:devices,
+      );
+    }
+    final encrypted=await cipher.encrypt(
+      conversationId:thread.id,groupEpoch:thread.groupEpoch,
+      kind:kind,plaintext:data,recipients:devices,
+    );
+    if(!cipher.independentlyVerified || encrypted.protocol!=cipher.protocol ||
+       encrypted.envelopes.isEmpty ||
+       encrypted.groupEpoch!=thread.groupEpoch){
+      throw OrbitMessagingSecurityException(
+        'Encrypted delivery validation failed; nothing was shared.',403);
+    }
+    if(await api.owner!=account)throw OrbitMessagingSecurityException(
+      'Account changed. Message was not sent.',401);
+    final outgoing=OrbitQueuedCiphertext(
+      clientId:stableClientId??const Uuid().v4(),conversationId:thread.id,
+      kind:encrypted.kind,protocol:encrypted.protocol,
+      groupEpoch:encrypted.groupEpoch,envelopes:encrypted.envelopes,
+    );
+    // The ratchet provider MUST have committed before encrypt returned.
+    // Outbox stores only already-encrypted envelopes, never plaintext.
+    // Only app-private encrypted SQLite may keep a pending preview. This
+    // preserves the owner's message through a network timeout or app restart
+    // without uploading plaintext or falsely showing a delivered receipt.
+    final preview=kind=='reaction'?null:OrbitLocalDecryptedMessage(
+      id:'local-${outgoing.clientId}',conversationId:thread.id,
+      senderId:account,kind:kind,text:utf8.decode(data),
+      createdAt:DateTime.now().toUtc());
+    await vault.queue(outgoing,preview:preview);
+    try{
+      final accepted=await api.publish(thread.id,
+        clientId:outgoing.clientId,kind:outgoing.kind,
+        protocol:outgoing.protocol,groupEpoch:outgoing.groupEpoch,
+        envelopes:outgoing.envelopes);
+      if(!accepted.accepted)throw OrbitMessagingSecurityException(
+          'Encrypted message not acknowledged.',503);
+      await vault.acknowledge(outgoing.clientId);
+      return OrbitMessagingSendResult(accepted:true,queued:false);
+    }on OrbitIdentityException catch(error){
+      if(error.statusCode==null || error.statusCode==408 ||
+          error.statusCode==429 || error.statusCode==502 ||
+          error.statusCode==503 || error.statusCode==504){
+        return OrbitMessagingSendResult(
+          accepted:false,queued:true,clientId:outgoing.clientId);
+      }
+      // Never auto-rekey or retry a permanently revoked recipient/epoch.
+      // The persisted flag ensures "Failed" survives app restarts and
+      // prevents an obsolete ciphertext from leaving after another poll.
+      await vault.markNeedsReview(outgoing.clientId);
+      throw OrbitQueuedMessageException(outgoing.clientId,
+        needsReview:true);
+    }
+  }
+
+  /// Foreground HTTPS retry of already-encrypted envelopes only.
+  /// Policy/epoch mismatches remain pending and are never silently dropped.
+  Future<OrbitMessagingRetryResult> retryPending() async {
+    await requireSecure();
+    final owner=await api.owner;
+    return _serialMailbox(owner,'__crypto__',() async {
+      var sent=0;
+    var needsReview=0;
+    for(final pending in await vault.pending()){
+      if(await api.owner!=owner)break;
+      if(await vault.requiresReview(pending.clientId)){
+        needsReview++;
+        // Preserve send order and require explicit owner review.
+        break;
+      }
+      try {
+        final result=await api.publish(pending.conversationId,
+          clientId:pending.clientId,kind:pending.kind,
+          protocol:pending.protocol,groupEpoch:pending.groupEpoch,
+          envelopes:pending.envelopes);
+        if(result.accepted){
+          await vault.acknowledge(pending.clientId);
+          sent++;
+        }
+      }on OrbitIdentityException catch(error){
+        if(error.statusCode==null || error.statusCode==408 ||
+            error.statusCode==429 || error.statusCode==502 ||
+            error.statusCode==503 || error.statusCode==504)break;
+        await vault.markNeedsReview(pending.clientId);
+        needsReview++;
+        // Preserve send order when the oldest ciphertext needs re-approval;
+        // do not deliver later messages ahead of a revoked-key envelope.
+        break;
+      }
+    }
+      return OrbitMessagingRetryResult(sent:sent,needsReview:needsReview);
+    });
+  }
+
+  /// User-confirmed discard only. Never auto-re-encrypt or re-send a
+  /// permanently rejected ciphertext after recipient/key/epoch changes.
+  Future<int> discardFailedQueued(OrbitConversation thread) async{
+    await requireSecure();
+    final owner=await api.owner;
+    return _serialMailbox(owner,'__crypto__',() async{
+      return vault.discardReviewRequired(thread.id);
+    });
+  }
+
+  /// Foreground sync of the newest server envelopes. Keep the original
+  /// backfill cursor across periodic refreshes instead of returning to page 1.
+  Future<List<OrbitLocalDecryptedMessage>> refresh(
+      OrbitConversation thread,{int limit=200}) async {
+    await requireSecure();
+    final owner=await api.owner;
+    return _serialMailbox(owner,'__crypto__',() async {
+      if(thread.kind=='circle'){
+        await cipher.refreshGroupKeys(thread.id,thread.groupEpoch);
+      }
+      final page=await api.sync(thread.id,limit:limit.clamp(1,200));
+      _olderCursors.putIfAbsent(
+        _pageKey(owner,thread.id),()=>page.nextCursor);
+      await _commitPage(thread,owner,page);
+      final displayLimit=limit.clamp(1,200);
+      final available=await vault.history(thread.id,limit:displayLimit+1);
+      final key=_pageKey(owner,thread.id);
+      final visible=available.length>displayLimit
+        ?available.sublist(available.length-displayLimit):available;
+      final previous=_localOldest[key];
+      if(visible.isNotEmpty){
+        final oldest=visible.first;
+        if(previous==null||
+           oldest.createdAt.isBefore(previous.createdAt)||
+           (oldest.createdAt==previous.createdAt &&
+            oldest.id.compareTo(previous.id)<0)){
+          _localOldest[key]=oldest;
+        }
+      }
+      if(previous==null) {
+        _hasLocalOlder[key]=available.length>displayLimit;
+      }else{
+        // Do not repeatedly offer already-exhausted local pages after
+        // the next 25-second HTTPS refresh.
+        final anchor=_localOldest[key];
+        _hasLocalOlder[key]=anchor!=null &&
+          (await vault.historyBefore(thread.id,before:anchor.createdAt,
+            beforeId:anchor.id,limit:1)).isNotEmpty;
+      }
+      return visible;
+    });
+  }
+
+  /// Decrypt at most one older page through the same verified ratchet provider,
+  /// using the server's opaque cursor and current authorization checks.
+  /// Returns ONLY messages newly stored during this request. Existing chat
+  /// widgets prepend them without changing the approved Orbit UI.
+  Future<List<OrbitLocalDecryptedMessage>> loadOlder(
+      OrbitConversation thread,{int limit=50}) async {
+    await requireSecure();
+    final owner=await api.owner;
+    final key=_pageKey(owner,thread.id);
+    if(!_olderCursors.containsKey(key)) {
+      // Initialize a cursor without pretending older messages are absent.
+      await refresh(thread);
+    }
+    return _serialMailbox(owner,'__crypto__',() async {
+      final count=limit.clamp(1,50);
+      final oldest=_localOldest[key];
+      if(_hasLocalOlder[key]==true && oldest!=null){
+        final locally=await vault.historyBefore(thread.id,
+          before:oldest.createdAt,beforeId:oldest.id,limit:count+1);
+        _hasLocalOlder[key]=locally.length>count;
+        if(locally.isNotEmpty){
+          final page=locally.length>count
+            ?locally.sublist(locally.length-count):locally;
+          _localOldest[key]=page.first;
+          return page;
+        }
+      }
+      final cursor=_olderCursors[key];
+      if(cursor==null)return const <OrbitLocalDecryptedMessage>[];
+      if(thread.kind=='circle'){
+        await cipher.refreshGroupKeys(thread.id,thread.groupEpoch);
+      }
+      final page=await api.envelopes(
+        thread.id,cursor:cursor,limit:count);
+      final items=await _commitPage(thread,owner,page);
+      if(await api.owner!=owner){
+        throw OrbitMessagingSecurityException(
+          'Account changed while retrieving older messages.',401);
+      }
+      _olderCursors[key]=page.nextCursor;
+      if(items.isNotEmpty){
+        items.sort((a,b){
+          final date=a.createdAt.compareTo(b.createdAt);
+          return date!=0?date:a.id.compareTo(b.id);
+        });
+        final previous=_localOldest[key];
+        if(previous==null||
+           items.first.createdAt.isBefore(previous.createdAt)){
+          _localOldest[key]=items.first;
+        }
+      }
+      return items;
+    });
+  }
+
+  Future<List<OrbitLocalDecryptedMessage>> _commitPage(
+      OrbitConversation thread,String owner,OrbitEnvelopePage page) async {
+    // Delete only messages this authenticated device actually received,
+    // as proved by the server's device-scoped deletion receipts. Delete the
+    // local cached copy before repainting or acknowledging newer envelopes.
+    if(page.redactedMessageIds.isNotEmpty){
+      final key=_pageKey(owner,thread.id);
+      _redactedByConversation.putIfAbsent(key,()=><String>{})
+          .addAll(page.redactedMessageIds);
+      for(final id in page.redactedMessageIds.toSet()){
+        if(await api.owner!=owner)throw OrbitMessagingSecurityException(
+          'Account changed before message redaction sync.',401);
+        await vault.deleteMessage(thread.id,id);
+      }
+    }
+    final saved=<OrbitLocalDecryptedMessage>[];
+    for(final encrypted in page.items.reversed){
+      if(await api.owner!=owner)throw OrbitMessagingSecurityException(
+        'Account changed while decrypting.',401);
+      // A late/replayed envelope must not resurrect a message already
+      // removed by an authenticated device-specific deletion receipt.
+      if(_redactedByConversation[_pageKey(owner,thread.id)]
+          ?.contains(encrypted.messageId)==true)continue;
+      if(await vault.hasMessage(thread.id,encrypted.messageId)){
+        await cipher.confirmStoredDecryption(encrypted.id);
+        continue;
+      }
+      try{
+        final decrypted=await cipher.decrypt(
+          envelope:encrypted,conversationId:thread.id);
+        final text=utf8.decode(decrypted);
+        final message=OrbitLocalDecryptedMessage(
+          id:encrypted.messageId,conversationId:thread.id,
+          senderId:encrypted.senderId,kind:encrypted.kind,
+          text:text,createdAt:encrypted.createdAt,
+          envelopeId:encrypted.id);
+        // Keep verified plaintext in the encrypted local vault before
+        // acknowledging receipt. Neither HTTP polling nor pagination may
+        // advance the ratchet a second time for the same committed message.
+        await vault.saveDecrypted(message);
+        await cipher.confirmStoredDecryption(encrypted.id);
+        saved.add(message);
+        if(encrypted.senderId!=owner){
+          await api.delivered(thread.id,encrypted.id);
+        }
+      }catch(error){
+        if(error is OrbitMessagingSecurityException ||
+            error is FormatException) {
+          throw OrbitMessagingSecurityException(
+            'An encrypted message could not be authenticated. '
+            'It remains pending and was not acknowledged.',409);
+        }
+        rethrow;
+      }
+    }
+    return saved;
+  }
+
+  Future<void> redactOwn(OrbitConversation thread,String messageId) async {
+    await requireSecure();
+    if(messageId.startsWith('local-')){
+      throw OrbitMessagingSecurityException(
+        'Message has not been acknowledged by the server.',409);
+    }
+    await api.redact(thread.id,messageId);
+    await vault.deleteMessage(thread.id,messageId);
+  }
+
+  Future<void> viewed(OrbitConversation thread,String envelopeId,
+      Duration visible) async {
+    await requireSecure();
+    if(visible.inMilliseconds<600)return;
+    await api.read(thread.id,envelopeId,visible);
+  }
+
+  Future<void> purge(String owner) async {
+    if(owner.isEmpty)return;
+    await _serialMailbox(owner,'__crypto__',() async {
+      await cipher.purgeForOwner(owner);
+      await vault.purge(owner);
+      _olderCursors.removeWhere((key,_)=>key.startsWith('$owner|'));
+      _localOldest.removeWhere((key,_)=>key.startsWith('$owner|'));
+      _hasLocalOlder.removeWhere((key,_)=>key.startsWith('$owner|'));
+      await OrbitMessagingMediaBridge.purgePendingForOwner(owner);
+      _redactedByConversation.removeWhere((key,_)=>key.startsWith('$owner|'));
+      _registeredNativeIdentities.removeWhere((key)=>key.startsWith('$owner|'));
+    });
+  }
+}
+class OrbitMessagingSendResult {
+  const OrbitMessagingSendResult({
+    required this.accepted,required this.queued,this.clientId,
+  });
+  final bool accepted,queued;
+  // Stable queue ID so a waiting bubble can be reconciled after restart.
+  final String? clientId;
+}
+class OrbitMessagingRetryResult {
+  const OrbitMessagingRetryResult({required this.sent,required this.needsReview});
+  final int sent,needsReview;
+}
+).hasMatch(stableClientId)){
+      throw const FormatException('Invalid stable media send identifier.');
     }
     await requireSecure();
     final account=await api.owner;
