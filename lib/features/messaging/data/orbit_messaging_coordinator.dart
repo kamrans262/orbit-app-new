@@ -393,6 +393,10 @@ class OrbitMessagingCoordinator {
         if(result.accepted){
           await vault.acknowledge(pending.clientId);
           sent++;
+        }else{
+          // Unacknowledged ciphertext remains in the encrypted outbox.
+          // Do not send newer ratchet messages ahead of an older packet.
+          break;
         }
       }on OrbitIdentityException catch(error){
         // The server may have applied a new moderator decision since the
