@@ -196,6 +196,59 @@ class OrbitMediaCrypto {
     return builder.toBytes();
   }
 
+  /// Decrypt a large video one authenticated chunk at a time into an
+  /// app-private temporary file. The whole clear video is never assembled
+  /// in RAM. The caller owns the returned file and must delete it on close.
+  Future<File> openToPrivateFile(Uint8List ciphertext,{
+    required File destination,required Uint8List key,
+    required Uint8List noncePrefix,required String ownerId,
+    required String transferId,required String purpose,
+    required String variant,required int expectedPlainBytes,
+    int maxPlainBytes=OrbitMediaFormat.videoLimit,
+  }) async {
+    if(key.length!=32 || noncePrefix.length!=8 ||
+       expectedPlainBytes<=0 ||expectedPlainBytes>maxPlainBytes ||
+       maxPlainBytes<=0 ||maxPlainBytes>OrbitMediaFormat.videoLimit ||
+       ciphertext.isEmpty ||
+       ciphertext.length>maxPlainBytes+2048 ||
+       await destination.exists()){
+      throw const FormatException('Encrypted video metadata is invalid.');
+    }
+    final handle=await destination.open(mode:FileMode.write);
+    var offset=0,index=0,written=0;
+    try{
+      while(offset<ciphertext.length){
+        final size=min(OrbitMediaFormat.partBytes,ciphertext.length-offset);
+        if(size<=OrbitMediaFormat.tagBytes) {
+          throw const FormatException('Truncated encrypted video.');
+        }
+        final end=offset+size;
+        final box=SecretBox(ciphertext.sublist(offset,
+          end-OrbitMediaFormat.tagBytes),nonce:_nonce(noncePrefix,index),
+          mac:Mac(ciphertext.sublist(end-OrbitMediaFormat.tagBytes,end)));
+        final chunk=await _cipher.decrypt(box,secretKey:SecretKey(key),
+          aad:_aad(ownerId,transferId,purpose,variant,index));
+        written+=chunk.length;
+        if(written>expectedPlainBytes){
+          throw const FormatException('Encrypted video length mismatch.');
+        }
+        await handle.writeFrom(chunk);
+        offset=end;
+        index++;
+      }
+      if(written!=expectedPlainBytes){
+        throw const FormatException('Encrypted video length mismatch.');
+      }
+      await handle.flush();
+      await handle.close();
+      return destination;
+    }catch(_){
+      try{await handle.close();}catch(_){}
+      if(await destination.exists())await destination.delete();
+      rethrow;
+    }
+  }
+
   /// Device-bound X25519 ECDH + HKDF authenticated key wrapping.
   /// The server sees this envelope but cannot derive the content key.
   Future<String> wrapKey(OrbitSealedMedia media, List<int> recipientPublic) async {
