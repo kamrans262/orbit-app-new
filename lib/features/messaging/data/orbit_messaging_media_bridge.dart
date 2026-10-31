@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart' as hashes;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
@@ -153,27 +155,205 @@ class OrbitMessagingMediaBridge {
     return deleted;
   }
 
+  static const _pendingPrefix='orbit.m13.encryptedUpload.v1.';
+  static const FlutterSecureStorage _pendingStorage=FlutterSecureStorage();
+
+  Future<Directory> _pendingDirectory() async {
+    final home=await getApplicationSupportDirectory();
+    final folder=Directory(home.path+Platform.pathSeparator+
+      'orbit_m13_pending_ciphertext');
+    if(!await folder.exists())await folder.create(recursive:true);
+    return folder;
+  }
+
+  String _pendingIndex(String owner,String conversation,String kind,
+      String source,int bytes,int modifiedMs,int? durationMs) =>
+    _pendingPrefix+hashes.sha256.convert(utf8.encode(
+      '$owner|$conversation|$kind|$source|$bytes|$modifiedMs|$durationMs'))
+      .toString();
+
+  /// The ciphertext stays inside the application's private support directory.
+  /// Its content key and resume metadata stay in OS secure storage. This is
+  /// the same encrypted upload session across process death and file reselect.
+  Future<OrbitSealedMedia?> _restore(String index,String owner,
+      String conversation,int epoch,String kind,int? durationMs) async {
+    final raw=await _pendingStorage.read(key:index);
+    if(raw==null)return null;
+    final value=Map<String,dynamic>.from(jsonDecode(raw) as Map);
+    final transfer=value['transfer'];
+    if(value['owner']!=owner||value['conversation']!=conversation||
+       value['epoch']!=epoch||value['kind']!=kind||
+       value['duration_ms']!=durationMs||
+       transfer is! String ||
+       !RegExp(r'^[a-f0-9-]{36}$').hasMatch(transfer)) {
+      throw OrbitIdentityException(
+        'Pending encrypted upload is no longer authorized.',409);
+    }
+    final filename='orbit_m13_'+transfer+'.cipher';
+    final folder=await _pendingDirectory();
+    final file=File(folder.path+Platform.pathSeparator+filename);
+    final key=base64Decode(value['key_b64'] as String);
+    final nonce=base64Decode(value['nonce_b64'] as String);
+    final bytes=value['bytes'];
+    final plainBytes=value['plain_bytes'];
+    final expectedHash=value['sha256'];
+    if(key.length!=32||nonce.length!=8||bytes is! int||bytes<17||
+       plainBytes is! int||plainBytes<=0||
+       expectedHash is! String||!RegExp(r'^[0-9a-f]{64}$').hasMatch(expectedHash)||
+       !await file.exists()||await file.length()!=bytes) {
+      throw const FormatException('Pending encrypted media is invalid.');
+    }
+    final actual=await hashes.sha256.bind(file.openRead()).first;
+    if(actual.toString()!=expectedHash){
+      throw const FormatException('Pending ciphertext integrity failed.');
+    }
+    return OrbitSealedMedia(file:file,key:Uint8List.fromList(key),
+      noncePrefix:Uint8List.fromList(nonce),plainBytes:plainBytes,
+      bytes:bytes,sha256:expectedHash,ownerId:owner,
+      transferId:transfer,purpose:'message',variant:'original');
+  }
+
+  Future<void> _savePending(String index,OrbitSealedMedia sealed,
+      String conversation,int epoch,String kind,int? durationMs) async {
+    await _pendingStorage.write(key:index,value:jsonEncode({
+      'owner':sealed.ownerId,'conversation':conversation,'epoch':epoch,
+      'kind':kind,'duration_ms':durationMs,
+      'transfer':sealed.transferId,'key_b64':base64Encode(sealed.key),
+      'nonce_b64':base64Encode(sealed.noncePrefix),
+      'bytes':sealed.bytes,'plain_bytes':sealed.plainBytes,
+      'sha256':sealed.sha256,
+      'created_at':DateTime.now().toUtc().toIso8601String(),
+    }));
+  }
+
+  Future<void> _discardPending(String index,OrbitSealedMedia sealed) async {
+    await _pendingStorage.delete(key:index);
+    if(await sealed.file.exists())await sealed.file.delete();
+  }
+
+  /// Remove only aged owned encrypted upload artifacts; never other files.
+  /// Pending items are never discarded merely because a network retry fails.
+  static Future<int> prunePendingCiphertext({DateTime? now}) async {
+    final expiry=(now??DateTime.now()).toUtc().subtract(
+      const Duration(days:90));
+    final home=await getApplicationSupportDirectory();
+    final root=Directory(home.path+Platform.pathSeparator+
+      'orbit_m13_pending_ciphertext');
+    final all=await _pendingStorage.readAll();
+    var cleaned=0;
+    for(final entry in all.entries) {
+      if(!entry.key.startsWith(_pendingPrefix))continue;
+      try{
+        final data=Map<String,dynamic>.from(jsonDecode(entry.value) as Map);
+        final created=DateTime.parse(data['created_at'] as String).toUtc();
+        final transfer=data['transfer'];
+        if(!created.isBefore(expiry)||transfer is! String||
+           !RegExp(r'^[a-f0-9-]{36}$').hasMatch(transfer))continue;
+        await _pendingStorage.delete(key:entry.key);
+        final file=File(root.path+Platform.pathSeparator+
+          'orbit_m13_'+transfer+'.cipher');
+        if(await file.exists())await file.delete();
+        cleaned++;
+      }catch(_){ /* Never delete an unrecognized local file. */ }
+    }
+    return cleaned;
+  }
+
+  static Future<void> purgePendingForOwner(String owner) async {
+    if(owner.isEmpty)return;
+    final all=await _pendingStorage.readAll();
+    final home=await getApplicationSupportDirectory();
+    final root=Directory(home.path+Platform.pathSeparator+
+      'orbit_m13_pending_ciphertext');
+    for(final entry in all.entries) {
+      if(!entry.key.startsWith(_pendingPrefix))continue;
+      try{
+        final data=Map<String,dynamic>.from(jsonDecode(entry.value) as Map);
+        if(data['owner']!=owner)continue;
+        await _pendingStorage.delete(key:entry.key);
+        final transfer=data['transfer'];
+        if(transfer is String &&
+           RegExp(r'^[a-f0-9-]{36}$').hasMatch(transfer)){
+          final file=File(root.path+Platform.pathSeparator+
+            'orbit_m13_'+transfer+'.cipher');
+          if(await file.exists())await file.delete();
+        }
+      }catch(_){ /* Keep unknown files; no broad directory deletion. */ }
+    }
+  }
+
+  Future<OrbitEncryptedChatMedia> _complete({
+    required OrbitConversation conversation,
+    required String owner,
+    required OrbitSealedMedia sealed,
+    required String pendingIndex,
+    required String kind,
+    required String mime,
+    int? durationMs,
+  }) async {
+    final fresh=conversation.kind=='circle'
+      ?await _api.circle(conversation.circleId!)
+      :await _api.direct(conversation.peerId!);
+    if(fresh.id!=conversation.id||fresh.groupEpoch!=conversation.groupEpoch ||
+       sealed.ownerId!=owner||sealed.purpose!='message') {
+      throw OrbitIdentityException('Conversation permissions changed.',409);
+    }
+    final recipients=await _eligibleRecipients(fresh,owner);
+    final ownDevices=await _keys.discover(audienceKind:'only_me',
+      purpose:'message',recipientIds:[owner]);
+    final userDevices=<OrbitMediaRecipient>[];
+    for(final peer in recipients) {
+      userDevices.addAll(await _keys.discover(
+        audienceKind:fresh.kind=='circle'?'selected_circles':'selected_friends',
+        purpose:'message',
+        circleId:fresh.kind=='circle'?fresh.circleId:null,
+        recipientIds:[peer]));
+    }
+    final receipt=await _media.upload(sealed,
+      kind:kind=='voice'?'audio':kind,mime:mime,durationMs:durationMs);
+    if(!receipt.ready)throw StateError('Private ciphertext still verifying.');
+    final ownKeys=await _keys.encryptEnvelopes(sealed,ownDevices);
+    await _media.createGrants(receipt.mediaId,
+      audience:'only_me',recipients:const [],
+      keyEnvelopes:ownKeys,idempotencyKey:const Uuid().v4());
+    final sharingKeys=await _keys.encryptEnvelopes(sealed,userDevices);
+    await _media.createGrants(receipt.mediaId,
+      audience:fresh.kind=='circle'?'selected_circles':'selected_friends',
+      recipients:fresh.kind=='circle'?[fresh.circleId!]:recipients,
+      keyEnvelopes:sharingKeys,idempotencyKey:const Uuid().v4());
+    if(await _identity.currentLocalSocialOwner()!=owner) {
+      throw OrbitIdentityException('Account changed during upload.',401);
+    }
+    final result=OrbitEncryptedChatMedia(
+      mediaId:receipt.mediaId,kind:kind,mime:mime,durationMs:durationMs,
+      contentKey:OrbitChatMediaContentKey.fromSealed(sealed));
+    await _discardPending(pendingIndex,sealed);
+    return result;
+  }
+
   Future<OrbitEncryptedChatMedia> stage({
     required OrbitConversation conversation,
     required File original,
     required String kind,
     int? durationMs,
   }) async {
-    // Opportunistic cleanup of orphaned encrypted uploads, never of user media.
     unawaited(pruneOrphanedCiphertext().then<void>((_) {},
-      onError:(_){ /* OS temp-file cleanup is best effort. */ }));
-    if(!const ['image','voice','video'].contains(kind)){
+      onError:(_){ /* Best-effort old temp cleanup. */ }));
+    unawaited(prunePendingCiphertext().then<void>((_) {},
+      onError:(_){ /* Retain unrecognized pending uploads. */ }));
+    if(!const ['image','voice','video'].contains(kind)) {
       throw ArgumentError.value(kind,'kind','Unsupported encrypted media');
     }
-    final current=await _identity.currentLocalSocialOwner();
-    if(current==null)throw OrbitIdentityException('Sign in first.',401);
+    final owner=await _identity.currentLocalSocialOwner();
+    if(owner==null)throw OrbitIdentityException('Sign in first.',401);
     final fresh=conversation.kind=='circle'
       ?await _api.circle(conversation.circleId!)
       :await _api.direct(conversation.peerId!);
     if(fresh.id!=conversation.id||fresh.groupEpoch!=conversation.groupEpoch){
       throw OrbitIdentityException('Conversation permissions changed.',409);
     }
-    final byteCount=await original.length();
+    final stat=await original.stat();
+    final bytes=stat.size;
     final limit=switch(kind){
       'image'=>OrbitMediaFormat.imageLimit,
       'voice'=>OrbitMediaFormat.audioLimit,
@@ -181,65 +361,73 @@ class OrbitMessagingMediaBridge {
       _=>0,
     };
     if((kind=='video' && (durationMs==null || durationMs<1 ||
-        durationMs>60000)) || byteCount<=0||byteCount>limit){
+        durationMs>60000)) || bytes<=0||bytes>limit){
       throw const FormatException('Media exceeds encrypted upload limit.');
     }
-    final recipients=await _eligibleRecipients(fresh,current);
-    final ownerDevices=await _keys.discover(audienceKind:'only_me',
-      purpose:'message',recipientIds:[current]);
-    final userDevices=<OrbitMediaRecipient>[];
-    for(final peer in recipients){
-      final people=await _keys.discover(
-        audienceKind:fresh.kind=='circle'?'selected_circles':'selected_friends',
-        purpose:'message',circleId:fresh.kind=='circle'?fresh.circleId:null,
-        recipientIds:[peer]);
-      userDevices.addAll(people);
-    }
-    final temp=await getTemporaryDirectory();
-    final transfer=const Uuid().v4();
-    final encrypted=File(temp.path+Platform.pathSeparator+
-      'orbit_m13_'+transfer+'.cipher');
-    OrbitSealedMedia? sealed;
-    String mime;
-    try{
-      if(kind=='image'){
-        // Remove EXIF, GPS and source metadata before encrypting bytes.
-        final clean=OrbitMediaCrypto.preparePhoto(
-          Uint8List.fromList(await original.readAsBytes()));
-        sealed=await _crypto.sealBytes(clean.jpeg,
-          destination:encrypted,ownerId:current,
-          transferId:transfer,purpose:'message');
-        mime='image/jpeg';
-      }else{
-        sealed=await _crypto.sealFile(original,
-          destination:encrypted,ownerId:current,
-          transferId:transfer,purpose:'message',maxInputBytes:limit);
-        mime=kind=='voice'?'audio/mp4':'video/mp4';
+    final index=_pendingIndex(owner,conversation.id,kind,original.path,
+      bytes,stat.modified.millisecondsSinceEpoch,durationMs);
+    var sealed=await _restore(index,owner,conversation.id,
+      conversation.groupEpoch,kind,durationMs);
+    if(sealed==null) {
+      final transfer=const Uuid().v4();
+      final folder=await _pendingDirectory();
+      final encrypted=File(folder.path+Platform.pathSeparator+
+        'orbit_m13_'+transfer+'.cipher');
+      try {
+        if(kind=='image') {
+          final clean=OrbitMediaCrypto.preparePhoto(
+            Uint8List.fromList(await original.readAsBytes()));
+          sealed=await _crypto.sealBytes(clean.jpeg,
+            destination:encrypted,ownerId:owner,
+            transferId:transfer,purpose:'message');
+        }else{
+          sealed=await _crypto.sealFile(original,
+            destination:encrypted,ownerId:owner,
+            transferId:transfer,purpose:'message',maxInputBytes:limit);
+        }
+        await _savePending(index,sealed,conversation.id,
+          conversation.groupEpoch,kind,durationMs);
+      }catch(_){
+        if(await encrypted.exists())await encrypted.delete();
+        rethrow;
       }
-      final receipt=await _media.upload(sealed,
-        kind:kind=='voice'?'audio':kind,mime:mime,
-        durationMs:durationMs);
-      if(!receipt.ready)throw StateError('Private ciphertext still verifying.');
-      // First grant the sender their own other devices access. Otherwise
-      // a restored or second device would have an unreadable sent item.
-      final ownKeys=await _keys.encryptEnvelopes(sealed,ownerDevices);
-      await _media.createGrants(receipt.mediaId,
-        audience:'only_me',recipients:const [],
-        keyEnvelopes:ownKeys,idempotencyKey:const Uuid().v4());
-      final sharingKeys=await _keys.encryptEnvelopes(sealed,userDevices);
-      await _media.createGrants(receipt.mediaId,
-        audience:fresh.kind=='circle'?'selected_circles':'selected_friends',
-        recipients:fresh.kind=='circle'?[fresh.circleId!]:recipients,
-        keyEnvelopes:sharingKeys,idempotencyKey:const Uuid().v4());
-      if(await _identity.currentLocalSocialOwner()!=current){
-        throw OrbitIdentityException('Account changed during upload.',401);
-      }
-      return OrbitEncryptedChatMedia(
-        mediaId:receipt.mediaId,kind:kind,mime:mime,durationMs:durationMs,
-        contentKey:OrbitChatMediaContentKey.fromSealed(sealed));
-    }finally{
-      if(await encrypted.exists())await encrypted.delete();
     }
+    return _complete(conversation:conversation,owner:owner,sealed:sealed,
+      pendingIndex:index,kind:kind,
+      mime:kind=='image'?'image/jpeg':
+        kind=='voice'?'audio/mp4':'video/mp4',durationMs:durationMs);
+  }
+
+  /// Retry unfinished encrypted uploads even when the original voice capture
+  /// has been removed, without re-reading plaintext or generating new keys.
+  /// Only the current authorized Circle epoch can complete the transfer.
+  Future<List<OrbitEncryptedChatMedia>> resumePending(
+      OrbitConversation conversation) async {
+    final owner=await _identity.currentLocalSocialOwner();
+    if(owner==null)return const [];
+    final records=await _pendingStorage.readAll();
+    final recovered=<OrbitEncryptedChatMedia>[];
+    for(final entry in records.entries){
+      if(!entry.key.startsWith(_pendingPrefix))continue;
+      try {
+        final meta=Map<String,dynamic>.from(jsonDecode(entry.value) as Map);
+        if(meta['owner']!=owner||
+           meta['conversation']!=conversation.id)continue;
+        final kind=meta['kind'] as String;
+        final duration=meta['duration_ms'] as int?;
+        final sealed=await _restore(entry.key,owner,conversation.id,
+          conversation.groupEpoch,kind,duration);
+        if(sealed==null)continue;
+        recovered.add(await _complete(conversation:conversation,owner:owner,
+          sealed:sealed,pendingIndex:entry.key,kind:kind,
+          mime:kind=='image'?'image/jpeg':
+            kind=='voice'?'audio/mp4':'video/mp4',durationMs:duration));
+      }catch(_){
+        // Leave ciphertext and its stable upload ID for a later authenticated
+        // retry. Never claim successful delivery or reveal any private data.
+      }
+    }
+    return recovered;
   }
 
   Future<List<String>> _eligibleRecipients(
