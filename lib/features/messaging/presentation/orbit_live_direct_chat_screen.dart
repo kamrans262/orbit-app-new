@@ -436,6 +436,15 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
     onOpenVideo:_playVideo,
     onTypingChanged:_setTyping,
     onMessageViewed:_viewed,
+    onDeleteMessage:(messageId) async {
+      final thread=_thread;
+      if(thread==null||!_cryptoReady){
+        throw OrbitMessagingSecurityException(
+          'Verified encrypted deletion is unavailable.',503);
+      }
+      await _messenger.redactOwn(thread,messageId);
+      if(mounted)unawaited(_load());
+    },
     onSendMessage:_send,
     onReactionChanged:_react,
     liveMode:true,encryptedTransportReady:_cryptoReady,
