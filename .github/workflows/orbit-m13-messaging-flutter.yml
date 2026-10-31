@@ -8,6 +8,8 @@ on:
     paths:
       - '.github/workflows/orbit-m13-messaging-flutter.yml'
       - 'lib/features/messaging/**'
+      - 'lib/features/media/data/orbit_media_repository.dart'
+      - 'lib/core/chat/**'
       - 'lib/features/messages/**'
       - 'lib/features/direct_chat/**'
       - 'lib/features/group_chat/**'
@@ -20,6 +22,7 @@ on:
       - 'native/orbit_vodozemac/**'
       - 'lib/main.dart'
       - 'test/features/messaging/**'
+      - 'test/core/chat/**'
   workflow_dispatch:
 permissions:
   contents: read
