@@ -231,6 +231,19 @@ class OrbitMessagingLocalVault {
     });
   }
 
+  /// Indexed existence check; unlike pending(), this finds any durable
+  /// queued encrypted send, even after the first 40 pending entries.
+  Future<bool> containsQueuedClientId(String clientId) async {
+    final owner=await _owner();
+    final index=await _index(owner,clientId);
+    return _db(owner,(db) async {
+      final rows=await db.query('outbox',columns:['client_id'],
+        where:'client_id = ?',whereArgs:[index],limit:1);
+      await _sameOwner(owner);
+      return rows.isNotEmpty;
+    });
+  }
+
   /// Non-retryable 4xx/epoch/consent rejections remain encrypted locally,
   /// with a durable failure flag. Do not silently re-send old ciphertext
   /// after an identity, Circle roster or consent revocation.
