@@ -215,6 +215,18 @@ class OrbitMessagingCoordinator {
       data:Uint8List.fromList(utf8.encode(media.encode())),
       stableClientId:media.contentKey?.transfer);
 
+  /// Idempotent media recovery: first honor a previously persisted
+  /// ciphertext outbox item, then check only this trusted sender device's
+  /// own server-side publication receipt. Fail closed on unavailable HTTP.
+  Future<bool> mediaAlreadyQueuedOrPublished(
+      OrbitConversation thread,OrbitEncryptedChatMedia media) async {
+    final transfer=media.contentKey?.transfer;
+    if(transfer==null)return false;
+    await requireSecure();
+    if(await vault.containsQueuedClientId(transfer))return true;
+    return api.wasPublished(thread.id,transfer);
+  }
+
   /// Sticker ID is encrypted by the active reviewed ratchet provider before
   /// a device-scoped envelope is sent. There is no plaintext fallback.
   Future<OrbitMessagingSendResult> sendSticker(
