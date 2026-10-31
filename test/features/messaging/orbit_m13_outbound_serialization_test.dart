@@ -211,7 +211,8 @@ void main(){
     final retry=await coordinator.retryPending();
     expect(retry.sent,0);
     expect(retry.needsReview,1);
-    expect(api.attempts,1,'Old epoch ciphertext must not be resent');
+    expect(api.attempts,1,
+      reason:'Old epoch ciphertext must not be resent');
     expect(await coordinator.discardFailedQueued(thread),1);
     expect(vault.packets,isEmpty);
     expect(vault.reviewed,isEmpty);
