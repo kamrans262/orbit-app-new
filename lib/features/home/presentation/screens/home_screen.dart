@@ -54,6 +54,7 @@ class HomeScreen extends StatefulWidget {
     required this.onTabSelected,
     required this.onAddPressed,
     this.nearbyFriendsCount,
+    this.notificationUnreadCount,
     this.circleSummaries = const <HomeCircleSummaryData>[],
     this.onCirclePressed,
     this.onSeeAllCirclesPressed,
@@ -208,6 +209,8 @@ class HomeScreen extends StatefulWidget {
 
   /// Only provided when the app has a genuine nearby-presence count.
   final int? nearbyFriendsCount;
+  /// Authoritative unread count; null means not yet available.
+  final int? notificationUnreadCount;
   final List<HomeCircleSummaryData> circleSummaries;
   final ValueChanged<HomeCircleSummaryData>? onCirclePressed;
   final VoidCallback? onSeeAllCirclesPressed;
@@ -612,14 +615,31 @@ class _HomeScreenState extends State<HomeScreen> {
               iconGradient: AppColors.primaryGradient,
             ),
             const SizedBox(width: 10),
-            AppCircularIconButton(
-              key: HomeKeys.notificationButton,
-              semanticLabel: 'Notifications',
-              onPressed: _handleNotificationPressed,
-              icon: Icons.notifications_none_rounded,
-              iconSize: 20,
-              iconGradient: AppColors.primaryGradient,
-            ),
+            Stack(clipBehavior:Clip.none,children:[
+              AppCircularIconButton(
+                key:HomeKeys.notificationButton,
+                semanticLabel:'Notifications',
+                onPressed:_handleNotificationPressed,
+                icon:Icons.notifications_none_rounded,
+                iconSize:20,
+                iconGradient:AppColors.primaryGradient,
+              ),
+              if((widget.notificationUnreadCount??0)>0)
+                Positioned(right:-4,top:-5,child:Semantics(
+                  label:'Unread notifications',
+                  child:Container(
+                    constraints:const BoxConstraints(minWidth:16,minHeight:16),
+                    padding:const EdgeInsets.symmetric(horizontal:3),
+                    alignment:Alignment.center,
+                    decoration:BoxDecoration(color:AppColors.primaryEnd,
+                      borderRadius:BorderRadius.circular(12)),
+                    child:Text(widget.notificationUnreadCount!>99?'99+':
+                      widget.notificationUnreadCount.toString(),
+                      style:const TextStyle(color:Colors.white,fontSize:9,
+                        fontWeight:FontWeight.w700)),
+                  ),
+                )),
+            ]),
           ],
         ),
         const SizedBox(height: 14),

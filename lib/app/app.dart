@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../features/home/presentation/screens/orbit_live_home_screen.dart';
+import '../features/notifications/presentation/orbit_live_notifications_screen.dart';
 import '../features/circles/data/orbit_circle_repository.dart';
 import '../features/circles/presentation/screens/orbit_circle_join_screen.dart';
 import '../features/circles/presentation/screens/orbit_live_circle_detail_screen.dart';
@@ -464,6 +465,9 @@ class _OrbitAppState extends State<OrbitApp> {
                   AppRoutes.home, (_) => false),
               ),
             );
+          case AppRoutes.notificationInbox:
+            return MaterialPageRoute<void>(settings:settings,
+              builder:(_)=>const OrbitLiveNotificationsScreen());
           case AppRoutes.home:
             return MaterialPageRoute<void>(
               settings: settings,

@@ -63,7 +63,7 @@ class _OrbitLiveNotificationsScreenState
     if(mounted)setState((){_loading=true;_error=null;});
     try{
       final owner=await OrbitIdentityClient.instance.currentLocalSocialOwner();
-      if(owner==null)throw const OrbitIdentityException('Sign in to view notifications.',401);
+      if(owner==null)throw OrbitIdentityException('Sign in to view notifications.',401);
       final page=await _repo.page();
       if(!mounted || serial!=_epoch)return;
       if(await OrbitIdentityClient.instance.currentLocalSocialOwner()!=owner) {

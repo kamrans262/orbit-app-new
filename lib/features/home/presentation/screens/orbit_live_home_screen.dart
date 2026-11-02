@@ -19,7 +19,9 @@ import '../../../moments/data/orbit_m7_rollout.dart';
 import '../../../moments/data/orbit_moment_push_runtime.dart';
 import '../../../moments/presentation/screens/orbit_live_moment_viewer.dart';
 import '../../../moments/presentation/screens/orbit_live_moments_screen.dart';
-import '../../../moments/presentation/screens/orbit_live_moment_notifications_screen.dart';
+import '../../../notifications/data/orbit_notification_repository.dart';
+import '../../../notifications/data/orbit_notification_push_runtime.dart';
+import '../../../../app/routing/app_routes.dart';
 import '../../data/orbit_dashboard_repository.dart';
 import '../../data/orbit_m8_rollout.dart';
 import '../../../presence/data/orbit_presence_rollout.dart';
@@ -53,6 +55,7 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
       OrbitMomentRepository(identity:_identity);
   late final OrbitPingRepository _pings=OrbitPingRepository(identity:_identity);
   late final OrbitCheckInRepository _checkins=OrbitCheckInRepository(identity:_identity);
+  late final OrbitNotificationRepository _notifications=OrbitNotificationRepository(identity:_identity);
 
   List<MomentData> _recent=const [];
   List<FavoritePersonData> _people=const [];
@@ -68,6 +71,10 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
   bool _refreshingPing=false;
   final Set<String> _shownPings=<String>{};
   StreamSubscription<void>? _pushEvents;
+  StreamSubscription<void>? _notificationUpdates;
+  StreamSubscription<void>? _notificationOpened;
+  int? _notificationUnread;
+  bool _refreshingUnread=false;
   int _epoch=0;
 
   @override
@@ -83,12 +90,23 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
     if(OrbitM7Rollout.enabled) {
       unawaited(OrbitMomentPushRuntime.instance.configure());
     }
+    _notificationUpdates=OrbitNotificationPushRuntime.instance.updates.listen((_){
+      if(mounted)unawaited(_refreshNotificationUnread());
+    });
+    _notificationOpened=OrbitNotificationPushRuntime.instance.opened.listen((_){
+      WidgetsBinding.instance.addPostFrameCallback((_){
+        if(mounted)unawaited(_openNotifications());
+      });
+    });
+    unawaited(OrbitNotificationPushRuntime.instance.configure());
+    unawaited(_refreshNotificationUnread());
     _revalidation=Timer.periodic(const Duration(seconds:25),(_){
       if(mounted && !_loading &&
           WidgetsBinding.instance.lifecycleState==AppLifecycleState.resumed &&
           ModalRoute.of(context)?.isCurrent==true) {
         unawaited(_reload());
         unawaited(_refreshPings());
+        unawaited(_refreshNotificationUnread());
       }
     });
     unawaited(_reload());
@@ -197,6 +215,8 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
       if(OrbitM7Rollout.enabled) {
         unawaited(OrbitMomentPushRuntime.instance.configure());
       }
+      unawaited(OrbitNotificationPushRuntime.instance.configure());
+      unawaited(_refreshNotificationUnread());
       unawaited(_reload());
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if(mounted)unawaited(_refreshPings());
@@ -214,6 +234,9 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
       _dropHomePresence();
     }
     unawaited(_pushEvents?.cancel());
+    unawaited(_notificationUpdates?.cancel());
+    unawaited(_notificationOpened?.cancel());
+    unawaited(OrbitNotificationPushRuntime.instance.stop());
     if(OrbitM7Rollout.enabled) unawaited(OrbitMomentPushRuntime.instance.stop());
     WidgetsBinding.instance.removeObserver(this);
     _clearProtected();
@@ -427,6 +450,32 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
     if(mounted)unawaited(_reload());
   }
 
+  Future<void> _refreshNotificationUnread() async {
+    if(_refreshingUnread||!mounted)return;
+    _refreshingUnread=true;
+    try{
+      final owner=await _identity.currentLocalSocialOwner();
+      if(owner==null){
+        if(mounted)setState(()=>_notificationUnread=null);
+        return;
+      }
+      final count=await _notifications.unread();
+      if(mounted&&await _identity.currentLocalSocialOwner()==owner){
+        setState(()=>_notificationUnread=count);
+      }
+    }catch(_){
+      if(mounted)setState(()=>_notificationUnread=null);
+    }finally{_refreshingUnread=false;}
+  }
+
+  Future<void> _openNotifications() async {
+    final owner=await _identity.currentLocalSocialOwner();
+    if(owner==null||!mounted)return;
+    // Generic provider taps never route directly to an untrusted target ID.
+    await Navigator.of(context).pushNamed(AppRoutes.notificationInbox);
+    if(mounted)unawaited(_refreshNotificationUnread());
+  }
+
   void _openMoments(){
     Navigator.of(context).push<void>(MaterialPageRoute(
       builder:(_)=>OrbitLiveMomentsScreen(onTabSelected:(_){},onAddPressed:(){})));
@@ -440,6 +489,7 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
   @override
   Widget build(BuildContext context)=>HomeScreen(
     greetingName:_name,useLiveDate:true,
+    notificationUnreadCount:_notificationUnread,
     dashboardNotice:_notice,
     onDashboardRetry:()=>unawaited(_reload()),
     showCircleSection:_showCircles,circleSummaries:_circleCards,
@@ -464,10 +514,7 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
     ],
     upcomingPlans:const <UpcomingPlanData>[],promoBanner:null,
     favoritePeople:_peopleWithPresence,recentMoments:_recent,
-    onNotificationPressed:(){
-      Navigator.of(context).push<void>(MaterialPageRoute(
-        builder:(_)=>const OrbitLiveMomentNotificationsScreen()));
-    },
+    onNotificationPressed:()=>unawaited(_openNotifications()),
     onQuickActionPressed:(action){
       if(action.id=='moment'){_openMoments();}
       else if(action.id=='messages'){

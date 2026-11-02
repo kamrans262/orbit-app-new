@@ -16,7 +16,7 @@ import '../widgets/profile_summary_header.dart';
 import '../widgets/settings_list_item.dart';
 import '../../../circles/presentation/screens/orbit_live_circles_screen.dart';
 import 'edit_profile_screen.dart';
-import 'notification_screen.dart';
+import '../../../notifications/presentation/orbit_live_notification_settings_screen.dart';
 import 'devices_screen.dart';
 import 'subscription_screen.dart';
 import 'orbit_live_blocked_users_screen.dart';
@@ -307,7 +307,7 @@ class SettingsScreen extends StatelessWidget {
     }
     if (label == 'Notification') {
       Navigator.of(context).push<void>(
-        AppFadeSlidePageRoute<void>(builder: (_) => const NotificationScreen()),
+        AppFadeSlidePageRoute<void>(builder: (_) => const OrbitLiveNotificationSettingsScreen()),
       );
       return;
     }

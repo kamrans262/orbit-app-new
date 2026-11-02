@@ -13,6 +13,8 @@
   static const String shareMoments = '/share-moments';
   static const String yourCircle = '/your-circle';
   static const String notifications = '/notifications';
+  // The original onboarding permission route remains unchanged.
+  static const String notificationInbox = '/inbox/notifications';
   static const String shareLocation = '/share-location';
   static const String createCircle = '/create-circle';
   static const String joinCircle = '/join-circle';
