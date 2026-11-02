@@ -35,6 +35,22 @@ void main() {
       ...base,'read':'false',
     }),throwsFormatException);
   });
+  test('Opaque grouping reference is accepted only as a digest', () {
+    final item=OrbitNotificationItem.fromJson({
+      'id':'notification-id','category':'messages','type':'message.available',
+      'title':'New message','body':'You have a message.',
+      'group_key':'a'*64,'created_at':'2026-11-02T10:00:00Z',
+      'read':false,'target':{'kind':'messages','opaque_id':'message-id'},
+    });
+    expect(item.groupKey,'a'*64);
+    expect(()=>OrbitNotificationItem.fromJson({
+      'id':'notification-id','category':'messages','type':'message.available',
+      'title':'New message','body':'You have a message.',
+      'group_key':'raw-conversation-id','created_at':'2026-11-02T10:00:00Z',
+      'read':false,'target':{'kind':'messages','opaque_id':'message-id'},
+    }),throwsFormatException);
+  });
+
   test('Onboarding permission and authenticated inbox use distinct routes', () {
     expect(AppRoutes.notifications,'/notifications');
     expect(AppRoutes.notificationInbox,'/inbox/notifications');
