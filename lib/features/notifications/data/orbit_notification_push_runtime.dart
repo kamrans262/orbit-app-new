@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../auth/data/orbit_identity_client.dart';
 import 'orbit_notification_repository.dart';
@@ -23,6 +24,10 @@ class OrbitNotificationPushRuntime {
   Stream<void> get updates=>_updates.stream;
   Stream<void> get opened=>_opened.stream;
 
+  /// Safe, user-visible status; never contains tokens, account IDs or keys.
+  final ValueNotifier<String> registrationStatus =
+      ValueNotifier<String>('Not connected');
+
   StreamSubscription<String>? _tokenChanges;
   StreamSubscription<RemoteMessage>? _foreground;
   StreamSubscription<RemoteMessage>? _tapped;
@@ -30,16 +35,29 @@ class OrbitNotificationPushRuntime {
   bool _starting=false;
   bool _active=false;
 
-  Future<void> configure() async {
+  Future<void> configure({bool force=false}) async {
     if(_starting)return;
     _starting=true;
     try {
+      registrationStatus.value='Checking Orbit push registration…';
       final owner=await _identity.currentLocalSocialOwner();
-      if(owner==null){await stop();return;}
+      if(owner==null){
+        await stop();
+        registrationStatus.value='Sign in to register for push notifications.';
+        return;
+      }
       final bootstrap=await _repository.pushBootstrap();
-      if(!bootstrap.enabled){await stop();return;}
-      if(_active&&_registeredOwner==owner)return;
+      if(!bootstrap.enabled){
+        await stop();
+        registrationStatus.value='Push is disabled in Orbit account or server settings.';
+        return;
+      }
+      if(_active&&_registeredOwner==owner&&!force){
+        registrationStatus.value='Connected — Android push token registered.';
+        return;
+      }
       await stop();
+      registrationStatus.value='Connecting to Firebase…';
 
       final options=bootstrap.options;
       String field(String key){
@@ -73,18 +91,30 @@ class OrbitNotificationPushRuntime {
         alert:true,badge:true,sound:true,provisional:false);
       if(permissions.authorizationStatus!=AuthorizationStatus.authorized &&
          permissions.authorizationStatus!=AuthorizationStatus.provisional){
+        registrationStatus.value='Phone notification permission is not granted.';
         return;
       }
       if(Platform.isIOS){
         final apns=await messaging.getAPNSToken();
-        if(apns==null||apns.isEmpty)return;
+        if(apns==null||apns.isEmpty){
+          registrationStatus.value='Apple push setup is not ready.';
+          return;
+        }
       }
+      registrationStatus.value='Registering this device with Orbit…';
       final token=await messaging.getToken();
-      if(token==null||token.isEmpty)return;
-      if(await _identity.currentLocalSocialOwner()!=owner)return;
+      if(token==null||token.isEmpty){
+        registrationStatus.value='Firebase token unavailable. Check Google Play services.';
+        return;
+      }
+      if(await _identity.currentLocalSocialOwner()!=owner){
+        registrationStatus.value='Account changed. Sign in and retry.';
+        return;
+      }
       await _repository.registerDevice(token,Platform.isIOS?'ios':'android');
       _registeredOwner=owner;
       _active=true;
+      registrationStatus.value='Connected — push token registered.';
       _tokenChanges=messaging.onTokenRefresh.listen((next){
         if(next.isEmpty)return;
         unawaited(_rotateToken(next,owner));
@@ -102,9 +132,21 @@ class OrbitNotificationPushRuntime {
          await _identity.currentLocalSocialOwner()==owner){
         _opened.add(null);
       }
+    }on OrbitIdentityException catch(error){
+      // Show only a safe HTTP status, never a token or server response body.
+      final code=error.statusCode;
+      registrationStatus.value=switch(code){
+        401 => 'Session expired. Sign in and retry push registration.',
+        403 => 'Device is not trusted or push consent is unavailable.',
+        422 => 'Orbit rejected device registration. Check device approval.',
+        503 => 'Orbit push provider is temporarily unavailable.',
+        _ => 'Could not contact Orbit for push registration. Retry.',
+      };
     }catch(_){
-      // Firebase is optional. The HTTPS inbox remains functional when the
-      // provider, platform configuration, or connection is unavailable.
+      // Surface a privacy-safe failure instead of silently hiding it.
+      // The authenticated HTTPS inbox remains functional.
+      registrationStatus.value=
+          'Firebase setup or token registration failed. Retry while online.';
     }finally{
       _starting=false;
     }
@@ -119,7 +161,8 @@ class OrbitNotificationPushRuntime {
       if(!settings.enabled)return;
       await _repository.registerDevice(next,Platform.isIOS?'ios':'android');
     }catch(_){
-      // Token rotation will be retried through a later verified bootstrap.
+      // No provider token or exception details are written to UI or logs.
+      registrationStatus.value='Push token refresh failed. Retry registration.';
     }
   }
 
@@ -133,6 +176,7 @@ class OrbitNotificationPushRuntime {
     _tokenChanges=null;
     _foreground=null;
     _tapped=null;
+    registrationStatus.value='Not connected';
     // Never unregister a different account's device token after logout.
     if(unregister && owner!=null
         && await _identity.currentLocalSocialOwner()==owner){
