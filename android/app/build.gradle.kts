@@ -96,8 +96,8 @@ tasks.matching {
         if (orbitAndroidId != "com.orbit.orbit_app" || !orbitHasSigning ||
             !file(orbitStore!!).isFile) {
             throw org.gradle.api.GradleException(
-                "Orbit release blocked: set verified ORBIT_ANDROID_APPLICATION_ID and " +
-                "ORBIT_ANDROID_KEYSTORE_PATH/PASSWORD/KEY_ALIAS/KEY_PASSWORD."
+                "Orbit release blocked: Android app ID must be com.orbit.orbit_app, and " +
+                "verified ORBIT_ANDROID_KEYSTORE_PATH/PASSWORD/KEY_ALIAS/KEY_PASSWORD are required."
             )
         }
     }
