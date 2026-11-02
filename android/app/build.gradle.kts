@@ -10,11 +10,11 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-// The client has not supplied its final app identifier or signing material.
-// Debug builds still work; unverified/debug-signed release builds must fail.
+// Android Firebase registration uses com.orbit.orbit_app.
+// Production releases still require independently verified signing credentials.
 val orbitAndroidId = System.getenv("ORBIT_ANDROID_APPLICATION_ID")?.trim()
     ?.takeIf { it.matches(Regex("^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*){1,}$")) }
-    ?: "com.example.orbit_ui"
+    ?: "com.orbit.orbit_app"
 // Platform-key injection. Separate Android-restricted and iOS-restricted keys.
 val orbitGoogleMapsProperties = Properties()
 val orbitGoogleMapsLocal = rootProject.file("secrets.properties")
@@ -93,7 +93,7 @@ tasks.matching {
     it.name in listOf("assembleRelease", "bundleRelease", "packageRelease")
 }.configureEach {
     doFirst {
-        if (orbitAndroidId == "com.example.orbit_ui" || !orbitHasSigning ||
+        if (orbitAndroidId != "com.orbit.orbit_app" || !orbitHasSigning ||
             !file(orbitStore!!).isFile) {
             throw org.gradle.api.GradleException(
                 "Orbit release blocked: set verified ORBIT_ANDROID_APPLICATION_ID and " +
