@@ -72,17 +72,21 @@ class _OrbitLiveNotificationsScreenState
       if(await OrbitIdentityClient.instance.currentLocalSocialOwner()!=owner) {
         throw OrbitIdentityException('Account changed.',401);
       }
-      if(mounted&&serial==_epoch)setState((){
-        _owner=owner;
-        _items..clear()..addAll(page.items);
-        _cursor=page.nextCursor;
-        _loading=false;
-      });
+      if(mounted&&serial==_epoch){
+        setState((){
+          _owner=owner;
+          _items..clear()..addAll(page.items);
+          _cursor=page.nextCursor;
+          _loading=false;
+        });
+      }
     }catch(_){
-      if(mounted&&serial==_epoch)setState((){
-        _items.clear();_cursor=null;_owner=null;_loading=false;
-        _error='Notifications are unavailable. Check your connection and retry.';
-      });
+      if(mounted&&serial==_epoch){
+        setState((){
+          _items.clear();_cursor=null;_owner=null;_loading=false;
+          _error='Notifications are unavailable. Check your connection and retry.';
+        });
+      }
     }
   }
   Future<void> _loadMore() async {
@@ -92,7 +96,9 @@ class _OrbitLiveNotificationsScreenState
     try{
       final page=await _repo.page(cursor:cursor);
       if(!mounted||_owner!=owner ||
-         await OrbitIdentityClient.instance.currentLocalSocialOwner()!=owner)return;
+         await OrbitIdentityClient.instance.currentLocalSocialOwner()!=owner){
+        return;
+      }
       final known=_items.map((e)=>e.id).toSet();
       setState((){
         _items.addAll(page.items.where((e)=>known.add(e.id)));
@@ -248,13 +254,12 @@ class _OrbitLiveNotificationsScreenState
         child:ListView.separated(
           shrinkWrap:true,
           itemCount:members.length,
-          separatorBuilder:(_,__)=>const Divider(height:1),
+          separatorBuilder:(_,_)=>const Divider(height:1),
           itemBuilder:(_,index){
             final item=members[index];
             return Semantics(
               button:true,enabled:true,
-              label:(item.category=='security'?'Account security. ':'')+
-                item.title+'. '+(item.read?'Read. ':'Unread. ')+item.body,
+              label:"${item.category=='security'?'Account security. ':''}${item.title}. ${item.read?'Read. ':'Unread. '}${item.body}",
               onTap:()=>Navigator.of(sheet).pop(item),
               child:ExcludeSemantics(child:ListTile(
               leading:Icon(_icon(item.category),
@@ -326,7 +331,7 @@ class _OrbitLiveNotificationsScreenState
               child:ListView.separated(
                 physics:const AlwaysScrollableScrollPhysics(),
                 itemCount:visible.length+(_cursor==null?0:1),
-                separatorBuilder:(_,__)=>const Divider(height:1),
+                separatorBuilder:(_,_)=>const Divider(height:1),
                 itemBuilder:(context,index){
                   if(index==visible.length){
                     return TextButton(
@@ -337,22 +342,21 @@ class _OrbitLiveNotificationsScreenState
                   final item=group.item;
                   final enlarged=MediaQuery.textScalerOf(context).scale(1)>1.5;
                   final title=item.category=='security'
-                    ?'Account security · '+item.title
+                    ?'Account security · ${item.title}'
                     :item.title;
+                  final readLabel=group.unread?'Unread. ':'Read. ';
+                  final updatesLabel=group.count>1?'${group.count} updates. ':'';
                   return Semantics(
                     button:true,enabled:true,
                     sortKey:OrdinalSortKey(index.toDouble()),
-                    label:title+'. '+
-                      (group.unread?'Unread. ':'Read. ')+
-                      (group.count>1
-                        ?group.count.toString()+' updates. ':'')+item.body,
+                    label:'$title. $readLabel$updatesLabel${item.body}',
                     onTap:()=>unawaited(_openGrouped(group.members)),
                     child:ExcludeSemantics(child:ListTile(
                     contentPadding:const EdgeInsets.symmetric(vertical:5),
                     leading:Icon(_icon(item.category),
                       color:AppColors.primaryEnd),
                     title:Text(group.count==1?title:
-                      title+' · '+group.count.toString()+' updates',
+                      '$title · ${group.count} updates',
                       style:AppTypography.body,
                       maxLines:enlarged?null:2,
                       overflow:enlarged?TextOverflow.visible:TextOverflow.ellipsis),
