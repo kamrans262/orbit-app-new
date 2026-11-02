@@ -208,8 +208,8 @@ class _OrbitLiveNotificationsScreenState
   }
 
   /// Only display groups; canonical notices stay intact in _items.
-  List<({OrbitNotificationItem item,int count,bool unread})> _rows() {
-    final result=<({OrbitNotificationItem item,int count,bool unread})>[];
+  List<({OrbitNotificationItem item,int count,bool unread,List<OrbitNotificationItem> members})> _rows() {
+    final result=<({OrbitNotificationItem item,int count,bool unread,List<OrbitNotificationItem> members})>[];
     final keys=<String,int>{};
     for(final item in _items){
       final key=item.groupKey;
@@ -221,14 +221,50 @@ class _OrbitLiveNotificationsScreenState
           result[existing]=(
             item:first.item,count:first.count+1,
             unread:first.unread||!item.read,
+            members:[...first.members,item],
           );
           continue;
         }
       }
       if(key!=null)keys[key]=result.length;
-      result.add((item:item,count:1,unread:!item.read));
+      result.add((item:item,count:1,unread:!item.read,members:[item]));
     }
     return result;
+  }
+
+  Future<void> _openGrouped(
+      List<OrbitNotificationItem> members) async {
+    if(members.isEmpty||!mounted)return;
+    if(members.length==1){
+      await _open(members.first);
+      return;
+    }
+    final selected=await showOrbitCircleSheet<OrbitNotificationItem>(
+      context:context,
+      title:'Notification updates',
+      builder:(sheet)=>ConstrainedBox(
+        constraints:const BoxConstraints(maxHeight:380),
+        child:ListView.separated(
+          shrinkWrap:true,
+          itemCount:members.length,
+          separatorBuilder:(_,__)=>const Divider(height:1),
+          itemBuilder:(_,index){
+            final item=members[index];
+            return ListTile(
+              leading:Icon(_icon(item.category),
+                color:AppColors.primaryEnd),
+              title:Text(item.title,style:AppTypography.body),
+              subtitle:Text(item.body,style:AppTypography.bodyMuted),
+              trailing:Icon(item.read?Icons.check_rounded:
+                  Icons.circle,size:item.read?18:8,
+                  color:AppColors.primaryEnd),
+              onTap:()=>Navigator.of(sheet).pop(item),
+            );
+          },
+        ),
+      ),
+    );
+    if(selected!=null && mounted)await _open(selected);
   }
 
   IconData _icon(String category)=>switch(category){
@@ -308,7 +344,7 @@ class _OrbitLiveNotificationsScreenState
                       const SizedBox(width:6),
                       const Icon(Icons.chevron_right_rounded),
                     ]),
-                    onTap:()=>unawaited(_open(item)),
+                    onTap:()=>unawaited(_openGrouped(group.members)),
                   );
                 },
               ),
