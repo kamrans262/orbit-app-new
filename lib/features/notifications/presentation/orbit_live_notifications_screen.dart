@@ -12,6 +12,7 @@ import '../../check_in/data/orbit_check_in_repository.dart';
 import '../../circles/presentation/screens/orbit_live_circles_screen.dart';
 import '../../circles/presentation/widgets/orbit_circle_sheet.dart';
 import '../../friends/presentation/screens/orbit_friend_requests_screen.dart';
+import '../../friends/presentation/screens/orbit_live_friends_screen.dart';
 import '../../messaging/presentation/orbit_messaging_navigation.dart';
 import '../../moments/data/orbit_moment_repository.dart';
 import '../../moments/presentation/screens/orbit_live_moment_viewer.dart';
@@ -184,8 +185,9 @@ class _OrbitLiveNotificationsScreenState
             break;
           case 'friends':
             await Navigator.of(context).push<void>(MaterialPageRoute(
-              builder:(_)=>const OrbitFriendRequestsScreen(
-                initialDirection:'incoming')));
+              builder:(_)=>item.type=='friend.accepted'
+                ?const OrbitLiveFriendsScreen()
+                :const OrbitFriendRequestsScreen(initialDirection:'incoming')));
             break;
           case 'circles':
             await Navigator.of(context).push<void>(MaterialPageRoute(
