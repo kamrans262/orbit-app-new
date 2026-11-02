@@ -250,7 +250,12 @@ class _OrbitLiveNotificationsScreenState
           separatorBuilder:(_,__)=>const Divider(height:1),
           itemBuilder:(_,index){
             final item=members[index];
-            return ListTile(
+            return Semantics(
+              button:true,enabled:true,
+              label:(item.category=='security'?'Account security. ':'')+
+                item.title+'. '+(item.read?'Read. ':'Unread. ')+item.body,
+              onTap:()=>Navigator.of(sheet).pop(item),
+              child:ExcludeSemantics(child:ListTile(
               leading:Icon(_icon(item.category),
                 color:AppColors.primaryEnd),
               title:Text(item.title,style:AppTypography.body),
@@ -259,6 +264,7 @@ class _OrbitLiveNotificationsScreenState
                   Icons.circle,size:item.read?18:8,
                   color:AppColors.primaryEnd),
               onTap:()=>Navigator.of(sheet).pop(item),
+            )),
             );
           },
         ),
@@ -328,16 +334,30 @@ class _OrbitLiveNotificationsScreenState
                   }
                   final group=visible[index];
                   final item=group.item;
-                  return ListTile(
+                  final enlarged=MediaQuery.textScalerOf(context).scale(1)>1.5;
+                  final title=item.category=='security'
+                    ?'Account security · '+item.title
+                    :item.title;
+                  return Semantics(
+                    button:true,enabled:true,
+                    sortKey:OrdinalSortKey(index.toDouble()),
+                    label:title+'. '+
+                      (group.unread?'Unread. ':'Read. ')+
+                      (group.count>1
+                        ?group.count.toString()+' updates. ':'')+item.body,
+                    onTap:()=>unawaited(_openGrouped(group.members)),
+                    child:ExcludeSemantics(child:ListTile(
                     contentPadding:const EdgeInsets.symmetric(vertical:5),
                     leading:Icon(_icon(item.category),
                       color:AppColors.primaryEnd),
-                    title:Text(group.count==1?item.title:
-                      item.title+' · '+group.count.toString()+' updates',
+                    title:Text(group.count==1?title:
+                      title+' · '+group.count.toString()+' updates',
                       style:AppTypography.body,
-                      maxLines:2,overflow:TextOverflow.ellipsis),
+                      maxLines:enlarged?null:2,
+                      overflow:enlarged?TextOverflow.visible:TextOverflow.ellipsis),
                     subtitle:Text(item.body,style:AppTypography.bodyMuted,
-                      maxLines:3,overflow:TextOverflow.ellipsis),
+                      maxLines:enlarged?null:3,
+                      overflow:enlarged?TextOverflow.visible:TextOverflow.ellipsis),
                     trailing:Row(mainAxisSize:MainAxisSize.min,children:[
                       if(group.unread)const Icon(Icons.circle,
                         size:8,color:AppColors.primaryEnd),
@@ -345,6 +365,7 @@ class _OrbitLiveNotificationsScreenState
                       const Icon(Icons.chevron_right_rounded),
                     ]),
                     onTap:()=>unawaited(_openGrouped(group.members)),
+                  )),
                   );
                 },
               ),

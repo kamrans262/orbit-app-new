@@ -150,8 +150,13 @@ class _OrbitLiveNotificationSettingsScreenState
                   if(mounted)await _readSystemPermission();
                 },
                 child:const Text('Open phone notification settings')),
-              const Text('Changing this setting does not enable Firebase push '
-                'unless the Orbit server has activated delivery.',
+              const Text('Push transport is currently a generic, silent refresh '
+                'signal. System sound/vibration settings do not guarantee an '
+                'OS notification, especially while the app is closed.',
+                style:TextStyle(fontSize:12,color:Color(0xFF5D6574))),
+              const SizedBox(height:6),
+              const Text('Account security notices remain available; SOS '
+                'escalation is a later module.',
                 style:TextStyle(fontSize:12,color:Color(0xFF5D6574))),
           ])),
       );
