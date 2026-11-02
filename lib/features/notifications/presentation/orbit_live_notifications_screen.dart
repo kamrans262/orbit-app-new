@@ -69,7 +69,7 @@ class _OrbitLiveNotificationsScreenState
       final page=await _repo.page();
       if(!mounted || serial!=_epoch)return;
       if(await OrbitIdentityClient.instance.currentLocalSocialOwner()!=owner) {
-        throw const OrbitIdentityException('Account changed.',401);
+        throw OrbitIdentityException('Account changed.',401);
       }
       if(mounted&&serial==_epoch)setState((){
         _owner=owner;
