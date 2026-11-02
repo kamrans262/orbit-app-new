@@ -21,6 +21,7 @@ class NotificationScreen extends StatefulWidget {
     this.onSettingsChanged,
     this.onSaveSettings,
     this.onBack,
+    this.systemPermissionFooter,
     super.key,
   });
 
@@ -28,6 +29,8 @@ class NotificationScreen extends StatefulWidget {
   final ValueChanged<NotificationSettings>? onSettingsChanged;
   final Future<NotificationSettings> Function(NotificationSettings)? onSaveSettings;
   final VoidCallback? onBack;
+  /// Appends status without modifying the seven approved setting toggles.
+  final Widget? systemPermissionFooter;
 
   @override
   State<NotificationScreen> createState() => _NotificationScreenState();
@@ -156,10 +159,11 @@ class _NotificationScreenState extends State<NotificationScreen> {
                         _screenPadding,
                         _screenPadding,
                       ),
-                      itemCount: rows.length,
+                      itemCount: rows.length + (widget.systemPermissionFooter==null?0:1),
                       separatorBuilder: (_, _) =>
                           const SizedBox(height: _rowGap),
                       itemBuilder: (context, index) {
+                        if(index==rows.length)return widget.systemPermissionFooter!;
                         final row = rows[index];
                         if (row.id == 'sos') {
                           return Column(

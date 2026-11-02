@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_typography.dart';
@@ -18,16 +19,35 @@ class OrbitLiveNotificationSettingsScreen extends StatefulWidget {
       _OrbitLiveNotificationSettingsScreenState();
 }
 class _OrbitLiveNotificationSettingsScreenState
-    extends State<OrbitLiveNotificationSettingsScreen> {
+    extends State<OrbitLiveNotificationSettingsScreen>
+    with WidgetsBindingObserver {
   late final OrbitProfileSettingsRepository _repo=
       widget.repository??OrbitProfileSettingsRepository();
   NotificationSettings? _current;
   String? _error;
   bool _loading=true;
+  PermissionStatus? _osStatus;
   int _epoch=0;
 
   @override
-  void initState(){super.initState();_load();}
+  void initState(){
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _load();
+    _readSystemPermission();
+  }
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if(state==AppLifecycleState.resumed)_readSystemPermission();
+  }
+  Future<void> _readSystemPermission() async {
+    try{
+      final status=await Permission.notification.status;
+      if(mounted)setState(()=>_osStatus=status);
+    }catch(_){
+      if(mounted)setState(()=>_osStatus=null);
+    }
+  }
   Future<void> _load() async {
     final epoch=++_epoch;
     setState((){_loading=true;_error=null;});
@@ -70,7 +90,29 @@ class _OrbitLiveNotificationSettingsScreenState
   Widget build(BuildContext context) {
     final current=_current;
     if(!_loading && current!=null) {
-      return NotificationScreen(initialSettings:current,onSaveSettings:_save);
+      return NotificationScreen(
+        initialSettings:current,onSaveSettings:_save,
+        systemPermissionFooter:Semantics(
+          label:'System notification permission status',
+          child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+              const SizedBox(height:6),
+              Text(_osStatus==null
+                ?'Device permission: Not checked'
+                :_osStatus!.isGranted
+                  ?'Device notifications: Allowed'
+                  :'Device notifications: Blocked or not granted',
+                  style:AppTypography.bodyMuted),
+              TextButton(
+                onPressed:() async {
+                  await openAppSettings();
+                  if(mounted)await _readSystemPermission();
+                },
+                child:const Text('Open phone notification settings')),
+              const Text('Changing this setting does not enable Firebase push '
+                'unless the Orbit server has activated delivery.',
+                style:TextStyle(fontSize:12,color:Color(0xFF5D6574))),
+          ])),
+      );
     }
     return Scaffold(
       backgroundColor:AppColors.background,
@@ -89,5 +131,9 @@ class _OrbitLiveNotificationSettingsScreenState
     );
   }
   @override
-  void dispose(){++_epoch;super.dispose();}
+  void dispose(){
+    ++_epoch;
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
 }

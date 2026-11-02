@@ -207,6 +207,30 @@ class _OrbitLiveNotificationsScreenState
     }finally{_opening=false;}
   }
 
+  /// Only display groups; canonical notices stay intact in _items.
+  List<({OrbitNotificationItem item,int count,bool unread})> _rows() {
+    final result=<({OrbitNotificationItem item,int count,bool unread})>[];
+    final keys=<String,int>{};
+    for(final item in _items){
+      final key=item.groupKey;
+      final existing=key==null?null:keys[key];
+      if(existing!=null){
+        final first=result[existing];
+        final delta=first.item.createdAt.difference(item.createdAt).abs();
+        if(delta<=const Duration(minutes:10)){
+          result[existing]=(
+            item:first.item,count:first.count+1,
+            unread:first.unread||!item.read,
+          );
+          continue;
+        }
+      }
+      if(key!=null)keys[key]=result.length;
+      result.add((item:item,count:1,unread:!item.read));
+    }
+    return result;
+  }
+
   IconData _icon(String category)=>switch(category){
     'moments'=>Icons.photo_camera_outlined,
     'pings'=>Icons.bolt_rounded,
@@ -219,7 +243,9 @@ class _OrbitLiveNotificationsScreenState
   };
 
   @override
-  Widget build(BuildContext context)=>Scaffold(
+  Widget build(BuildContext context){
+    final visible=_rows();
+    return Scaffold(
     backgroundColor:AppColors.background,
     body:SafeArea(child:Padding(
       padding:const EdgeInsets.fromLTRB(20,20,20,12),
@@ -256,25 +282,28 @@ class _OrbitLiveNotificationsScreenState
               onRefresh:_load,
               child:ListView.separated(
                 physics:const AlwaysScrollableScrollPhysics(),
-                itemCount:_items.length+(_cursor==null?0:1),
+                itemCount:visible.length+(_cursor==null?0:1),
                 separatorBuilder:(_,__)=>const Divider(height:1),
                 itemBuilder:(context,index){
-                  if(index==_items.length){
+                  if(index==visible.length){
                     return TextButton(
                       onPressed:_more?null:()=>unawaited(_loadMore()),
                       child:Text(_more?'Loading…':'Load more'));
                   }
-                  final item=_items[index];
+                  final group=visible[index];
+                  final item=group.item;
                   return ListTile(
                     contentPadding:const EdgeInsets.symmetric(vertical:5),
                     leading:Icon(_icon(item.category),
                       color:AppColors.primaryEnd),
-                    title:Text(item.title,style:AppTypography.body,
+                    title:Text(group.count==1?item.title:
+                      item.title+' · '+group.count.toString()+' updates',
+                      style:AppTypography.body,
                       maxLines:2,overflow:TextOverflow.ellipsis),
                     subtitle:Text(item.body,style:AppTypography.bodyMuted,
                       maxLines:3,overflow:TextOverflow.ellipsis),
                     trailing:Row(mainAxisSize:MainAxisSize.min,children:[
-                      if(!item.read)const Icon(Icons.circle,
+                      if(group.unread)const Icon(Icons.circle,
                         size:8,color:AppColors.primaryEnd),
                       const SizedBox(width:6),
                       const Icon(Icons.chevron_right_rounded),
@@ -287,4 +316,5 @@ class _OrbitLiveNotificationsScreenState
       ]),
     )),
   );
-}
+  }
+
