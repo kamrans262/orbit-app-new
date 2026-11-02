@@ -237,7 +237,8 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
     unawaited(_pushEvents?.cancel());
     unawaited(_notificationUpdates?.cancel());
     unawaited(_notificationOpened?.cancel());
-    unawaited(OrbitNotificationPushRuntime.instance.stop());
+    // The shared notification runtime is session-scoped, not Home-scoped.
+    // Disposing a route must not unregister an otherwise trusted device.
     if(OrbitM7Rollout.enabled) unawaited(OrbitMomentPushRuntime.instance.stop());
     WidgetsBinding.instance.removeObserver(this);
     _clearProtected();

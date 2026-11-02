@@ -123,7 +123,7 @@ class OrbitNotificationPushRuntime {
     }
   }
 
-  Future<void> stop() async {
+  Future<void> stop({bool unregister=true}) async {
     final owner=_registeredOwner;
     _active=false;
     _registeredOwner=null;
@@ -134,7 +134,8 @@ class OrbitNotificationPushRuntime {
     _foreground=null;
     _tapped=null;
     // Never unregister a different account's device token after logout.
-    if(owner!=null && await _identity.currentLocalSocialOwner()==owner){
+    if(unregister && owner!=null
+        && await _identity.currentLocalSocialOwner()==owner){
       try {await _repository.unregisterCurrentDevice();}catch(_){}
     }
   }

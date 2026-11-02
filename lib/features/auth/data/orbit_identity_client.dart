@@ -20,6 +20,7 @@ import '../../messaging/data/orbit_messaging_local_vault.dart';
 import '../../messaging/data/orbit_messaging_media_bridge.dart';
 import '../../messaging/data/orbit_messaging_cipher.dart';
 import '../../messaging/data/orbit_messaging_vodozemac_store.dart';
+import '../../notifications/data/orbit_notification_push_runtime.dart';
 
 enum OrbitRestoreState { signedOut, authenticated, deviceRegistration, deletionPending, offlineProfile }
 
@@ -381,6 +382,9 @@ class OrbitIdentityClient {
   }
 
   Future<void> clearSession() async {
+    // Stop notification listeners before deleting this account's credentials.
+    // No recursive HTTP unregister during a 401/session teardown.
+    await OrbitNotificationPushRuntime.instance.stop(unregister:false);
     final oldMediaOwner=await _storage.read(key:_userIdKey);
     await OrbitM5FirebaseChangeSource.instance.stop();
     if(oldMediaOwner != null && oldMediaOwner.isNotEmpty) {
