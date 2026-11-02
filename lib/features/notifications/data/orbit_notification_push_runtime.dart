@@ -38,6 +38,7 @@ class OrbitNotificationPushRuntime {
   Future<void> configure({bool force=false}) async {
     if(_starting)return;
     _starting=true;
+    String phase='checking account settings';
     try {
       registrationStatus.value='Checking Orbit push registration…';
       final owner=await _identity.currentLocalSocialOwner();
@@ -59,6 +60,7 @@ class OrbitNotificationPushRuntime {
       // A manual retry must not revoke the existing server token first.
       await stop(unregister:false);
       registrationStatus.value='Connecting to Firebase…';
+      phase='initializing Firebase';
 
       final options=bootstrap.options;
       String field(String key){
@@ -87,6 +89,7 @@ class OrbitNotificationPushRuntime {
           throw StateError('Firebase app registration mismatch.');
         }
       }
+      phase='requesting phone permission';
       final messaging=FirebaseMessaging.instance;
       final permissions=await messaging.requestPermission(
         alert:true,badge:true,sound:true,provisional:false);
@@ -102,7 +105,8 @@ class OrbitNotificationPushRuntime {
           return;
         }
       }
-      registrationStatus.value='Registering this device with Orbit…';
+      phase='obtaining Firebase token';
+      registrationStatus.value='Retrieving Firebase device token…';
       final token=await messaging.getToken();
       if(token==null||token.isEmpty){
         registrationStatus.value='Firebase token unavailable. Check Google Play services.';
@@ -112,6 +116,8 @@ class OrbitNotificationPushRuntime {
         registrationStatus.value='Account changed. Sign in and retry.';
         return;
       }
+      phase='registering device with Orbit';
+      registrationStatus.value='Registering this device with Orbit…';
       await _repository.registerDevice(token,Platform.isIOS?'ios':'android');
       _registeredOwner=owner;
       _active=true;
@@ -147,7 +153,7 @@ class OrbitNotificationPushRuntime {
       // Surface a privacy-safe failure instead of silently hiding it.
       // The authenticated HTTPS inbox remains functional.
       registrationStatus.value=
-          'Firebase setup or token registration failed. Retry while online.';
+          'Push connection failed while $phase. Retry while online.';
     }finally{
       _starting=false;
     }
