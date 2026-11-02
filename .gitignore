@@ -50,6 +50,8 @@ app.*.map.json
 # Local M10 map provider / URL overrides (never commit mobile API credentials).
 /.orbit_m10_local.json
 
+# Downloaded Android Firebase app config remains local to the developer checkout.
+/android/app/google-services.json
 # Platform-specific Google Maps SDK keys, always untracked.
 /android/secrets.properties
 /ios/Flutter/GoogleMapsSecrets.xcconfig
