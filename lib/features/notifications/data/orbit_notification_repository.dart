@@ -151,6 +151,31 @@ class OrbitNotificationRepository {
     await _request('PUT',path,body:{'muted':muted});
   }
 
+  /// Supplemental M14 controls; security messages are deliberately mandatory.
+  Future<Map<String, bool>> categoryPreferences() async {
+    final data=await _request('GET','/me/notifications/category-preferences');
+    if(data['messages'] is! bool || data['friends'] is! bool) {
+      throw const FormatException('Invalid notification preferences.');
+    }
+    return {
+      'messages':data['messages'] as bool,
+      'friends':data['friends'] as bool,
+    };
+  }
+
+  Future<bool> setCategoryPreference(String category,bool enabled) async {
+    if(!const {'messages','friends'}.contains(category)) {
+      throw ArgumentError.value(category,'category','Not an optional category');
+    }
+    final data=await _request('PUT',
+      '/me/notifications/category-preferences/'+Uri.encodeComponent(category),
+      body:{'enabled':enabled});
+    if(data['category']!=category || data['enabled'] is! bool) {
+      throw const FormatException('Notification preference not confirmed.');
+    }
+    return data['enabled'] as bool;
+  }
+
   Future<OrbitNotificationPushBootstrap> pushBootstrap() async {
     final data=await _request('GET','/me/notifications/push-bootstrap');
     if(data['enabled']!=true){

@@ -22,6 +22,7 @@ class NotificationScreen extends StatefulWidget {
     this.onSaveSettings,
     this.onBack,
     this.systemPermissionFooter,
+    this.additionalSettings=const <NotificationSupplementalSetting>[],
     super.key,
   });
 
@@ -31,6 +32,8 @@ class NotificationScreen extends StatefulWidget {
   final VoidCallback? onBack;
   /// Appends status without modifying the seven approved setting toggles.
   final Widget? systemPermissionFooter;
+  /// Reuses approved toggle row and key/spacing without altering M3 fields.
+  final List<NotificationSupplementalSetting> additionalSettings;
 
   @override
   State<NotificationScreen> createState() => _NotificationScreenState();
@@ -112,6 +115,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
       ),
     ];
 
+    rows.addAll(widget.additionalSettings.map((setting)=>_NotificationRowSpec(
+      id:setting.id,title:setting.title,value:setting.value,
+      onChanged:setting.onChanged,
+    )));
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
@@ -254,6 +261,17 @@ class _NotificationSettingRow extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Additive category toggle rendered exactly like the existing M3 rows.
+class NotificationSupplementalSetting {
+  const NotificationSupplementalSetting({
+    required this.id,required this.title,required this.value,
+    required this.onChanged,
+  });
+  final String id,title;
+  final bool value;
+  final ValueChanged<bool> onChanged;
 }
 
 class _NotificationRowSpec {
