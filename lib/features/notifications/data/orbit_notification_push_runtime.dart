@@ -53,10 +53,11 @@ class OrbitNotificationPushRuntime {
         return;
       }
       if(_active&&_registeredOwner==owner&&!force){
-        registrationStatus.value='Connected — Android push token registered.';
+        registrationStatus.value='Connected — push token registered.';
         return;
       }
-      await stop();
+      // A manual retry must not revoke the existing server token first.
+      await stop(unregister:false);
       registrationStatus.value='Connecting to Firebase…';
 
       final options=bootstrap.options;
