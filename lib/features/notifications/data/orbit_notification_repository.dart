@@ -113,6 +113,44 @@ class OrbitNotificationRepository {
     if(count is! int||count<0)throw const FormatException('Invalid acknowledgement.');
     return count;
   }
+  /// Return only still-authorized owner mutes, never a public roster.
+  Future<List<({String type,String id})>> contextMutes(
+      String category) async {
+    const supported={'moments','pings','check_ins','circles','messages'};
+    if(!supported.contains(category))throw ArgumentError.value(category);
+    final data=await _request('GET','/me/notifications/context-mutes'
+        '?category=' + Uri.encodeQueryComponent(category));
+    final items=data['items'];
+    if(items is! List)throw const FormatException('Invalid mute preferences.');
+    final out=<({String type,String id})>[];
+    for(final entry in items){
+      if(entry is! Map)throw const FormatException('Invalid mute context.');
+      final item=Map<String,dynamic>.from(entry);
+      final kind=item['type'],id=item['id'];
+      if(kind is! String || !['circle','conversation'].contains(kind) ||
+         id is! String || id.isEmpty){
+        throw const FormatException('Invalid mute context.');
+      }
+      out.add((type:kind,id:id));
+    }
+    return out;
+  }
+
+  Future<void> setContextMute({
+    required String category,required String contextType,
+    required String contextId,required bool muted,
+  }) async {
+    const supported={'moments','pings','check_ins','circles','messages'};
+    if(!supported.contains(category) ||
+       !['circle','conversation'].contains(contextType) ||
+       contextId.isEmpty)throw ArgumentError('Invalid notification context.');
+    final path='/me/notifications/context-mutes/' +
+       Uri.encodeComponent(category) + '/' +
+       Uri.encodeComponent(contextType) + '/' +
+       Uri.encodeComponent(contextId);
+    await _request('PUT',path,body:{'muted':muted});
+  }
+
   Future<OrbitNotificationPushBootstrap> pushBootstrap() async {
     final data=await _request('GET','/me/notifications/push-bootstrap');
     if(data['enabled']!=true){
