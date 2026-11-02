@@ -15,6 +15,7 @@ import '../../friends/presentation/screens/orbit_friend_requests_screen.dart';
 import '../../messaging/presentation/orbit_messaging_navigation.dart';
 import '../../moments/data/orbit_moment_repository.dart';
 import '../../moments/presentation/screens/orbit_live_moment_viewer.dart';
+import '../../moments/presentation/screens/orbit_live_moment_notifications_screen.dart';
 import '../../ping/data/orbit_ping_repository.dart';
 import '../../ping/presentation/navigation/orbit_ping_navigation.dart';
 import '../data/orbit_notification_repository.dart';
@@ -183,8 +184,8 @@ class _OrbitLiveNotificationsScreenState
             break;
           case 'friends':
             await Navigator.of(context).push<void>(MaterialPageRoute(
-              builder:(_)=>OrbitFriendRequestsScreen(
-                initialDirection:item.type=='friend.accepted'?'outgoing':'incoming')));
+              builder:(_)=>const OrbitFriendRequestsScreen(
+                initialDirection:'incoming')));
             break;
           case 'circles':
             await Navigator.of(context).push<void>(MaterialPageRoute(
@@ -238,6 +239,13 @@ class _OrbitLiveNotificationsScreenState
                 style:AppTypography.bodyMuted),
               TextButton(onPressed:()=>unawaited(_load()),
                 child:const Text('Try again')),
+              // An older server may still expose the original M7 inbox.
+              // Keep it accessible until the additive M14 backend deploys.
+              TextButton(
+                onPressed:()=>Navigator.of(context).push<void>(
+                  MaterialPageRoute(
+                    builder:(_)=>const OrbitLiveMomentNotificationsScreen())),
+                child:const Text('Moment notifications')),
             ]))
           :_items.isEmpty
             ?Center(child:Text('No notifications',

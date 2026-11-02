@@ -203,6 +203,7 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
     _byId.clear();
     _authors.clear();
     _shownPings.clear();
+    _notificationUnread=null;
   }
 
   @override

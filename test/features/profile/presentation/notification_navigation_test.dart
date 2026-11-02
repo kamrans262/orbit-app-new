@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_ui/features/profile/domain/models/profile_models.dart';
-import 'package:orbit_ui/features/profile/presentation/screens/notification_screen.dart';
+import 'package:orbit_ui/features/notifications/presentation/orbit_live_notification_settings_screen.dart';
 import 'package:orbit_ui/features/profile/presentation/screens/profile_settings_screen.dart';
 
 void main() {
@@ -18,7 +18,7 @@ void main() {
     moments: <ProfileMomentData>[],
   );
 
-  testWidgets('Settings Notification row opens NotificationScreen', (
+  testWidgets('Settings Notification row opens authenticated preferences', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(390, 844);
@@ -47,9 +47,9 @@ void main() {
     await tester.tap(notificationRow.hitTestable());
     await tester.pumpAndSettle();
 
-    expect(find.byType(NotificationScreen), findsOneWidget);
-    expect(find.text('Push Notification'), findsOneWidget);
-    expect(find.text('Sound'), findsOneWidget);
+    expect(find.byType(OrbitLiveNotificationSettingsScreen), findsOneWidget);
+    // A signed-out test environment must never render demo preference toggles.
+    expect(find.text('Push Notification'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

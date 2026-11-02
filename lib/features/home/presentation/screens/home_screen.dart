@@ -633,7 +633,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     alignment:Alignment.center,
                     decoration:BoxDecoration(color:AppColors.primaryEnd,
                       borderRadius:BorderRadius.circular(12)),
-                    child:Text(widget.notificationUnreadCount!>99?'99+':
+                    child:Text((widget.notificationUnreadCount??0)>99?'99+':
                       widget.notificationUnreadCount.toString(),
                       style:const TextStyle(color:Colors.white,fontSize:9,
                         fontWeight:FontWeight.w700)),
