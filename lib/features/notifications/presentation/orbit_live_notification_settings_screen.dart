@@ -150,9 +150,21 @@ class _OrbitLiveNotificationSettingsScreenState
                   if(mounted)await _readSystemPermission();
                 },
                 child:const Text('Open phone notification settings')),
-              const Text('Push transport is currently a generic, silent refresh '
-                'signal. System sound/vibration settings do not guarantee an '
-                'OS notification, especially while the app is closed.',
+              ValueListenableBuilder<String>(
+                valueListenable:OrbitNotificationPushRuntime.instance.registrationStatus,
+                builder:(context,status,_)=>Text('Firebase push: $status',
+                  style:AppTypography.bodyMuted),
+              ),
+              TextButton(
+                onPressed:() async {
+                  await OrbitNotificationPushRuntime.instance.configure(force:true);
+                  if(mounted)await _readSystemPermission();
+                },
+                child:const Text('Retry push connection'),
+              ),
+              const Text('Android alerts use a generic Orbit notification. '
+                'Device permission and power settings affect delivery while '
+                'the application is closed.',
                 style:TextStyle(fontSize:12,color:Color(0xFF5D6574))),
               const SizedBox(height:6),
               const Text('Account security notices remain available; SOS '
