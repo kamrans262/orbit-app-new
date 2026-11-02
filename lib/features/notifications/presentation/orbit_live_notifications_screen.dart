@@ -249,7 +249,7 @@ class _OrbitLiveNotificationsScreenState
                     builder:(_)=>const OrbitLiveMomentNotificationsScreen())),
                 child:const Text('Moment notifications')),
             ]))
-          :_items.isEmpty
+          :_items.isEmpty && _cursor==null
             ?Center(child:Text('No notifications',
                 style:AppTypography.bodyMuted))
             :RefreshIndicator(
