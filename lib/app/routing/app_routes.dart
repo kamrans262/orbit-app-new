@@ -15,6 +15,10 @@
   static const String notifications = '/notifications';
   // The original onboarding permission route remains unchanged.
   static const String notificationInbox = '/inbox/notifications';
+  static const String plans = '/plans';
+  static const String planDetail = '/plans/detail';
+  static const String planCreate = '/plans/create';
+  static const String planReminders = '/plans/reminders';
   static const String shareLocation = '/share-location';
   static const String createCircle = '/create-circle';
   static const String joinCircle = '/join-circle';

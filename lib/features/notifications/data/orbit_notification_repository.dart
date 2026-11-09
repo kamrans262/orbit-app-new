@@ -14,7 +14,7 @@ class OrbitNotificationItem {
   final bool read;
 
   static const categories = <String>{
-    'moments','pings','check_ins','messages','friends','circles','security',
+    'moments','pings','check_ins','messages','friends','circles','plans','security',
   };
 
   factory OrbitNotificationItem.fromJson(Map<String, dynamic> data) {

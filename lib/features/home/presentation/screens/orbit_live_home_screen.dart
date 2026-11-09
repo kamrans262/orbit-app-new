@@ -21,6 +21,7 @@ import '../../../moments/presentation/screens/orbit_live_moment_viewer.dart';
 import '../../../moments/presentation/screens/orbit_live_moments_screen.dart';
 import '../../../notifications/data/orbit_notification_repository.dart';
 import '../../../notifications/data/orbit_notification_push_runtime.dart';
+import '../../../plans/data/orbit_plan_repository.dart';
 import '../../../../app/routing/app_routes.dart';
 import '../../data/orbit_dashboard_repository.dart';
 import '../../data/orbit_m8_rollout.dart';
@@ -56,8 +57,11 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
   late final OrbitPingRepository _pings=OrbitPingRepository(identity:_identity);
   late final OrbitCheckInRepository _checkins=OrbitCheckInRepository(identity:_identity);
   late final OrbitNotificationRepository _notifications=OrbitNotificationRepository(identity:_identity);
+  late final OrbitPlanRepository _plans=OrbitPlanRepository(identity:_identity);
 
   List<MomentData> _recent=const [];
+  List<UpcomingPlanData> _upcomingPlans=const [];
+  bool _planUnavailable=true;
   List<FavoritePersonData> _people=const [];
   List<HomeCircleSummaryData> _circleCards=const [];
   final Map<String,OrbitPerson> _peopleById={};
@@ -196,6 +200,8 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
       if(bytes!=null) unawaited(MemoryImage(bytes).evict());
     }
     _recent=const [];
+    _upcomingPlans=const [];
+    _planUnavailable=true;
     _people=const [];
     _circleCards=const [];
     _showCircles=false;
@@ -433,7 +439,45 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
           try{await _identity.clearDashboardSafeShell();}catch(_){}
         }
       }
-    }finally{_loading=false;}
+    }finally{
+      _loading=false;
+      if(mounted && _owner.isNotEmpty)unawaited(_refreshPlans());
+    }
+  }
+
+  Future<void> _refreshPlans() async {
+    final serial=_epoch;
+    final owner=await _identity.currentLocalSocialOwner();
+    if(owner==null || owner!=_owner || !mounted)return;
+    try {
+      final response=await _plans.list(limit:5);
+      if(!mounted||serial!=_epoch||_owner!=owner||
+          await _identity.currentLocalSocialOwner()!=owner)return;
+      final items=response.items.map((plan){
+        final start=plan.startsAt.toLocal();
+        return UpcomingPlanData(
+          id:plan.id,title:plan.title,
+          schedule:MaterialLocalizations.of(context).formatMediumDate(start)+
+            ' · '+MaterialLocalizations.of(context).formatTimeOfDay(
+              TimeOfDay.fromDateTime(start)),
+          location:plan.placeLabel,participants:const <ParticipantData>[]);
+      }).toList(growable:false);
+      setState((){_upcomingPlans=items;_planUnavailable=false;});
+    }catch(_){
+      if(mounted&&serial==_epoch&&_owner==owner){
+        setState((){_upcomingPlans=const [];_planUnavailable=true;});
+      }
+    }
+  }
+
+  Future<void> _openPlan(String id) async {
+    await Navigator.of(context).pushNamed(AppRoutes.planDetail,arguments:id);
+    if(mounted)unawaited(_refreshPlans());
+  }
+
+  Future<void> _openPlans() async {
+    await Navigator.of(context).pushNamed(AppRoutes.plans);
+    if(mounted)unawaited(_refreshPlans());
   }
 
   Future<void> _view(MomentData data) async {
@@ -499,7 +543,7 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
       builder:(_)=>OrbitLiveCircleDetailScreen(circleId:c.id))),
     onSeeAllCirclesPressed:()=>Navigator.of(context).push<void>(
       MaterialPageRoute(builder:(_)=>const OrbitLiveCirclesScreen())),
-    peopleSectionTitle:'Friends',planUnavailable:true,
+    peopleSectionTitle:'Friends',planUnavailable:_planUnavailable,
     quickActions:const <QuickActionData>[
       QuickActionData(id:'ping',title:'Ping',icon:Icons.bolt_rounded,
         iconColor:Color(0xFF7C3AED),iconBackground:Color(0xFFF2EAFE)),
@@ -514,7 +558,7 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
       QuickActionData(id:'messages',title:'Messages',icon:Icons.chat_bubble_outline_rounded,
         iconColor:Color(0xFF7C3AED),iconBackground:Color(0xFFF2EAFE)),
     ],
-    upcomingPlans:const <UpcomingPlanData>[],promoBanner:null,
+    upcomingPlans:_upcomingPlans,promoBanner:null,
     favoritePeople:_peopleWithPresence,recentMoments:_recent,
     onNotificationPressed:()=>unawaited(_openNotifications()),
     onQuickActionPressed:(action){
@@ -530,7 +574,9 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
           social:_social,repository:_pings));
       }else {_unavailable(action.title);}
     },
-    onPlanPressed:(_){},onPromoPressed:(){},
+    onPlanPressed:(plan)=>unawaited(_openPlan(plan.id)),
+    onSeeAllPlansPressed:()=>unawaited(_openPlans()),
+    onPromoPressed:(){},
     onSeeAllFriendsPressed:()=>Navigator.of(context).push<void>(
       MaterialPageRoute(builder:(_)=>const OrbitLiveFriendsScreen())),
     onSeeAllMomentsPressed:_openMoments,

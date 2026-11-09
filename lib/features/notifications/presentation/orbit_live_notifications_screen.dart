@@ -20,6 +20,8 @@ import '../../moments/presentation/screens/orbit_live_moment_viewer.dart';
 import '../../moments/presentation/screens/orbit_live_moment_notifications_screen.dart';
 import '../../ping/data/orbit_ping_repository.dart';
 import '../../ping/presentation/navigation/orbit_ping_navigation.dart';
+import '../../plans/data/orbit_plan_repository.dart';
+import '../../plans/presentation/screens/orbit_live_plan_detail_screen.dart';
 import '../data/orbit_notification_repository.dart';
 
 /// The existing Orbit white surface, header and notification ListTile style.
@@ -39,6 +41,7 @@ class _OrbitLiveNotificationsScreenState
   final OrbitMomentRepository _moments=OrbitMomentRepository();
   final OrbitPingRepository _pings=OrbitPingRepository();
   final OrbitCheckInRepository _checkins=OrbitCheckInRepository();
+  final OrbitPlanRepository _plans=OrbitPlanRepository();
   final List<OrbitNotificationItem> _items=[];
   String? _cursor,_owner,_error;
   bool _loading=true,_more=false,_opening=false;
@@ -160,6 +163,14 @@ class _OrbitLiveNotificationsScreenState
         await _repo.markRead(item.id);
         if(!mounted)return;
         await OrbitPingNavigation.showIncoming(context,ping,repository:_pings);
+      }else if(item.category=='plans'){
+        // A private notification is not a read grant. Verify the Plan on
+        // the server before acknowledging or routing to its detail screen.
+        await _plans.detail(item.targetId);
+        await _repo.markRead(item.id);
+        if(!mounted)return;
+        await Navigator.of(context).push<void>(MaterialPageRoute(
+          builder:(_)=>OrbitLivePlanDetailScreen(planId:item.targetId)));
       }else if(item.category=='check_ins'){
         final checkin=await _checkins.detail(item.targetId);
         await _repo.markRead(item.id);
@@ -286,6 +297,7 @@ class _OrbitLiveNotificationsScreenState
     'messages'=>Icons.chat_bubble_outline_rounded,
     'friends'=>Icons.people_outline_rounded,
     'circles'=>Icons.groups_outlined,
+    'plans'=>Icons.event_note_outlined,
     'security'=>Icons.shield_outlined,
     _=>Icons.notifications_none_rounded,
   };

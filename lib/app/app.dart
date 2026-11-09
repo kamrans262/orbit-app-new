@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../features/home/presentation/screens/orbit_live_home_screen.dart';
 import '../features/notifications/presentation/orbit_live_notifications_screen.dart';
+import '../features/plans/presentation/screens/orbit_live_plans_screen.dart';
+import '../features/plans/presentation/screens/orbit_live_plan_detail_screen.dart';
+import '../features/plans/presentation/screens/orbit_live_plan_editor_screen.dart';
+import '../features/plans/presentation/screens/orbit_live_plan_reminder_screen.dart';
 import '../features/circles/data/orbit_circle_repository.dart';
 import '../features/circles/presentation/screens/orbit_circle_join_screen.dart';
 import '../features/circles/presentation/screens/orbit_live_circle_detail_screen.dart';
@@ -468,6 +472,24 @@ class _OrbitAppState extends State<OrbitApp> {
           case AppRoutes.notificationInbox:
             return MaterialPageRoute<void>(settings:settings,
               builder:(_)=>const OrbitLiveNotificationsScreen());
+          case AppRoutes.plans:
+            return MaterialPageRoute<void>(settings:settings,
+              builder:(_)=>const OrbitLivePlansScreen());
+          case AppRoutes.planDetail:
+            if(settings.arguments is String){
+              return MaterialPageRoute<void>(settings:settings,
+                builder:(_)=>OrbitLivePlanDetailScreen(
+                  planId:settings.arguments as String));
+            }
+            return MaterialPageRoute<void>(settings:settings,
+              builder:(_)=>const OrbitLivePlansScreen());
+          case AppRoutes.planCreate:
+            return MaterialPageRoute<void>(settings:settings,
+              builder:(_)=>OrbitLivePlanEditorScreen(
+                planId:settings.arguments is String?settings.arguments as String:null));
+          case AppRoutes.planReminders:
+            return MaterialPageRoute<void>(settings:settings,
+              builder:(_)=>const OrbitLivePlanReminderScreen());
           case AppRoutes.home:
             return MaterialPageRoute<void>(
               settings: settings,
