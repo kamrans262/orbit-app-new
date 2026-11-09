@@ -71,7 +71,7 @@ class OrbitPlanRepository {
       if(title!=null)'title':title.trim(),
       if(description!=null)'description':description.trim(),
       if(startsAt!=null)'starts_at':startsAt.toUtc().toIso8601String(),
-      if(endsAt!=null)'ends_at':endsAt.toUtc().toIso8601String(),
+      'ends_at':endsAt?.toUtc().toIso8601String(),
       if(placeLabel!=null)'place_label':placeLabel.trim(),
       if(inviteeIds!=null)'invitee_ids':inviteeIds,
       if(circleIds!=null)'circle_ids':circleIds,
