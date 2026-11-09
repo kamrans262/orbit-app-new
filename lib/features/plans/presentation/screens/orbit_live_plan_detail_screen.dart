@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../../../app/routing/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
@@ -82,6 +83,23 @@ class _OrbitLivePlanDetailScreenState extends State<OrbitLivePlanDetailScreen>
       ]));
     if(answer==true)await _perform((p)=>_repo.cancel(p.id,p.revision));
   }
+  Future<void> _shareDirections(OrbitPlan p) async {
+    // The location leaves Orbit only after an explicit user action.
+    final destination=p.latitude!=null && p.longitude!=null
+        ?p.latitude.toString()+','+p.longitude.toString()
+        :(p.placeLabel??'').trim();
+    if(destination.isEmpty)return;
+    final link=Uri.https('www.google.com','/maps/dir/',{
+      'api':'1','destination':destination,
+    });
+    try{
+      await Share.share(link.toString(),subject:'Plan directions');
+    }catch(_){
+      if(mounted)ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content:Text('Directions could not be shared.')));
+    }
+  }
+
   Widget _info(IconData icon,String title,String value)=>Padding(
     padding:const EdgeInsets.symmetric(vertical:9),
     child:Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
@@ -131,6 +149,13 @@ class _OrbitLivePlanDetailScreenState extends State<OrbitLivePlanDetailScreen>
                     TimeOfDay.fromDateTime(p.endsAt!))),
                 if((p.placeLabel??'').isNotEmpty)_info(Icons.place_outlined,'Location',
                   p.placeLabel!),
+                if((p.placeLabel??'').isNotEmpty ||
+                    (p.latitude!=null && p.longitude!=null))
+                  TextButton.icon(
+                    onPressed:()=>unawaited(_shareDirections(p)),
+                    icon:const Icon(Icons.directions_outlined),
+                    label:const Text('Share directions link')),
+
                 if(p.description.isNotEmpty)_info(Icons.notes_outlined,'Description',
                   p.description),
               ])),
