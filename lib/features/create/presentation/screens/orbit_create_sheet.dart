@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../app/routing/app_routes.dart';
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../../../core/widgets/app_bottom_navigation_bar.dart';
 import '../../../../core/widgets/app_circular_icon_button.dart';
@@ -23,7 +24,7 @@ abstract final class OrbitCreateKeys {
   static const sos = Key('orbit_create_sos');
 }
 
-enum _CreateAction { moment, post, ping, sos }
+enum _CreateAction { moment, post, ping, sos, plan }
 
 /// The shared bottom-navigation + has ONE entry point, registered in main.dart.
 /// The selected destination opens only after THIS sheet route has fully closed.
@@ -80,6 +81,9 @@ abstract final class OrbitCreateSheet {
         return;
       case _CreateAction.ping:
         await OrbitPingNavigation.chooseFriend(context);
+        return;
+      case _CreateAction.plan:
+        await navigator.pushNamed(AppRoutes.planCreate);
         return;
       case _CreateAction.sos:
         await navigator.push<void>(
@@ -297,6 +301,18 @@ class _CreateSheetRouteBodyState extends State<_CreateSheetRouteBody> {
                                   ),
                                 ),
                               ],
+                            ),
+                            const SizedBox(height:10),
+                            // Additive action below the approved 2x2 card grid.
+                            TextButton.icon(
+                              key:const Key('orbit_create_plan'),
+                              onPressed:()=>_select(_CreateAction.plan),
+                              icon:const Icon(Icons.event_note_outlined,
+                                color:AppColors.primaryEnd),
+                              label:Text('Create a Plan',
+                                style:AppTypography.body.copyWith(
+                                  color:AppColors.primaryEnd,
+                                  fontWeight:FontWeight.w600)),
                             ),
                           ],
                         );

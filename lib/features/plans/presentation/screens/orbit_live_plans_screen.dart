@@ -92,7 +92,15 @@ class _OrbitLivePlansScreenState extends State<OrbitLivePlansScreen>
       constraints:const BoxConstraints(maxWidth:650),
       child:Padding(padding:const EdgeInsets.fromLTRB(20,20,20,12),
         child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-          const AppScreenHeader(title:'Plans',prominent:true),
+          Row(children:[
+            const Expanded(child:AppScreenHeader(title:'Plans',prominent:true)),
+            IconButton(
+              tooltip:'Plan reminder settings',
+              icon:const Icon(Icons.notifications_active_outlined,
+                color:AppColors.primaryEnd),
+              onPressed:()=>Navigator.of(context).pushNamed(AppRoutes.planReminders),
+            ),
+          ]),
           const SizedBox(height:18),
           Row(children:[
             for(final tab in const ['upcoming','past'])...[
