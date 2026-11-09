@@ -6,7 +6,6 @@ import '../../../../core/widgets/app_screen_header.dart';
 import '../../../../core/widgets/app_primary_button.dart';
 import '../../../auth/data/orbit_identity_client.dart';
 import '../../data/orbit_plan_repository.dart';
-import '../../domain/orbit_plan_models.dart';
 
 /// Reminders are an independent Plan preference. M14 push remains governed
 /// separately by device notification permission and server FCM controls.

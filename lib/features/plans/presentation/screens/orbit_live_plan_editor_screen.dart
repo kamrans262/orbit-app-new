@@ -239,7 +239,7 @@ class _OrbitLivePlanEditorScreenState extends State<OrbitLivePlanEditorScreen> w
     labelText:label,filled:true,fillColor:Colors.white,
     border:OutlineInputBorder(borderRadius:BorderRadius.circular(12)));
   Widget _field(String label,TextEditingController controller,{
-      int lines=1,int max=160,bool required=false})=Padding(
+      int lines=1,int max=160,bool required=false})=>Padding(
     padding:const EdgeInsets.only(bottom:14),
     child:TextFormField(controller:controller,maxLines:lines,maxLength:max,
       style:AppTypography.body,decoration:_inputDecoration(label),
