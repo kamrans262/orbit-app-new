@@ -32,6 +32,10 @@ class _OrbitLivePlanEditorScreenState extends State<OrbitLivePlanEditorScreen> w
   final _circles=<OrbitCircle>[];
   final _selectedPeople=<String>{};
   final _selectedCircles=<String>{};
+  final OrbitSocialRepository _social=OrbitSocialRepository();
+  final OrbitCircleRepository _circleRepo=OrbitCircleRepository();
+  int _friendsPage=1,_circlesPage=1;
+  bool _hasMoreFriends=false,_hasMoreCircles=false,_paging=false;
   String _clientId=const Uuid().v4();
   String? _error,_owner;
   OrbitPlan? _original;
@@ -77,8 +81,8 @@ class _OrbitLivePlanEditorScreenState extends State<OrbitLivePlanEditorScreen> w
       final pending=_editing?null:await _vault.readFor(owner);
       OrbitFriendPage<OrbitPerson>? friends;
       OrbitCirclePage<OrbitCircle>? circles;
-      try{friends=await OrbitSocialRepository().friends();}catch(_){}
-      try{circles=await OrbitCircleRepository().list();}catch(_){}
+      try{friends=await _social.friends();}catch(_){}
+      try{circles=await _circleRepo.list();}catch(_){}
       final plan=_editing?await _repo.detail(widget.planId!):null;
       if(!mounted||serial!=_epoch||
          await OrbitIdentityClient.instance.currentLocalSocialOwner()!=owner)return;
@@ -89,6 +93,10 @@ class _OrbitLivePlanEditorScreenState extends State<OrbitLivePlanEditorScreen> w
         _circles..clear()..addAll((circles?.items??const <OrbitCircle>[])
           .where((c)=>c.lifecycleState=='active' || c.lifecycleState=='permanent'));
         _original=plan;
+        _friendsPage=friends?.page??1;
+        _circlesPage=circles?.page??1;
+        _hasMoreFriends=friends?.hasMore??false;
+        _hasMoreCircles=circles?.hasMore??false;
         if(plan!=null){
           _title.text=plan.title;_description.text=plan.description;
           _location.text=plan.placeLabel??'';
@@ -113,6 +121,44 @@ class _OrbitLivePlanEditorScreenState extends State<OrbitLivePlanEditorScreen> w
         _error='Plan form could not be verified. Please reconnect and reopen.';
       });
     }
+  }
+
+  Future<void> _moreFriends() async {
+    if(_paging||!_hasMoreFriends||_owner==null||_frozen)return;
+    _paging=true;final owner=_owner!,epoch=_epoch;
+    try{
+      final page=await _social.friends(page:_friendsPage+1);
+      if(!mounted||epoch!=_epoch||
+          await OrbitIdentityClient.instance.currentLocalSocialOwner()!=owner)return;
+      final known=_friends.map((e)=>e.id).toSet();
+      setState((){
+        _friends.addAll(page.items.where((e)=>known.add(e.id)));
+        _friendsPage=page.page;_hasMoreFriends=page.hasMore;
+      });
+    }catch(_){
+      if(mounted)ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content:Text('More friends could not be loaded. Retry.')));
+    }finally{_paging=false;}
+  }
+
+  Future<void> _moreCircles() async {
+    if(_paging||!_hasMoreCircles||_owner==null||_frozen)return;
+    _paging=true;final owner=_owner!,epoch=_epoch;
+    try{
+      final page=await _circleRepo.list(page:_circlesPage+1);
+      if(!mounted||epoch!=_epoch||
+          await OrbitIdentityClient.instance.currentLocalSocialOwner()!=owner)return;
+      final known=_circles.map((e)=>e.id).toSet();
+      setState((){
+        _circles.addAll(page.items.where((e)=>
+          (e.lifecycleState=='active'||e.lifecycleState=='permanent')
+          && known.add(e.id)));
+        _circlesPage=page.page;_hasMoreCircles=page.hasMore;
+      });
+    }catch(_){
+      if(mounted)ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content:Text('More Circles could not be loaded. Retry.')));
+    }finally{_paging=false;}
   }
 
   Future<void> _pickStart() async {
@@ -214,10 +260,22 @@ class _OrbitLivePlanEditorScreenState extends State<OrbitLivePlanEditorScreen> w
       if(!_editing)await _vault.clearIfMatches(owner,_clientId);
       if(mounted)Navigator.of(context).pop(plan.id);
     }catch(e){
+      final status=e is OrbitIdentityException?e.statusCode:null;
+      // 422/403/404 are confirmed server denials, not lost acknowledgements.
+      // A rejected create can be edited with a NEW intent key. Timeouts and
+      // 5xx remain frozen under the old key, preventing duplicate creation.
+      final rejected=const {400,401,403,404,409,422}.contains(status);
+      if(rejected && !_editing){
+        try{await _vault.clearIfMatches(_owner??'',_clientId);}catch(_){}
+      }
       if(mounted)setState((){
-        _error=e is OrbitIdentityException && e.statusCode==409
-          ?'This Plan changed. Reopen it to review the latest revision.'
-          :'Submission not confirmed. Your encrypted pending Plan remains available for retry.';
+        if(rejected && !_editing)_clientId=const Uuid().v4();
+        if(rejected)_frozen=false;
+        _error=status==409
+          ?'The Plan changed or a submission key conflicted. Review before retrying.'
+          :rejected
+            ?'The server did not accept the Plan. Check people, Circles and fields.'
+            :'Submission not confirmed. Your encrypted pending Plan remains available for retry.';
       });
     }finally{if(mounted)setState(()=>_saving=false);}
   }
@@ -293,10 +351,20 @@ class _OrbitLivePlanEditorScreenState extends State<OrbitLivePlanEditorScreen> w
                   title:Text(person.name,style:AppTypography.body),
                   value:_selectedPeople.contains(person.id),
                   activeColor:AppColors.primaryEnd,
-                  onChanged:(on)=>setState((){
-                    if(on==true){_selectedPeople.add(person.id);}
-                    else{_selectedPeople.remove(person.id);}
-                  })),
+                  onChanged:(on){
+                    if(on==true && _selectedPeople.length>=100){
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content:Text('Choose up to 100 friends.')));
+                      return;
+                    }
+                    setState((){
+                      if(on==true){_selectedPeople.add(person.id);}
+                      else{_selectedPeople.remove(person.id);}
+                    });
+                  }),
+              if(_hasMoreFriends)TextButton(
+                onPressed:_paging?null:()=>unawaited(_moreFriends()),
+                child:const Text('Load more friends')),
               const SizedBox(height:12),
               Text('Invite Circles',style:AppTypography.smallHeading),
               Text('Recipients must satisfy current Circle consent and privacy rules.',
@@ -305,10 +373,20 @@ class _OrbitLivePlanEditorScreenState extends State<OrbitLivePlanEditorScreen> w
                 CheckboxListTile(title:Text(circle.name,style:AppTypography.body),
                   value:_selectedCircles.contains(circle.id),
                   activeColor:AppColors.primaryEnd,
-                  onChanged:(on)=>setState((){
-                    if(on==true){_selectedCircles.add(circle.id);}
-                    else{_selectedCircles.remove(circle.id);}
-                  })),
+                  onChanged:(on){
+                    if(on==true && _selectedCircles.length>=5){
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content:Text('Choose up to five Circles.')));
+                      return;
+                    }
+                    setState((){
+                      if(on==true){_selectedCircles.add(circle.id);}
+                      else{_selectedCircles.remove(circle.id);}
+                    });
+                  }),
+              if(_hasMoreCircles)TextButton(
+                onPressed:_paging?null:()=>unawaited(_moreCircles()),
+                child:const Text('Load more Circles')),
               const SizedBox(height:20),
             ]))),
           ),
