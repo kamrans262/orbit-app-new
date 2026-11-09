@@ -328,7 +328,7 @@ class _OrbitLivePlanEditorScreenState extends State<OrbitLivePlanEditorScreen> w
               child:const Text('Discard pending Plan')),
           ],
         ]))),
-      )))
+      ))
     );
   }
 }

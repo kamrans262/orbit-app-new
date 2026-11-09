@@ -170,7 +170,7 @@ class _OrbitLivePlanDetailScreenState extends State<OrbitLivePlanDetailScreen>
           ]))),
           if(_working)const LinearProgressIndicator(color:AppColors.primaryEnd),
         ]))),
-      )))
+      ))
     );
   }
 }
