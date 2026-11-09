@@ -75,6 +75,10 @@ void main() {
     await tester.tap(row);
     await tester.pump();
     expect(newValue,false);
+    // This first setting is virtualized while scrolled to the last row.
+    await tester.scrollUntilVisible(find.text('Push Notification'), -100,
+      scrollable:find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
     expect(find.text('Push Notification'),findsOneWidget);
   });
 
