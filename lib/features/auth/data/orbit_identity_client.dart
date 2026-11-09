@@ -21,6 +21,7 @@ import '../../messaging/data/orbit_messaging_media_bridge.dart';
 import '../../messaging/data/orbit_messaging_cipher.dart';
 import '../../messaging/data/orbit_messaging_vodozemac_store.dart';
 import '../../notifications/data/orbit_notification_push_runtime.dart';
+import '../../plans/data/orbit_plan_pending_vault.dart';
 
 enum OrbitRestoreState { signedOut, authenticated, deviceRegistration, deletionPending, offlineProfile }
 
@@ -385,6 +386,9 @@ class OrbitIdentityClient {
     // Stop notification listeners before deleting this account's credentials.
     // No recursive HTTP unregister during a 401/session teardown.
     await OrbitNotificationPushRuntime.instance.stop(unregister:false);
+    // Erase encrypted pending Plan intents at every logout, revocation or
+    // identity switch. This must not rely on a Plans screen being mounted.
+    try { await OrbitPlanPendingVault().clear(); } catch (_) {}
     final oldMediaOwner=await _storage.read(key:_userIdKey);
     await OrbitM5FirebaseChangeSource.instance.stop();
     if(oldMediaOwner != null && oldMediaOwner.isNotEmpty) {

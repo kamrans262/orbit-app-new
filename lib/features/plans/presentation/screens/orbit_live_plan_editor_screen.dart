@@ -9,6 +9,7 @@ import '../../../auth/data/orbit_identity_client.dart';
 import '../../../circles/data/orbit_circle_repository.dart';
 import '../../../friends/data/orbit_social_repository.dart';
 import '../../data/orbit_plan_repository.dart';
+import '../../data/orbit_plan_pending_vault.dart';
 import '../../domain/orbit_plan_models.dart';
 
 /// Uses the approved Orbit field/button vocabulary. Client id is retained
@@ -20,8 +21,9 @@ class OrbitLivePlanEditorScreen extends StatefulWidget {
   @override
   State<OrbitLivePlanEditorScreen> createState()=>_OrbitLivePlanEditorScreenState();
 }
-class _OrbitLivePlanEditorScreenState extends State<OrbitLivePlanEditorScreen> {
+class _OrbitLivePlanEditorScreenState extends State<OrbitLivePlanEditorScreen> with WidgetsBindingObserver {
   late final OrbitPlanRepository _repo=widget.repository??OrbitPlanRepository();
+  final OrbitPlanPendingVault _vault=OrbitPlanPendingVault();
   final _form=GlobalKey<FormState>();
   final _title=TextEditingController();
   final _description=TextEditingController();
@@ -39,10 +41,28 @@ class _OrbitLivePlanEditorScreenState extends State<OrbitLivePlanEditorScreen> {
   int _epoch=0;
   bool get _editing=>widget.planId!=null;
   @override
-  void initState(){super.initState();unawaited(_load());}
+  void initState(){
+    super.initState();WidgetsBinding.instance.addObserver(this);unawaited(_load());
+  }
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state){
+    if(state==AppLifecycleState.resumed)unawaited(_checkOwner());
+  }
+  Future<void> _checkOwner() async {
+    final current=await OrbitIdentityClient.instance.currentLocalSocialOwner();
+    if(!mounted || _owner==null || current==_owner)return;
+    ++_epoch;
+    setState((){
+      _title.clear();_description.clear();_location.clear();
+      _selectedPeople.clear();_selectedCircles.clear();
+      _original=null;_owner=null;_loading=false;_frozen=false;
+      _error='Account changed. Close this page and reopen Plans.';
+    });
+  }
   @override
   void dispose(){
     ++_epoch;
+    WidgetsBinding.instance.removeObserver(this);
     _title.dispose();_description.dispose();_location.dispose();
     _selectedPeople.clear();_selectedCircles.clear();
     super.dispose();
@@ -53,27 +73,37 @@ class _OrbitLivePlanEditorScreenState extends State<OrbitLivePlanEditorScreen> {
     try {
       final owner=await OrbitIdentityClient.instance.currentLocalSocialOwner();
       if(owner==null)throw StateError('Sign in required');
-      final futures=await Future.wait<dynamic>([
-        OrbitSocialRepository().friends(),
-        OrbitCircleRepository().list(),
-        if(_editing)_repo.detail(widget.planId!),
-      ]);
+      // Recover an encrypted pending create even if this device is offline.
+      final pending=_editing?null:await _vault.readFor(owner);
+      OrbitFriendPage<OrbitPerson>? friends;
+      OrbitCirclePage<OrbitCircle>? circles;
+      try{friends=await OrbitSocialRepository().friends();}catch(_){}
+      try{circles=await OrbitCircleRepository().list();}catch(_){}
+      final plan=_editing?await _repo.detail(widget.planId!):null;
       if(!mounted||serial!=_epoch||
          await OrbitIdentityClient.instance.currentLocalSocialOwner()!=owner)return;
-      final friends=futures[0] as OrbitFriendPage<OrbitPerson>;
-      final circles=futures[1] as OrbitCirclePage<OrbitCircle>;
-      final plan=_editing?futures[2] as OrbitPlan:null;
       if(_editing && (plan==null||!plan.canEdit))throw StateError('Read only');
       setState((){
         _owner=owner;
-        _friends..clear()..addAll(friends.items);
-        _circles..clear()..addAll(circles.items.where((c)=>
-          c.lifecycleState=='active' || c.lifecycleState=='permanent'));
+        _friends..clear()..addAll(friends?.items??const <OrbitPerson>[]);
+        _circles..clear()..addAll((circles?.items??const <OrbitCircle>[])
+          .where((c)=>c.lifecycleState=='active' || c.lifecycleState=='permanent'));
         _original=plan;
         if(plan!=null){
           _title.text=plan.title;_description.text=plan.description;
           _location.text=plan.placeLabel??'';
           _start=plan.startsAt;_end=plan.endsAt;
+        }
+        if(pending!=null){
+          _clientId=pending.clientId;
+          _title.text=pending.title;
+          _description.text=pending.description;
+          _location.text=pending.placeLabel;
+          _start=pending.startsAt;_end=pending.endsAt;
+          _selectedPeople..clear()..addAll(pending.inviteeIds);
+          _selectedCircles..clear()..addAll(pending.circleIds);
+          _frozen=true;
+          _error='A previous submission is not confirmed. Retry it using the same request.';
         }
         _loading=false;
       });
@@ -161,6 +191,16 @@ class _OrbitLivePlanEditorScreenState extends State<OrbitLivePlanEditorScreen> {
     setState((){_saving=true;_frozen=true;_error=null;});
     try{
       final owner=_owner!;
+      if(!_editing){
+        // Storage failure prevents submission: uncertain requests must be
+        // recoverable under the same idempotency key after app restart.
+        await _vault.store(OrbitPlanPendingDraft(
+          owner:owner,clientId:_clientId,
+          title:_title.text.trim(),description:_description.text.trim(),
+          placeLabel:_location.text.trim(),startsAt:_start,endsAt:_end,
+          inviteeIds:_selectedPeople.toList(),circleIds:_selectedCircles.toList(),
+          savedAt:DateTime.now().toUtc()));
+      }
       final plan=_editing
         ?await _repo.update(widget.planId!,revision:_original!.revision,
           title:_title.text,description:_description.text,
@@ -171,14 +211,28 @@ class _OrbitLivePlanEditorScreenState extends State<OrbitLivePlanEditorScreen> {
           placeLabel:_location.text,inviteeIds:_selectedPeople.toList(),
           circleIds:_selectedCircles.toList());
       if(!mounted||await OrbitIdentityClient.instance.currentLocalSocialOwner()!=owner)return;
-      Navigator.of(context).pop(plan.id);
+      if(!_editing)await _vault.clearIfMatches(owner,_clientId);
+      if(mounted)Navigator.of(context).pop(plan.id);
     }catch(e){
       if(mounted)setState((){
         _error=e is OrbitIdentityException && e.statusCode==409
           ?'This Plan changed. Reopen it to review the latest revision.'
-          :'Submission not confirmed. Retry the same request to prevent duplicates.';
+          :'Submission not confirmed. Your encrypted pending Plan remains available for retry.';
       });
     }finally{if(mounted)setState(()=>_saving=false);}
+  }
+
+  Future<void> _discardPending() async {
+    final confirm=await showDialog<bool>(context:context,builder:(ctx)=>AlertDialog(
+      title:const Text('Discard pending Plan?'),
+      content:const Text('A previous submission may have succeeded. Review your Plans before starting another.'),
+      actions:[
+        TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('Keep')),
+        TextButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('Discard')),
+      ]));
+    if(confirm!=true || !mounted)return;
+    await _vault.clearIfMatches(_owner??'',_clientId);
+    if(mounted)Navigator.of(context).pop();
   }
 
   InputDecoration _inputDecoration(String label)=>InputDecoration(
@@ -266,9 +320,13 @@ class _OrbitLivePlanEditorScreenState extends State<OrbitLivePlanEditorScreen> {
             label:_saving?'Submitting…':_frozen?'Retry same submission':
               _editing?'Review changes':'Review & Create',
             enabled:!_saving,onPressed:()=>unawaited(_submit())),
-          if(_frozen && !_saving)
+          if(_frozen && !_saving) ...[
             TextButton(onPressed:()=>Navigator.of(context).pop(),
-              child:const Text('Close without retrying')),
+              child:const Text('Close — keep pending Plan for later')),
+            if(!_editing)TextButton(
+              onPressed:()=>unawaited(_discardPending()),
+              child:const Text('Discard pending Plan')),
+          ],
         ]))),
       )))
     );
