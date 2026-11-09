@@ -1,0 +1,45 @@
+name: Orbit M15 focused Plans and Reminders Flutter verification
+on:
+  push:
+    branches: [feature/m15-plans-flutter-2026-11-10]
+    paths:
+      - '.github/workflows/orbit-m15-flutter-tests.yml'
+      - 'lib/features/plans/**'
+      - 'lib/features/home/presentation/screens/orbit_live_home_screen.dart'
+      - 'lib/features/create/presentation/screens/orbit_create_sheet.dart'
+      - 'lib/features/notifications/**'
+      - 'lib/features/auth/data/orbit_identity_client.dart'
+      - 'lib/app/**'
+      - 'test/features/plans/**'
+      - 'pubspec.yaml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  plans:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Analyze M15 and modified integrations
+        run: |
+          dart analyze lib/features/plans \
+            lib/features/home/presentation/screens/orbit_live_home_screen.dart \
+            lib/features/create/presentation/screens/orbit_create_sheet.dart \
+            lib/features/notifications/data/orbit_notification_repository.dart \
+            lib/features/notifications/presentation/orbit_live_notifications_screen.dart \
+            lib/features/auth/data/orbit_identity_client.dart \
+            lib/app/app.dart lib/app/routing/app_routes.dart \
+            test/features/plans
+      - name: Run focused M15 and preserved M8/M14/Create regressions
+        run: |
+          flutter test test/features/plans
+          flutter test test/features/notifications/orbit_notification_contract_test.dart
+          flutter test test/features/create/orbit_create_sheet_current_layout_test.dart
+          flutter test test/features/home/presentation/m8_home_sections_test.dart
