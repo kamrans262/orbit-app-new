@@ -32,6 +32,7 @@ class OrbitNotificationPushRuntime {
   StreamSubscription<RemoteMessage>? _foreground;
   StreamSubscription<RemoteMessage>? _tapped;
   String? _registeredOwner;
+  DateTime? _lastRegisteredAt;
   bool _starting=false;
   bool _active=false;
 
@@ -54,8 +55,25 @@ class OrbitNotificationPushRuntime {
         return;
       }
       if(_active&&_registeredOwner==owner&&!force){
-        registrationStatus.value='Connected — push token registered.';
-        return;
+        // A previously registered token may have been disabled server-side
+        // (e.g. after a session/consent change). Reconfirm at most every six
+        // hours; avoid repeated Firebase setup and duplicate listeners.
+        if(_lastRegisteredAt!=null &&
+           DateTime.now().difference(_lastRegisteredAt!)<
+               const Duration(hours:6)){
+          registrationStatus.value='Connected — push token registered.';
+          return;
+        }
+        phase='refreshing device registration';
+        final currentToken=await FirebaseMessaging.instance.getToken();
+        if(currentToken!=null&&currentToken.isNotEmpty &&
+           await _identity.currentLocalSocialOwner()==owner){
+          await _repository.registerDevice(
+              currentToken,Platform.isIOS?'ios':'android');
+          _lastRegisteredAt=DateTime.now();
+          registrationStatus.value='Connected — push token registered.';
+          return;
+        }
       }
       // A manual retry must not revoke the existing server token first.
       await stop(unregister:false);
@@ -120,6 +138,7 @@ class OrbitNotificationPushRuntime {
       registrationStatus.value='Registering this device with Orbit…';
       await _repository.registerDevice(token,Platform.isIOS?'ios':'android');
       _registeredOwner=owner;
+      _lastRegisteredAt=DateTime.now();
       _active=true;
       registrationStatus.value='Connected — push token registered.';
       _tokenChanges=messaging.onTokenRefresh.listen((next){
@@ -167,6 +186,7 @@ class OrbitNotificationPushRuntime {
       final settings=await _repository.pushBootstrap();
       if(!settings.enabled)return;
       await _repository.registerDevice(next,Platform.isIOS?'ios':'android');
+      _lastRegisteredAt=DateTime.now();
     }catch(_){
       // No provider token or exception details are written to UI or logs.
       registrationStatus.value='Push token refresh failed. Retry registration.';
@@ -177,6 +197,7 @@ class OrbitNotificationPushRuntime {
     final owner=_registeredOwner;
     _active=false;
     _registeredOwner=null;
+    _lastRegisteredAt=null;
     await _tokenChanges?.cancel();
     await _foreground?.cancel();
     await _tapped?.cancel();
