@@ -66,7 +66,10 @@ void main() {
       ],
     )));
     final row=find.byKey(NotificationKeys.row('messages'));
-    await tester.ensureVisible(row);
+    // The approved settings list builds rows lazily; scroll first so this
+    // off-screen supplemental setting exists in the widget tree.
+    await tester.scrollUntilVisible(row, 100,
+      scrollable:find.byKey(NotificationKeys.scrollView));
     await tester.pumpAndSettle();
     expect(row,findsOneWidget);
     await tester.tap(row);
