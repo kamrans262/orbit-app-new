@@ -69,7 +69,7 @@ void main() {
     // The approved settings list builds rows lazily; scroll first so this
     // off-screen supplemental setting exists in the widget tree.
     await tester.scrollUntilVisible(row, 100,
-      scrollable:find.byKey(NotificationKeys.scrollView));
+      scrollable:find.byType(Scrollable).first);
     await tester.pumpAndSettle();
     expect(row,findsOneWidget);
     await tester.tap(row);
