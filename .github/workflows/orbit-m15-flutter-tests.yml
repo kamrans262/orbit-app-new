@@ -11,6 +11,8 @@ on:
       - 'lib/features/auth/data/orbit_identity_client.dart'
       - 'lib/app/**'
       - 'test/features/plans/**'
+      - 'test/features/notifications/orbit_notification_contract_test.dart'
+      - 'test/features/create/orbit_create_sheet_current_layout_test.dart'
       - 'pubspec.yaml'
   workflow_dispatch:
 permissions:
