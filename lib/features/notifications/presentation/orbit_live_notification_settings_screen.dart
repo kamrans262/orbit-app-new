@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -42,7 +44,12 @@ class _OrbitLiveNotificationSettingsScreenState
   }
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if(state==AppLifecycleState.resumed)_readSystemPermission();
+    if(state==AppLifecycleState.resumed){
+      unawaited(_readSystemPermission());
+      if(_current?.pushNotificationsEnabled==true){
+        unawaited(OrbitNotificationPushRuntime.instance.configure());
+      }
+    }
   }
   Future<void> _readSystemPermission() async {
     try{
@@ -69,9 +76,16 @@ class _OrbitLiveNotificationSettingsScreenState
       if(await OrbitIdentityClient.instance.currentLocalSocialOwner()!=owner) {
         throw StateError('Account changed');
       }
-      if(mounted&&epoch==_epoch)setState((){
-        _current=value;_optional=optional;_loading=false;
-      });
+      if(mounted&&epoch==_epoch){
+        setState((){
+          _current=value;_optional=optional;_loading=false;
+        });
+        // Existing user opt-in should connect automatically when settings
+        // opens; no repeated Save or manual Retry action is required.
+        if(value.pushNotificationsEnabled){
+          unawaited(OrbitNotificationPushRuntime.instance.configure());
+        }
+      }
     }catch(_){
       if(mounted&&epoch==_epoch)setState((){
         _loading=false;_current=null;_optional=null;
