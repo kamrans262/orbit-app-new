@@ -1,12 +1,39 @@
 import '../../auth/data/orbit_identity_client.dart';
 import '../domain/orbit_plan_models.dart';
+import 'orbit_plan_offline_cache.dart';
 
-/// All M15 calls use the existing bearer token, trusted-device checks,
-/// centralized timeouts and refresh handling. No private disk snapshots.
+/// All M15 calls use existing bearer tokens, trusted-device checks,
+/// centralized timeouts and refresh handling. The optional offline cache
+/// uses encrypted secure storage for last-authorized read-only snapshots.
 class OrbitPlanRepository {
   OrbitPlanRepository({OrbitIdentityClient? identity})
     : _identity=identity??OrbitIdentityClient.instance;
   final OrbitIdentityClient _identity;
+  final OrbitPlanOfflineCache _cache=OrbitPlanOfflineCache();
+
+  static bool temporaryOffline(Object error) =>
+    error is OrbitIdentityException &&
+    (error.statusCode==null || error.statusCode==502 || error.statusCode==504);
+
+  Future<void> clearCachedPlans()=>_cache.clear();
+
+  Future<OrbitPlanPage?> lastVerifiedList(String tab) async {
+    final owner=await _owner();
+    final records=await _cache.lastList(owner,tab);
+    if(records==null)return null;
+    try{
+      return OrbitPlanPage(records.map(OrbitPlan.fromJson)
+          .toList(growable:false),null);
+    }catch(_){await _cache.clear();return null;}
+  }
+
+  Future<OrbitPlan?> lastVerifiedDetail(String id) async {
+    final owner=await _owner();
+    final value=await _cache.lastDetail(owner,id);
+    if(value==null)return null;
+    try{return OrbitPlan.fromJson(value);}
+    catch(_){await _cache.clear();return null;}
+  }
 
   Future<String> _owner() async {
     final owner=await _identity.currentLocalSocialOwner();
@@ -37,17 +64,30 @@ class OrbitPlanRepository {
     if(!const {'upcoming','past'}.contains(tab))throw ArgumentError.value(tab);
     final params=<String,String>{'tab':tab,'limit':'$limit'};
     if(cursor!=null && cursor.isNotEmpty)params['cursor']=cursor;
+    final owner=await _owner();
     final result=await _call('GET',Uri(path:'/plans',queryParameters:params).toString());
     final data=result['data'],meta=result['meta'];
     if(data is! List)throw const FormatException('Invalid Plan list.');
     final next=meta is Map?meta['next_cursor']:null;
     if(next!=null && next is! String)throw const FormatException('Invalid Plan cursor.');
-    return OrbitPlanPage(data.map((e)=>OrbitPlan.fromJson(
-      Map<String,dynamic>.from(e as Map))).toList(growable:false),next as String?);
+    final rows=data.map((e)=>Map<String,dynamic>.from(e as Map))
+      .toList(growable:false);
+    final items=rows.map(OrbitPlan.fromJson).toList(growable:false);
+    if(cursor==null && await _identity.currentLocalSocialOwner()==owner){
+      try{await _cache.rememberList(owner,tab,rows);}catch(_){}
+    }
+    return OrbitPlanPage(items,next as String?);
   }
 
-  Future<OrbitPlan> detail(String id) async=>OrbitPlan.fromJson(
-    await _data('GET','/plans/'+Uri.encodeComponent(id)));
+  Future<OrbitPlan> detail(String id) async {
+    final owner=await _owner();
+    final response=await _data('GET','/plans/'+Uri.encodeComponent(id));
+    final plan=OrbitPlan.fromJson(response);
+    if(await _identity.currentLocalSocialOwner()==owner){
+      try{await _cache.rememberDetail(owner,id,response);}catch(_){}
+    }
+    return plan;
+  }
 
   Future<OrbitPlan> create({required String clientId,required String title,
     required DateTime startsAt,DateTime? endsAt,String description='',
