@@ -21,7 +21,7 @@ class _OrbitLivePlanDetailScreenState extends State<OrbitLivePlanDetailScreen>
     with WidgetsBindingObserver {
   late final OrbitPlanRepository _repo=widget.repository??OrbitPlanRepository();
   OrbitPlan? _plan;
-  bool _loading=true,_working=false;
+  bool _loading=true,_working=false,_offline=false;
   String? _error;
   int _epoch=0;
   @override
@@ -38,24 +38,40 @@ class _OrbitLivePlanDetailScreenState extends State<OrbitLivePlanDetailScreen>
   }
   Future<void> _load() async {
     final serial=++_epoch;
-    setState((){_loading=true;_plan=null;_error=null;});
+    setState((){_loading=true;_plan=null;_error=null;_offline=false;});
+    String? owner;
     try{
-      final owner=await OrbitIdentityClient.instance.currentLocalSocialOwner();
+      owner=await OrbitIdentityClient.instance.currentLocalSocialOwner();
       if(owner==null)throw StateError('Signed out');
       final value=await _repo.detail(widget.planId);
       if(!mounted||serial!=_epoch||
           await OrbitIdentityClient.instance.currentLocalSocialOwner()!=owner)return;
       setState((){_plan=value;_loading=false;});
-    }catch(_){
+    }catch(e){
+      if(!mounted||serial!=_epoch)return;
+      if(owner!=null && OrbitPlanRepository.temporaryOffline(e)){
+        try{
+          final cached=await _repo.lastVerifiedDetail(widget.planId);
+          if(cached!=null && mounted && serial==_epoch &&
+              await OrbitIdentityClient.instance.currentLocalSocialOwner()==owner){
+            setState((){_plan=cached;_loading=false;_offline=true;});
+            return;
+          }
+        }catch(_){}
+      }
+      if(e is OrbitIdentityException &&
+          const {401,403,404}.contains(e.statusCode)){
+        try{await _repo.clearCachedPlans();}catch(_){}
+      }
       if(mounted&&serial==_epoch)setState((){
-        _loading=false;_plan=null;
+        _loading=false;_plan=null;_offline=false;
         _error='This Plan is unavailable or your access has changed.';
       });
     }
   }
   Future<void> _perform(Future<OrbitPlan> Function(OrbitPlan) work) async {
     final p=_plan;
-    if(p==null||_working)return;
+    if(p==null||_working||_offline)return;
     setState(()=>_working=true);
     try{
       await work(p);
@@ -129,6 +145,9 @@ class _OrbitLivePlanDetailScreenState extends State<OrbitLivePlanDetailScreen>
             TextButton(onPressed:()=>unawaited(_load()),child:const Text('Retry')),
           ]))
           :RefreshIndicator(onRefresh:_load,child:ListView(children:[
+            if(_offline)Padding(padding:const EdgeInsets.only(bottom:12),
+              child:Text('Offline — last verified, read-only. Reconnect to confirm current permissions.',
+                style:AppTypography.bodyMuted)),
             Container(padding:const EdgeInsets.all(20),
               decoration:BoxDecoration(color:Colors.white,
                 borderRadius:BorderRadius.circular(20)),
@@ -171,11 +190,11 @@ class _OrbitLivePlanDetailScreenState extends State<OrbitLivePlanDetailScreen>
                 leading:const Icon(Icons.account_circle_outlined,
                   color:AppColors.primaryEnd)),
             const SizedBox(height:18),
-            if(p.canEdit) ...[
+            if(!_offline && p.canEdit) ...[
               AppPrimaryButton(label:'Edit Plan',onPressed:()=>unawaited(_edit())),
               TextButton(onPressed:_working?null:()=>unawaited(_cancel()),
                 child:const Text('Cancel Plan')),
-            ] else if(p.canRespond) ...[
+            ] else if(!_offline && p.canRespond) ...[
               if(p.myRsvp!='joined')
                 AppPrimaryButton(label:'Join Plan',onPressed:()=>unawaited(
                   _perform((p)=>_repo.rsvp(p.id,'joined')))),

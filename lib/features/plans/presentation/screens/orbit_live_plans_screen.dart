@@ -24,7 +24,7 @@ class _OrbitLivePlansScreenState extends State<OrbitLivePlansScreen>
   final _items=<OrbitPlan>[];
   String _tab='upcoming';
   String? _cursor,_error,_owner;
-  bool _loading=true,_loadingMore=false;
+  bool _loading=true,_loadingMore=false,_offline=false;
   int _epoch=0;
   @override
   void initState(){super.initState();WidgetsBinding.instance.addObserver(this);unawaited(_load());}
@@ -40,19 +40,40 @@ class _OrbitLivePlansScreenState extends State<OrbitLivePlansScreen>
   }
   Future<void> _load() async {
     final serial=++_epoch;
-    if(mounted)setState((){_loading=true;_error=null;_items.clear();_cursor=null;});
+    if(mounted)setState((){_loading=true;_error=null;_offline=false;
+      _items.clear();_cursor=null;});
+    String? owner;
     try {
-      final owner=await OrbitIdentityClient.instance.currentLocalSocialOwner();
+      owner=await OrbitIdentityClient.instance.currentLocalSocialOwner();
       if(owner==null)throw StateError('Sign in required');
       final result=await _repo.list(tab:_tab);
       if(!mounted||serial!=_epoch ||
           await OrbitIdentityClient.instance.currentLocalSocialOwner()!=owner)return;
       setState((){_items..clear()..addAll(result.items);_cursor=result.nextCursor;
         _owner=owner;_loading=false;});
-    }catch(_) {
+    }catch(e) {
+      if(!mounted||serial!=_epoch)return;
+      if(owner!=null && OrbitPlanRepository.temporaryOffline(e)){
+        try{
+          final page=await _repo.lastVerifiedList(_tab);
+          if(page!=null && mounted && serial==_epoch &&
+              await OrbitIdentityClient.instance.currentLocalSocialOwner()==owner){
+            setState((){
+              _items..clear()..addAll(page.items);
+              _cursor=null;_owner=owner;_loading=false;_offline=true;
+            });
+            return;
+          }
+        }catch(_){}
+      }
+      if(e is OrbitIdentityException &&
+          const {401,403,404}.contains(e.statusCode)){
+        try{await _repo.clearCachedPlans();}catch(_){}
+      }
       if(mounted&&serial==_epoch)setState((){
-        _loading=false;_error='Plans could not be verified. Reconnect and retry.';
-        _items.clear();_cursor=null;
+        _loading=false;_offline=false;
+        _error='Plans could not be verified. Reconnect and retry.';
+        _items.clear();_cursor=null;_owner=null;
       });
     }
   }
@@ -117,6 +138,9 @@ class _OrbitLivePlansScreenState extends State<OrbitLivePlansScreen>
             ],
           ]),
           const SizedBox(height:16),
+          if(_offline)Padding(padding:const EdgeInsets.only(bottom:12),
+            child:Text('Offline — last verified Plans, read-only. Refresh to check access.',
+              style:AppTypography.bodyMuted)),
           Expanded(child:_loading
             ?const Center(child:CircularProgressIndicator(color:AppColors.primaryEnd))
             :_error!=null&&_items.isEmpty
@@ -144,7 +168,8 @@ class _OrbitLivePlansScreenState extends State<OrbitLivePlansScreen>
             Padding(padding:const EdgeInsets.only(top:12),
               child:Text('No '+_tab+' plans yet.',style:AppTypography.bodyMuted)),
           const SizedBox(height:12),
-          AppPrimaryButton(label:'Create Plan',onPressed:()=>unawaited(_create())),
+          AppPrimaryButton(label:'Create Plan',
+            enabled:!_offline,onPressed:()=>unawaited(_create())),
         ]),
       ),
     ))),
