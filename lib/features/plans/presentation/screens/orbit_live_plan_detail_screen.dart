@@ -175,7 +175,7 @@ class _OrbitLivePlanDetailScreenState extends State<OrbitLivePlanDetailScreen>
                 if((p.placeLabel??'').isNotEmpty ||
                     (p.latitude!=null && p.longitude!=null))
                   TextButton.icon(
-                    onPressed:()=>unawaited(_openDirections(p)),
+                    onPressed:_offline?null:()=>unawaited(_openDirections(p)),
                     icon:const Icon(Icons.directions_outlined),
                     label:const Text('Directions')),
 
