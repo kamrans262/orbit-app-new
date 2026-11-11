@@ -14,6 +14,7 @@ on:
       - 'test/features/notifications/orbit_notification_contract_test.dart'
       - 'test/features/create/orbit_create_sheet_current_layout_test.dart'
       - 'pubspec.yaml'
+      - 'pubspec.lock'
   workflow_dispatch:
 permissions:
   contents: read
@@ -45,3 +46,47 @@ jobs:
           flutter test test/features/notifications/orbit_notification_contract_test.dart
           flutter test test/features/create/orbit_create_sheet_current_layout_test.dart
           flutter test test/features/home/presentation/m8_home_sections_test.dart
+
+  android-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - name: Resolve current plugins
+        run: flutter pub get
+      - name: Print plugin lock delta for review
+        run: git diff -- pubspec.lock
+      - name: Compile complete M15 Android debug APK
+        run: flutter build apk --debug
+      - name: Verify Android artifact
+        run: test -s build/app/outputs/flutter-apk/app-debug.apk
+
+  ios-no-sign-build:
+    runs-on: macos-15
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - name: Record iOS SDK and CocoaPods versions
+        run: |
+          xcodebuild -version
+          pod --version
+      - name: Resolve current plugins
+        run: flutter pub get
+      - name: Compile complete unsigned iOS app
+        run: flutter build ios --debug --no-codesign
+      - name: Verify iOS build artifact
+        run: test -d build/ios/iphoneos/Runner.app
