@@ -65,6 +65,39 @@ jobs:
         run: flutter pub get
       - name: Print plugin lock delta for review
         run: git diff -- pubspec.lock
+      - name: Provide CI-only synthetic Firebase app registration
+        # A disposable compile fixture, NOT a real Firebase project, API key,
+        # service account, push credential, production app configuration or
+        # artifact to be published. Real configs remain locally untracked.
+        run: |
+          test ! -e android/app/google-services.json
+          cat > android/app/google-services.json <<'EOF'
+          {
+            "project_info": {
+              "project_number": "123456789012",
+              "project_id": "orbit-ci-compile-only",
+              "storage_bucket": "orbit-ci-compile-only.invalid"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:123456789012:android:abcdef0123456789",
+                  "android_client_info": {
+                    "package_name": "com.orbit.orbit_app"
+                  }
+                },
+                "api_key": [
+                  {
+                    "current_key": "CI_ONLY_NOT_A_REAL_GOOGLE_API_KEY"
+                  }
+                ]
+              }
+            ],
+            "configuration_version": "1"
+          }
+          EOF
+          test -s android/app/google-services.json
+          test -z "$(git ls-files android/app/google-services.json)"
       - name: Compile complete M15 Android debug APK
         run: flutter build apk --debug
       - name: Verify Android artifact
