@@ -557,12 +557,17 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
         iconColor:Color(0xFFD40D7B),iconBackground:Color(0xFFFFE9F5)),
       QuickActionData(id:'messages',title:'Messages',icon:Icons.chat_bubble_outline_rounded,
         iconColor:Color(0xFF7C3AED),iconBackground:Color(0xFFF2EAFE)),
+      // Additive scroll item: approved first six actions retain their order,
+      // dimensions, icon treatment and layout.
+      QuickActionData(id:'plans',title:'Plans',icon:Icons.event_note_outlined,
+        iconColor:Color(0xFF7C3AED),iconBackground:Color(0xFFF2EAFE)),
     ],
     upcomingPlans:_upcomingPlans,promoBanner:null,
     favoritePeople:_peopleWithPresence,recentMoments:_recent,
     onNotificationPressed:()=>unawaited(_openNotifications()),
     onQuickActionPressed:(action){
       if(action.id=='moment'){_openMoments();}
+      else if(action.id=='plans'){unawaited(_openPlans());}
       else if(action.id=='messages'){
         unawaited(OrbitMessagingNavigation.openList(context));
       }
