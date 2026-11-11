@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../../app/routing/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
@@ -99,7 +100,7 @@ class _OrbitLivePlanDetailScreenState extends State<OrbitLivePlanDetailScreen>
       ]));
     if(answer==true)await _perform((p)=>_repo.cancel(p.id,p.revision));
   }
-  Future<void> _shareDirections(OrbitPlan p) async {
+  Future<void> _openDirections(OrbitPlan p) async {
     // The location leaves Orbit only after an explicit user action.
     final destination=p.latitude!=null && p.longitude!=null
         ?p.latitude.toString()+','+p.longitude.toString()
@@ -109,7 +110,10 @@ class _OrbitLivePlanDetailScreenState extends State<OrbitLivePlanDetailScreen>
       'api':'1','destination':destination,
     });
     try{
-      await Share.share(link.toString(),subject:'Plan directions');
+      final launched=await launchUrl(link,mode:LaunchMode.externalApplication);
+      if(!launched){
+        await Share.share(link.toString(),subject:'Plan directions');
+      }
     }catch(_){
       if(mounted)ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content:Text('Directions could not be shared.')));
@@ -171,9 +175,9 @@ class _OrbitLivePlanDetailScreenState extends State<OrbitLivePlanDetailScreen>
                 if((p.placeLabel??'').isNotEmpty ||
                     (p.latitude!=null && p.longitude!=null))
                   TextButton.icon(
-                    onPressed:()=>unawaited(_shareDirections(p)),
+                    onPressed:()=>unawaited(_openDirections(p)),
                     icon:const Icon(Icons.directions_outlined),
-                    label:const Text('Share directions link')),
+                    label:const Text('Directions')),
 
                 if(p.description.isNotEmpty)_info(Icons.notes_outlined,'Description',
                   p.description),
