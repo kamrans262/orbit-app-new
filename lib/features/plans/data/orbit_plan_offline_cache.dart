@@ -11,7 +11,7 @@ class OrbitPlanOfflineCache {
   static const storageKey='orbit.plans.offline.verified.v1';
   static const maxAge=Duration(hours:24);
   static const maxDetails=20;
-  static const schemaVersion=1;
+  static const schemaVersion=2;
 
   Future<Map<String,dynamic>?> _documentFor(String owner) async {
     final raw=await _storage.read(key:storageKey);
@@ -40,7 +40,10 @@ class OrbitPlanOfflineCache {
     final details=existing?['details'] is Map
         ?Map<String,dynamic>.from(existing!['details'] as Map)
         :<String,dynamic>{};
-    lists[tab]=items.take(30).toList(growable:false);
+    lists[tab]={
+      'verified_at':DateTime.now().toUtc().toIso8601String(),
+      'items':items.take(30).toList(growable:false),
+    };
     await _write(owner,lists,details);
   }
 
@@ -54,7 +57,10 @@ class OrbitPlanOfflineCache {
         ?Map<String,dynamic>.from(existing!['details'] as Map)
         :<String,dynamic>{};
     details.remove(id);
-    details[id]=plan;
+    details[id]={
+      'verified_at':DateTime.now().toUtc().toIso8601String(),
+      'data':plan,
+    };
     while(details.length>maxDetails){details.remove(details.keys.first);}
     await _write(owner,lists,details);
   }
@@ -68,21 +74,35 @@ class OrbitPlanOfflineCache {
     }));
   }
 
+  bool _entryIsFresh(dynamic raw) {
+    if(raw is! Map)return false;
+    final checked=DateTime.tryParse(raw['verified_at'] as String? ?? '');
+    return checked!=null
+      && !checked.isAfter(DateTime.now().add(const Duration(minutes:5)))
+      && DateTime.now().difference(checked)<=maxAge;
+  }
+
   Future<List<Map<String,dynamic>>?> lastList(String owner,String tab) async {
     final doc=await _documentFor(owner);
     final lists=doc?['lists'];
-    if(lists is! Map || lists[tab] is! List)return null;
+    if(lists is! Map || !_entryIsFresh(lists[tab]))return null;
     try{
-      return (lists[tab] as List).map((e)=>
-        Map<String,dynamic>.from(e as Map)).toList(growable:false);
+      final raw=lists[tab] as Map;
+      final items=raw['items'];
+      if(items is! List)return null;
+      return items.map((e)=>Map<String,dynamic>.from(e as Map))
+        .toList(growable:false);
     }catch(_){await clear();return null;}
   }
 
   Future<Map<String,dynamic>?> lastDetail(String owner,String id) async {
     final doc=await _documentFor(owner);
     final details=doc?['details'];
-    if(details is! Map || details[id] is! Map)return null;
-    try{return Map<String,dynamic>.from(details[id] as Map);}
+    if(details is! Map || !_entryIsFresh(details[id]))return null;
+    try{
+      final raw=details[id] as Map;
+      return Map<String,dynamic>.from(raw['data'] as Map);
+    }
     catch(_){await clear();return null;}
   }
 
