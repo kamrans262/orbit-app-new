@@ -190,7 +190,11 @@ class OrbitModerationHistorySnapshot {
   final List<OrbitModerationAppeal> appeals;
 }
 
-class OrbitModerationReceipt {
+/// MySQL UTC timestamps without an explicit offset must not become local time.
+DateTime? orbitModerationUtcTimestamp(Object? value) {
+  if (value is! String || value.trim().isEmpty) return null;
+  final iso = value.trim().replaceFirst(' ', 'T');
+  final hasZone = RegExp(r'(Z|[+-]\d{2}:\d{2})
   const OrbitModerationReceipt({
     required this.id, required this.status, required this.createdAt,
   });
@@ -200,7 +204,7 @@ class OrbitModerationReceipt {
   factory OrbitModerationReceipt.fromJson(Map<String, dynamic> data) {
     final id = data['id'];
     final status = data['status'];
-    final date = DateTime.tryParse(data['created_at'] as String? ?? '');
+    final date = orbitModerationUtcTimestamp(data['created_at']);
     if (id is! String || id.isEmpty ||
         status != 'received' || date == null) {
       throw const FormatException('Unconfirmed moderation report.');
@@ -231,7 +235,156 @@ class OrbitModerationAction {
 
   factory OrbitModerationAction.fromJson(Map<String, dynamic> data) {
     final id = data['id'], scope = data['scope'], status = data['status'];
-    final date = DateTime.tryParse(data['created_at'] as String? ?? '');
+    final date = orbitModerationUtcTimestamp(data['created_at']);
+    final endRaw = data['ends_at'];
+    final end = orbitModerationUtcTimestamp(endRaw);
+    if (id is! String || id.isEmpty ||
+        !['warning','messaging_send'].contains(scope) ||
+        !['active','reversed'].contains(status) ||
+        date == null || (endRaw != null && end == null)) {
+      throw const FormatException('Invalid moderation action.');
+    }
+    return OrbitModerationAction(
+      id: id, scope: scope as String, status: status as String,
+      createdAt: date, endsAt: end,
+    );
+  }
+}
+
+class OrbitModerationAppeal {
+  const OrbitModerationAppeal({
+    required this.id, required this.status, required this.createdAt,
+    this.decisionCode, this.decidedAt, this.actionId,
+  });
+  final String id, status;
+  final String? actionId;
+  final DateTime createdAt;
+  final String? decisionCode;
+  final DateTime? decidedAt;
+  factory OrbitModerationAppeal.fromJson(Map<String, dynamic> data) {
+    final id = data['id'], status = data['status'];
+    final date = orbitModerationUtcTimestamp(data['created_at']);
+    if (id is! String || id.isEmpty ||
+        !['pending','upheld','reversed'].contains(status) || date == null) {
+      throw const FormatException('Invalid appeal response.');
+    }
+    return OrbitModerationAppeal(
+      id: id, status: status as String, createdAt: date,
+      actionId: data['action_id'] as String?,
+      decisionCode: data['decision_code'] as String?,
+      decidedAt: orbitModerationUtcTimestamp(data['decided_at']),
+    );
+  }
+}
+
+/// Only a short-lived, owner-bound retry token and a user-selected payload.
+/// Stored in the platform secure store, never in preferences or push data.
+/// There is NO automatic background report/appeal upload.
+class OrbitModerationIntent {
+  const OrbitModerationIntent({
+    required this.owner, required this.kind, required this.clientId,
+    required this.createdAt, required this.body, this.subjectId,
+  });
+  final String owner, kind, clientId;
+  final String? subjectId;
+  final DateTime createdAt;
+  final Map<String, Object?> body;
+  Map<String, Object?> toJson() => <String, Object?>{
+    'owner': owner, 'kind': kind, 'client_id': clientId,
+    'subject_id': subjectId,
+    'created_at': createdAt.toUtc().toIso8601String(),
+    'body': body,
+  };
+  factory OrbitModerationIntent.fromJson(Map<String, dynamic> data) =>
+      OrbitModerationIntent(
+        owner: data['owner'] as String,
+        kind: data['kind'] as String,
+        clientId: data['client_id'] as String,
+        subjectId: data['subject_id'] as String?,
+        createdAt: DateTime.parse(data['created_at'] as String),
+        body: Map<String, Object?>.from(data['body'] as Map),
+      );
+}
+
+class OrbitModerationPendingVault {
+  OrbitModerationPendingVault({FlutterSecureStorage? storage}) :
+      _storage = storage ?? const FlutterSecureStorage();
+  final FlutterSecureStorage _storage;
+  static const Duration maxAge = Duration(hours: 24);
+  static String _key(String kind) => 'orbit.m17.pending.v1.$kind';
+
+  Future<void> put(OrbitModerationIntent intent) =>
+      _storage.write(key: _key(intent.kind), value: jsonEncode(intent.toJson()));
+
+  Future<OrbitModerationIntent?> read(String owner, String kind) async {
+    final raw = await _storage.read(key: _key(kind));
+    if (raw == null) return null;
+    try {
+      final intent = OrbitModerationIntent.fromJson(
+          Map<String, dynamic>.from(jsonDecode(raw) as Map));
+      final age = DateTime.now().toUtc().difference(intent.createdAt.toUtc());
+      if (intent.owner == owner && intent.kind == kind &&
+          age >= Duration.zero && age <= maxAge) {
+        return intent;
+      }
+    } catch (_) { /* Malformed sensitive entries are discarded. */ }
+    await clear(kind);
+    return null;
+  }
+
+  Future<void> clear(String kind) => _storage.delete(key: _key(kind));
+  Future<void> clearAll() async {
+    await clear('report');
+    await clear('appeal');
+  }
+}
+, caseSensitive: false)
+      .hasMatch(iso);
+  return DateTime.tryParse(hasZone ? iso : iso + 'Z')?.toUtc();
+}
+
+class OrbitModerationReceipt {
+  const OrbitModerationReceipt({
+    required this.id, required this.status, required this.createdAt,
+  });
+  final String id;
+  final String status;
+  final DateTime createdAt;
+  factory OrbitModerationReceipt.fromJson(Map<String, dynamic> data) {
+    final id = data['id'];
+    final status = data['status'];
+    final date = orbitModerationUtcTimestamp(data['created_at']);
+    if (id is! String || id.isEmpty ||
+        status != 'received' || date == null) {
+      throw const FormatException('Unconfirmed moderation report.');
+    }
+    return OrbitModerationReceipt(id: id, status: status, createdAt: date);
+  }
+}
+
+class OrbitModerationAction {
+  const OrbitModerationAction({
+    required this.id, required this.scope, required this.status,
+    required this.createdAt, this.endsAt,
+  });
+  final String id, scope, status;
+  final DateTime createdAt;
+  final DateTime? endsAt;
+
+  /// The original M13 restriction automatically expires. The audit row stays
+  /// 'active' as recorded, but must never be represented as an active block
+  /// once its exact server-authoritative expiry has passed.
+  String get effectiveStatus {
+    if (status == 'active' && scope == 'messaging_send' &&
+        endsAt != null && !DateTime.now().toUtc().isBefore(endsAt!.toUtc())) {
+      return 'expired';
+    }
+    return status;
+  }
+
+  factory OrbitModerationAction.fromJson(Map<String, dynamic> data) {
+    final id = data['id'], scope = data['scope'], status = data['status'];
+    final date = orbitModerationUtcTimestamp(data['created_at']);
     final endRaw = data['ends_at'];
     final end = endRaw == null ? null : DateTime.tryParse(endRaw as String);
     if (id is! String || id.isEmpty ||
@@ -259,7 +412,7 @@ class OrbitModerationAppeal {
   final DateTime? decidedAt;
   factory OrbitModerationAppeal.fromJson(Map<String, dynamic> data) {
     final id = data['id'], status = data['status'];
-    final date = DateTime.tryParse(data['created_at'] as String? ?? '');
+    final date = orbitModerationUtcTimestamp(data['created_at']);
     if (id is! String || id.isEmpty ||
         !['pending','upheld','reversed'].contains(status) || date == null) {
       throw const FormatException('Invalid appeal response.');
