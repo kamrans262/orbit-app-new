@@ -124,6 +124,21 @@ class OrbitModerationRepository {
     return items.map(OrbitModerationAppeal.fromJson).toList(growable: false);
   }
 
+  /// Atomic view-model ownership, not atomic server reads. Never mix
+  /// reports from a previous account with a new account's sanctions.
+  Future<OrbitModerationHistorySnapshot> myHistory() async {
+    final actor = await owner();
+    final reports = await myReports();
+    final actions = await myActions();
+    final appeals = await myAppeals();
+    if (await owner() != actor) {
+      throw OrbitIdentityException('Your Orbit account has changed.', 401);
+    }
+    return OrbitModerationHistorySnapshot(
+      reports: reports, actions: actions, appeals: appeals,
+    );
+  }
+
   Future<OrbitModerationAppeal> appeal(String actionId,
       {String? statement}) async {
     final actor = await owner();
@@ -164,6 +179,15 @@ class OrbitModerationRepository {
 
   static bool _sameBody(Map<String, Object?> a, Map<String, Object?> b) =>
       jsonEncode(a) == jsonEncode(b);
+}
+
+class OrbitModerationHistorySnapshot {
+  const OrbitModerationHistorySnapshot({
+    required this.reports, required this.actions, required this.appeals,
+  });
+  final List<OrbitModerationReceipt> reports;
+  final List<OrbitModerationAction> actions;
+  final List<OrbitModerationAppeal> appeals;
 }
 
 class OrbitModerationReceipt {

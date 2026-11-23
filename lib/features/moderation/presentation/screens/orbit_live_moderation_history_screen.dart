@@ -49,14 +49,12 @@ class _OrbitLiveModerationHistoryScreenState
       _appeals = const [];
     });
     try {
-      final reports = await _repository.myReports();
-      final actions = await _repository.myActions();
-      final appeals = await _repository.myAppeals();
+      final snapshot = await _repository.myHistory();
       if (!mounted) return;
       setState(() {
-        _reports = reports;
-        _actions = actions;
-        _appeals = appeals;
+        _reports = snapshot.reports;
+        _actions = snapshot.actions;
+        _appeals = snapshot.appeals;
       });
     } catch (_) {
       if (mounted) {

@@ -45,7 +45,9 @@ class ReportUserScreen extends StatefulWidget {
   }) {
     final moderation = repository ?? OrbitModerationRepository();
     return ReportUserScreen(
-      onSubmit: (request) async => await moderation.submitReport(request),
+      onSubmit: (request) async {
+        await moderation.submitReport(request);
+      },
       args: ReportUserArgs(
         userId: userId,
         displayName: displayName,

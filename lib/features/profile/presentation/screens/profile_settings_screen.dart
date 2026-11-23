@@ -23,6 +23,7 @@ import 'orbit_live_blocked_users_screen.dart';
 import 'privacy_setting_screen.dart';
 import '../../../../core/popups/orbit_popup_variants.dart';
 import '../../../friends/presentation/screens/orbit_live_friends_screen.dart';
+import '../../../moderation/presentation/screens/orbit_live_moderation_history_screen.dart';
 
 abstract final class SettingsKeys {
   static const scrollView = Key('settings_scroll_view');
@@ -190,6 +191,11 @@ class SettingsScreen extends StatelessWidget {
                               label: 'Blocked Users',
                               override: onBlockedUsersPressed,
                             ),
+                            onReportsAppealsPressed: () => _handleDestination(
+                              context,
+                              label: 'Reports & Appeals',
+                              override: null,
+                            ),
                             onPrivacySettingsPressed: () => _handleDestination(
                               context,
                               label: 'Privacy Settings',
@@ -247,6 +253,14 @@ class SettingsScreen extends StatelessWidget {
   }) {
     if (override != null) {
       override();
+      return;
+    }
+    if (label == 'Reports & Appeals') {
+      Navigator.of(context).push<void>(
+        AppFadeSlidePageRoute<void>(
+          builder: (_) => const OrbitLiveModerationHistoryScreen(),
+        ),
+      );
       return;
     }
     if (label == 'Subscription') {
@@ -426,6 +440,7 @@ class _SettingsCard extends StatelessWidget {
     required this.onFriendsPressed,
     required this.onNotificationPressed,
     required this.onBlockedUsersPressed,
+    required this.onReportsAppealsPressed,
     required this.onPrivacySettingsPressed,
     required this.onSosSettingsPressed,
     required this.onMoreMenuPressed,
@@ -440,6 +455,7 @@ class _SettingsCard extends StatelessWidget {
   final VoidCallback onFriendsPressed;
   final VoidCallback onNotificationPressed;
   final VoidCallback onBlockedUsersPressed;
+  final VoidCallback onReportsAppealsPressed;
   final VoidCallback onPrivacySettingsPressed;
   final VoidCallback onSosSettingsPressed;
   final VoidCallback onMoreMenuPressed;
@@ -481,6 +497,12 @@ class _SettingsCard extends StatelessWidget {
         icon: Icons.person_off_outlined,
         label: 'Blocked Users',
         onTap: onBlockedUsersPressed,
+      ),
+      _SettingsEntry(
+        id: 'reports_appeals',
+        icon: Icons.flag_outlined,
+        label: 'Reports & Appeals',
+        onTap: onReportsAppealsPressed,
       ),
       _SettingsEntry(
         id: 'privacy',
