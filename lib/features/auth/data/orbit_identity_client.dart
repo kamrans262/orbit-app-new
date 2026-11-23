@@ -705,191 +705,21 @@ class OrbitIdentityClient {
       _storage.delete(key: _circlesCacheKey);
 
 
-  /// Authenticated M20 static creative image. The API returns a *signed*
-  /// private URL, but the image still requires the existing bearer/session.
-  /// Never send the bearer token to an external host or follow redirects.
-  Future<Uint8List> advertisingAsset(String signedUrl, {
-    int maxBytes=4*1024*1024, bool retry=true,
+  /// M20 private static ad creative: signed URL *and* trusted-device bearer.
+  /// Uses only the current Orbit API origin; redirects are prohibited.
+  Future<Uint8List> advertisingAsset(String signedUrl,{
+    int maxBytes=4*1024*1024,bool retry=true,
   }) async {
-    final uri=Uri.tryParse(signedUrl);
-    final base=Uri.parse(_origin);
-    final valid=uri!=null && uri.scheme=='https'
-        && uri.origin==base.origin && uri.userInfo.isEmpty
-        && !uri.hasFragment
-        && RegExp(r'^/api/v1/ads/creatives/[0-9a-fA-F-]{36}/asset
-  /// API. No refresh token, access token or media key is sent to an external
-  /// storage URL. Bound to a maximum response to avoid device memory attacks.
-  Future<Uint8List> mediaBinaryRequest(String method,String path,{
-    Uint8List? body, Map<String,String> headers=const {},
-    int maxResponseBytes=27*1024*1024, bool retry=true,
-  }) async {
-    if(!path.startsWith('/media/') || path.startsWith('//') ||
-       path.contains('..') || path.contains('://') ||
-       !['GET','PUT'].contains(method)) {
-      throw ArgumentError.value(path,'path','Unsafe private-media API route');
-    }
-    if(_access==null)await refresh();
-    final request=http.Request(method,Uri.parse('$_origin$path'));
-    request.headers['Accept']='application/octet-stream';
-    if(_access!=null)request.headers['Authorization']='Bearer $_access';
-    request.headers.addAll(headers);
-    if(body!=null) {
-      if(body.length>1024*1024)throw ArgumentError('Private media chunk too large.');
-      request.headers['Content-Type']='application/octet-stream';
-      request.bodyBytes=body;
-    }
-    late final http.StreamedResponse response;
-    try {
-      response=await _http.send(request).timeout(const Duration(seconds:90));
-    } catch (_) {
-      throw OrbitIdentityException('Unable to transfer encrypted media.');
-    }
-    if(response.statusCode==401 && retry) {
-      await response.stream.drain<void>();
-      _access=null;
-      await refresh();
-      return mediaBinaryRequest(method,path,body:body,headers:headers,
-          maxResponseBytes:maxResponseBytes,retry:false);
-    }
-    final buffered=BytesBuilder(copy:false);
-    var total=0;
-    try {
-      await for(final chunk in response.stream.timeout(
-          const Duration(seconds:90))) {
-        total+=chunk.length;
-        if(total>maxResponseBytes)throw OrbitIdentityException(
-            'Encrypted media response exceeded safe limits.',413);
-        buffered.add(chunk);
-      }
-    } catch (_) {
-      throw OrbitIdentityException('Encrypted media transfer was interrupted.');
-    }
-    if(response.statusCode<200 || response.statusCode>=300) {
-      throw OrbitIdentityException('Encrypted media transfer was denied.',
-          response.statusCode);
-    }
-    return buffered.toBytes();
-  }
-
-  /// Stream authenticated PRIVATE ciphertext to an app-owned temporary
-  /// file. Unlike mediaBinaryRequest, memory use is bounded by one network
-  /// chunk; no bearer token is ever sent to a signed storage URL.
-  /// A partial file is deleted on an interruption or response-size failure.
-  Future<int> mediaBinaryDownloadToFile(String path,{
-    required File destination,int maxResponseBytes=251*1024*1024,
-    bool retry=true,
-  }) async {
-    if(!path.startsWith('/media/') ||path.startsWith('//') ||
-       path.contains('..') ||path.contains('://') ||
-       maxResponseBytes<=0 ||maxResponseBytes>251*1024*1024){
-      throw ArgumentError.value(path,'path','Unsafe private ciphertext download');
-    }
-    if(_access==null)await refresh();
-    final request=http.Request('GET',Uri.parse('$_origin$path'));
-    request.followRedirects=false;
-    request.headers['Accept']='application/octet-stream';
-    if(_access!=null)request.headers['Authorization']='Bearer $_access';
-    late final http.StreamedResponse response;
-    try{
-      response=await _http.send(request).timeout(const Duration(seconds:90));
-    }catch(_){
-      throw OrbitIdentityException('Private encrypted download unavailable.');
-    }
-    if(response.statusCode==401 && retry){
-      await response.stream.drain<void>();
-      _access=null;
-      await refresh();
-      return mediaBinaryDownloadToFile(path,destination:destination,
-        maxResponseBytes:maxResponseBytes,retry:false);
-    }
-    if(response.statusCode!=200 ||
-       (response.contentLength??0)>maxResponseBytes){
-      await response.stream.drain<void>();
-      throw OrbitIdentityException('Private ciphertext download denied.',
-        response.statusCode);
-    }
-    if(await destination.exists()){
-      await response.stream.drain<void>();
-      throw StateError('Private ciphertext destination already exists.');
-    }
-    final output=await destination.open(mode:FileMode.write);
-    var total=0;
-    var completed=false;
-    try{
-      await for(final chunk in response.stream.timeout(
-          const Duration(seconds:90))){
-        total+=chunk.length;
-        if(total>maxResponseBytes){
-          throw OrbitIdentityException('Private ciphertext download too large.',413);
-        }
-        await output.writeFrom(chunk);
-      }
-      if(total==0)throw const FormatException('Empty ciphertext download.');
-      await output.flush();
-      completed=true;
-      return total;
-    }finally{
-      await output.close();
-      if(!completed && await destination.exists())await destination.delete();
-    }
-  }
-
-  Future<Map<String, dynamic>> socialRequest(String method, String path,
-      {Map<String, Object?>? body, String? idempotencyKey}) {
-    if (!path.startsWith('/') || path.startsWith('//') ||
-        path.contains('..') || path.contains('://')) {
-      throw ArgumentError.value(path, 'path', 'Unsafe API path');
-    }
-    return _send(method, path, body: body, protected: true,
-      idempotencyKey:idempotencyKey);
-  }
-
-  Future<Map<String, dynamic>> currentUser() =>
-      _send('GET', '/me', protected: true);
-
-  Future<void> linkIdentity(String channel, String recipient, String code) async {
-    await _send('POST', '/me/identities/link', protected: true,
-      body: <String, Object?>{
-        'channel': channel,
-        'recipient': recipient.trim(),
-        'code': code.trim(),
-      });
-  }
-
-  Future<void> updateProfileBasics(String displayName, String username, {String? bio}) async {
-    await _send('PATCH', '/me/profile-basics', protected: true,
-        body: <String, Object?>{
-          'display_name': displayName.trim(),
-          'username': username.trim(),
-          if (bio != null) 'bio': bio.trim(),
-        });
-  }
-
-  Future<List<Map<String, dynamic>>> devices() async {
-    final response = await _send('GET', '/me/devices', protected: true);
-    return (response['data'] as List<dynamic>)
-        .map((item) => Map<String, dynamic>.from(item as Map)).toList();
-  }
-
-  Future<void> renameDevice(String id, String name) async {
-    await _send('PATCH', '/me/devices/$id',
-        protected: true, body: <String, Object?>{'name': name});
-  }
-
-  Future<void> revokeDevice(String id) async =>
-      _send('DELETE', '/me/devices/$id', protected: true);
-
-  Future<void> approveDevice(String id) async =>
-      _send('POST', '/me/devices/$id/approve',
-          protected: true, body: <String, Object?>{});
-}
-)
-            .hasMatch(uri.path)
-        && uri.queryParameters['decision']!=null
-        && uri.queryParameters['expires']!=null
-        && uri.queryParameters['signature']!=null;
-    if(!valid || maxBytes<1 || maxBytes>4*1024*1024){
-      throw ArgumentError.value(signedUrl,'signedUrl','Unsafe private ad image URL');
+    final uri=Uri.tryParse(signedUrl),base=Uri.parse(_origin);
+    final valid=uri!=null&&uri.scheme=='https'&&uri.origin==base.origin
+        &&uri.userInfo.isEmpty&&!uri.hasFragment
+        &&RegExp(r'^/api/v1/ads/creatives/[0-9a-fA-F-]{36}/asset$')
+          .hasMatch(uri.path)
+        &&uri.queryParameters['decision']!=null
+        &&uri.queryParameters['expires']!=null
+        &&uri.queryParameters['signature']!=null;
+    if(!valid||maxBytes<1||maxBytes>4*1024*1024){
+      throw ArgumentError.value(signedUrl,'signedUrl','Unsafe ad asset URL');
     }
     if(_access==null)await refresh();
     final request=http.Request('GET',uri!)
@@ -902,30 +732,29 @@ class OrbitIdentityClient {
     }catch(_){
       throw OrbitIdentityException('Sponsored image unavailable.');
     }
-    if(response.statusCode==401 && retry){
+    if(response.statusCode==401&&retry){
       await response.stream.drain<void>();
       _access=null;
       await refresh();
       return advertisingAsset(signedUrl,maxBytes:maxBytes,retry:false);
     }
     final mime=(response.headers['content-type']??'')
-        .split(';').first.trim().toLowerCase();
-    if(response.statusCode!=200 || !const <String>[
-      'image/jpeg','image/png','image/webp',
-    ].contains(mime) || (response.contentLength??0)>maxBytes){
+      .split(';').first.trim().toLowerCase();
+    if(response.statusCode!=200||
+       !const <String>['image/jpeg','image/png','image/webp'].contains(mime)||
+       (response.contentLength??0)>maxBytes){
       await response.stream.drain<void>();
-      throw OrbitIdentityException('Sponsored image access denied.',
-        response.statusCode);
+      throw OrbitIdentityException('Sponsored image access denied.',response.statusCode);
     }
-    final bytes=BytesBuilder(copy:false);
+    final buffer=BytesBuilder(copy:false);
     var count=0;
     try{
-      await for(final chunk in response.stream.timeout(const Duration(seconds:20))){
-        count+=chunk.length;
+      await for(final part in response.stream.timeout(const Duration(seconds:20))){
+        count+=part.length;
         if(count>maxBytes){
           throw OrbitIdentityException('Sponsored image exceeds safe limits.',413);
         }
-        bytes.add(chunk);
+        buffer.add(part);
       }
     }on OrbitIdentityException{
       rethrow;
@@ -933,7 +762,7 @@ class OrbitIdentityClient {
       throw OrbitIdentityException('Sponsored image transfer interrupted.');
     }
     if(count==0)throw const FormatException('Empty sponsored image.');
-    return bytes.toBytes();
+    return buffer.toBytes();
   }
 
   /// Fetch/submit *only* binary ciphertext through the authenticated Orbit
