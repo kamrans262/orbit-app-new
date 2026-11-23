@@ -97,11 +97,11 @@ class _OrbitLiveSosIncidentScreenState extends State<OrbitLiveSosIncidentScreen>
 
   SosResponderSession _toSession(OrbitSosIncident incident) {
     final records=incident.responders.map((r)=>SosResponderPerson(
-      id:r.id,name:'Responder',status:r.state=='acknowledged'
+      id:r.id,name:r.name,status:r.state=='acknowledged'
         ?'Acknowledged SOS':'Awaiting acknowledgement',
     )).toList(growable:false);
     return SosResponderSession(id:incident.id,serverConfirmed:incident.serverAccepted,
-      originatorName:incident.role=='initiator'?'You':'SOS initiator',
+      originatorName:incident.role=='initiator'?'You':incident.initiatorName,
       circleName:'Private SOS',status:incident.status,
       responders:records,isOriginator:incident.role=='initiator',
       deliveryLabel:incident.deliveryDescription,

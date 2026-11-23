@@ -133,4 +133,20 @@ void main(){
     expect(AppRoutes.sosInbox,'/sos/inbox');
     expect(AppRoutes.sos,isNot(AppRoutes.shareLocation));
   });
+  test('M16 Stage 4 authorized incident labels cannot be invented locally',(){
+    final named=OrbitSosIncident.fromJson({
+      ...sosRecord(),
+      'initiator_name':'Verified initiator',
+      'recipients':[{
+        'user_id':'member-1','source':'trusted','state':'pending',
+        'display_name':'Verified responder',
+      }],
+    });
+    expect(named.initiatorName,'Verified initiator');
+    expect(named.responders.single.name,'Verified responder');
+    final old=OrbitSosIncident.fromJson(sosRecord());
+    expect(old.initiatorName,'Orbit contact');
+    expect(old.responders.single.name,'Orbit contact');
+  });
+
 }

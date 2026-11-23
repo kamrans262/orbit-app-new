@@ -72,7 +72,7 @@ class _OrbitLiveSosInboxScreenState extends State<OrbitLiveSosInboxScreen>
                 ListTile(key:ValueKey('sos-incident-${item.id}'),
                   leading:Icon(Icons.sos_rounded,color:item.status=='active'
                     ?const Color(0xFFE84040):AppColors.textSecondary),
-                  title:Text(item.role=='responder'?'SOS from an Orbit contact':'Your SOS',
+                  title:Text(item.role=='responder'?'SOS from ${item.initiatorName}':'Your SOS',
                     style:AppTypography.body.copyWith(fontWeight:FontWeight.w600)),
                   subtitle:Text('${item.status} · ${item.deliveryDescription}',
                     maxLines:3,overflow:TextOverflow.ellipsis),

@@ -23,6 +23,7 @@ import '../../messaging/data/orbit_messaging_vodozemac_store.dart';
 import '../../notifications/data/orbit_notification_push_runtime.dart';
 import '../../plans/data/orbit_plan_pending_vault.dart';
 import '../../plans/data/orbit_plan_offline_cache.dart';
+import '../../sos/data/orbit_sos_repository.dart';
 
 enum OrbitRestoreState { signedOut, authenticated, deviceRegistration, deletionPending, offlineProfile }
 
@@ -249,6 +250,9 @@ class OrbitIdentityClient {
       final nextUser = user['id'] as String;
       final lastUser = await _storage.read(key: _userIdKey);
       if (lastUser != nextUser) {
+        // M16: never carry a previous account's encrypted uncertain SOS
+        // request/coordinates into another identity session.
+        try { await OrbitSosPendingVault().clear(); } catch (_) {}
         if(lastUser != null && lastUser.isNotEmpty) {
           try { await OrbitMediaOutbox().purge(lastUser); }
           catch (_) { /* Block cross-account access even if disk cleanup fails. */ }
@@ -391,6 +395,7 @@ class OrbitIdentityClient {
     // identity switch. This must not rely on a Plans screen being mounted.
     try { await OrbitPlanPendingVault().clear(); } catch (_) {}
     try { await OrbitPlanOfflineCache().clear(); } catch (_) {}
+    try { await OrbitSosPendingVault().clear(); } catch (_) {}
     final oldMediaOwner=await _storage.read(key:_userIdKey);
     await OrbitM5FirebaseChangeSource.instance.stop();
     if(oldMediaOwner != null && oldMediaOwner.isNotEmpty) {

@@ -13,9 +13,9 @@ class OrbitSosIncident {
     required this.acknowledgements, required this.pushAccepted,
     required this.inAppAvailable, required this.locationActive,
     required this.recordingConsented, required this.recordingActive,
-    this.myResponse});
+    this.initiatorName='Orbit contact',this.myResponse});
 
-  final String id, status, role;
+  final String id, status, role, initiatorName;
   final int revision, acknowledgements, pushAccepted;
   final DateTime createdAt;
   final bool serverAccepted, inAppAvailable, locationActive;
@@ -38,6 +38,9 @@ class OrbitSosIncident {
     return OrbitSosIncident(
       id: id, status: status, revision: revision.toInt(),
       role: data['my_role'] == 'responder' ? 'responder' : 'initiator',
+      initiatorName: data['initiator_name'] is String &&
+          (data['initiator_name'] as String).trim().isNotEmpty
+          ?(data['initiator_name'] as String).trim():'Orbit contact',
       createdAt: DateTime.tryParse(data['created_at'] as String? ?? '')
           ?? DateTime.fromMillisecondsSinceEpoch(0),
       serverAccepted: data['server_accepted'] == true,
@@ -67,10 +70,13 @@ class OrbitSosIncident {
 
 class OrbitSosResponder {
   const OrbitSosResponder({required this.id, required this.source,
-    required this.state});
-  final String id, source, state;
+    required this.state,this.name='Orbit contact'});
+  final String id, source, state, name;
   factory OrbitSosResponder.fromJson(Map<String,dynamic> data) =>
       OrbitSosResponder(id:data['user_id'] as String,
+        name:data['display_name'] is String &&
+          (data['display_name'] as String).trim().isNotEmpty
+            ?(data['display_name'] as String).trim():'Orbit contact',
         source:data['source'] as String? ?? 'trusted',
         state:data['state'] as String? ?? 'pending');
 }
