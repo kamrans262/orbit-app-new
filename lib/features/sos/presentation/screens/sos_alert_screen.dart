@@ -11,6 +11,7 @@ import '../widgets/sos_header.dart';
 import '../widgets/sos_quick_actions.dart';
 import '../widgets/sos_trigger.dart';
 import '../../../../core/popups/orbit_popup_variants.dart';
+import '../../../../core/popups/orbit_popup_modal.dart';
 
 class SosAlertScreen extends StatefulWidget {
   const SosAlertScreen({
@@ -123,6 +124,31 @@ class _SosAlertScreenState extends State<SosAlertScreen> {
         builder: (_) => const SosResponderMapScreen(),
       ),
     );
+  }
+
+  Future<void> _reviewPending() async {
+    if(!mounted)return;
+    final selected=await showOrbitPopupModal<String>(
+      context:context,
+      builder:(popupContext)=>OrbitPopupModal(
+        title:'Unconfirmed SOS request',
+        description:'Orbit cannot yet confirm whether the previous SOS '
+          'reached the server. Review SOS history, or retry the same request '
+          'instead of creating a duplicate alert.',
+        showCloseButton:true,
+        primaryAction:OrbitPopupPrimaryButton(
+          label:'Retry same SOS request',
+          onPressed:()=>Navigator.of(popupContext).pop('retry'),
+        ),
+        secondaryAction:OrbitPopupTextButton(
+          label:'Discard local retry',
+          onPressed:()=>Navigator.of(popupContext).pop('discard'),
+        ),
+      ),
+    );
+    if(!mounted)return;
+    if(selected=='retry')widget.onRetryPending?.call();
+    if(selected=='discard')widget.onDiscardPending?.call();
   }
 
   void _handleQuickAction(SosQuickActionType type) {
@@ -249,21 +275,16 @@ class _SosAlertScreenState extends State<SosAlertScreen> {
                         ),
                       ],
                       if(widget.pendingUnconfirmed) ...<Widget>[
-                        const SizedBox(height: 16),
-                        const Text(
-                          'Previous SOS is not confirmed. It may have reached Orbit. Review history or retry the same request.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(fontFamily: AppTypography.fontFamily,
-                            fontSize: 12,height: 1.4,color: Color(0xFFFFB5B5)),
+                        const SizedBox(height:16),
+                        TextButton.icon(
+                          onPressed:_reviewPending,
+                          icon:const Icon(Icons.warning_amber_rounded,
+                            color:Colors.white70),
+                          label:const Text('Review unconfirmed SOS',
+                            style:TextStyle(
+                              fontFamily:AppTypography.fontFamily,
+                              fontSize:12,color:Colors.white70)),
                         ),
-                        Wrap(alignment:WrapAlignment.center,spacing:12,children:[
-                          if(widget.onRetryPending!=null)TextButton(
-                            onPressed:widget.onRetryPending,
-                            child:const Text('Retry unconfirmed SOS')),
-                          if(widget.onDiscardPending!=null)TextButton(
-                            onPressed:widget.onDiscardPending,
-                            child:const Text('Discard local retry')),
-                        ]),
                       ],
                       const SizedBox(height: 20),
                       TextButton.icon(

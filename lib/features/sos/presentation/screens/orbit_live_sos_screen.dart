@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/popups/orbit_popup_modal.dart';
+import '../../../../core/widgets/app_text_field.dart';
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../../auth/data/orbit_identity_client.dart';
 import '../../../circles/data/orbit_circle_repository.dart';
@@ -109,8 +111,9 @@ class _OrbitLiveSosScreenState extends State<OrbitLiveSosScreen>
     final phone=await showOrbitPopupModal<String>(context:context,
       builder:(dialog)=>OrbitPopupModal(title:'Call emergency services',
         description:'Enter your local emergency number to open your phone dialer. Orbit does not place calls itself.',
-        content:TextField(controller:controller,keyboardType:TextInputType.phone,
-          maxLength:20,decoration:const InputDecoration(labelText:'Local emergency number')),
+        content:AppTextField(controller:controller,keyboardType:TextInputType.phone,
+          label:'Local emergency number',hintText:'Number to dial',
+          inputFormatters:[LengthLimitingTextInputFormatter(20)]),
         primaryAction:OrbitPopupPrimaryButton(label:'Open dialer',onPressed:(){
           final value=controller.text.trim();
           if(RegExp(r'^\+?[0-9]{2,18}$').hasMatch(value)){

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_screen_header.dart';
+import '../../../../core/widgets/app_primary_button.dart';
+import '../../../../core/popups/orbit_popup_modal.dart';
 import '../../../circles/presentation/widgets/orbit_circle_sheet.dart';
 import '../../../friends/data/orbit_social_repository.dart';
 import '../../data/orbit_sos_repository.dart';
@@ -82,54 +84,147 @@ class _OrbitLiveSosContactsScreenState extends State<OrbitLiveSosContactsScreen>
     if(person==null||!mounted)return;
     await _mutate(() async{await _repo.addContact(person.id);});
   }
+  /// The existing Circle sheet handles all contact actions. No new card,
+  /// action menu, bottom-sheet system, or independent button styling.
+  Future<void> _manageContact(OrbitSosContact contact,
+      String displayName,bool outgoing) async {
+    if(_busy || !mounted)return;
+    final choice=await showOrbitCircleSheet<String>(
+      context:context,title:displayName,
+      builder:(sheet)=>Column(
+        mainAxisSize:MainAxisSize.min,
+        crossAxisAlignment:CrossAxisAlignment.stretch,
+        children:[
+          Text(_contactStatus(contact,outgoing),
+            style:AppTypography.bodyMuted),
+          const SizedBox(height:16),
+          if(!outgoing && contact.state=='requested') ...[
+            OrbitCircleSheetAction(
+              title:'Accept trusted contact',
+              icon:Icons.check_circle_outline,
+              onTap:()=>Navigator.of(sheet).pop('accepted'),
+            ),
+            const SizedBox(height:10),
+            OrbitCircleSheetAction(
+              title:'Decline request',
+              icon:Icons.close_rounded,
+              onTap:()=>Navigator.of(sheet).pop('declined'),
+            ),
+            const SizedBox(height:10),
+          ],
+          OrbitCircleSheetAction(
+            title:'Remove trusted contact',
+            icon:Icons.person_remove_outlined,
+            destructive:true,
+            onTap:()=>Navigator.of(sheet).pop('remove'),
+          ),
+        ],
+      ),
+    );
+    if(choice==null || !mounted)return;
+    if(choice=='remove') {
+      final confirmed=await showOrbitPopupModal<bool>(
+        context:context,
+        builder:(dialog)=>OrbitPopupModal(
+          title:'Remove trusted contact?',
+          description:'This removes the SOS contact association. '
+              'The person will no longer be an eligible trusted responder.',
+          primaryAction:OrbitPopupDestructiveButton(
+            label:'Remove',
+            onPressed:()=>Navigator.of(dialog).pop(true),
+          ),
+          secondaryAction:OrbitPopupTextButton(
+            label:'Cancel',
+            onPressed:()=>Navigator.of(dialog).pop(false),
+          ),
+        ),
+      );
+      if(confirmed!=true || !mounted)return;
+    }
+    await _mutate(() async {
+      if(choice=='accepted' || choice=='declined'){
+        await _repo.decideContact(contact.id,choice);
+      }else if(choice=='remove'){
+        await _repo.removeContact(contact.id);
+      }
+    });
+  }
+
+  String _contactStatus(OrbitSosContact contact,bool outgoing) =>
+    switch(contact.state){
+      'accepted'=>'Accepted trusted SOS contact',
+      'requested'=>outgoing
+        ?'Request awaiting acceptance'
+        :'Your consent is required',
+      'declined'=>'Request declined',
+      _=>'Contact status unavailable',
+    };
+
   @override
-  Widget build(BuildContext context)=>Scaffold(backgroundColor:AppColors.background,
-    body:SafeArea(child:Padding(padding:const EdgeInsets.fromLTRB(20,20,20,16),child:
-      Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-        const AppScreenHeader(title:'Emergency Contacts',prominent:true),
-        const SizedBox(height:14),
-        Text('A friend only becomes your trusted SOS contact after accepting your request.',
-          style:AppTypography.body.copyWith(color:AppColors.textSecondary,fontSize:12)),
-        const SizedBox(height:10),
-        SizedBox(width:double.infinity,child:ElevatedButton.icon(
-          onPressed:_busy?null:_chooseFriend,icon:const Icon(Icons.person_add_alt_1_outlined),
-          label:const Text('Add trusted contact'))),
-        const SizedBox(height:12),
-        Expanded(child:_loading?const Center(child:CircularProgressIndicator())
-          :_error!=null?Center(child:Column(mainAxisSize:MainAxisSize.min,children:[
-              Text(_error!,textAlign:TextAlign.center),
-              TextButton(onPressed:_load,child:const Text('Retry')),
-            ])):_contacts.isEmpty?const Center(child:Text('No trusted contact requests yet.')):
-            RefreshIndicator(onRefresh:_load,child:ListView.separated(
-              itemCount:_contacts.length,separatorBuilder:(_,__)=>const SizedBox(height:10),
-              itemBuilder:(context,index){
-                final contact=_contacts[index];
-                final outgoing=contact.ownerId==_owner;
-                final personId=outgoing?contact.recipientId:contact.ownerId;
-                final name=_friendNames[personId]??'Orbit contact';
-                return Card(child:Padding(padding:const EdgeInsets.all(13),child:
-                  Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-                    Text(outgoing?name:'Request from $name',
-                      style:AppTypography.body.copyWith(fontWeight:FontWeight.w600)),
-                    Text('Status: ${contact.state}. ${outgoing?"Awaiting your friend’s choice":"Your consent is required"}.',
-                      style:AppTypography.body.copyWith(fontSize:12)),
-                    const SizedBox(height:8),
-                    Wrap(spacing:8,children:[
-                      if(!outgoing && contact.state=='requested')...[
-                        TextButton(onPressed:_busy?null:()=>_mutate(() async{
-                          await _repo.decideContact(contact.id,'accepted');}),
-                          child:const Text('Accept')),
-                        TextButton(onPressed:_busy?null:()=>_mutate(() async{
-                          await _repo.decideContact(contact.id,'declined');}),
-                          child:const Text('Decline')),
+  Widget build(BuildContext context)=>Scaffold(
+    backgroundColor:AppColors.background,
+    body:SafeArea(child:Center(child:ConstrainedBox(
+      constraints:const BoxConstraints(maxWidth:650),
+      child:Padding(
+        padding:const EdgeInsets.fromLTRB(20,20,20,12),
+        child:Column(
+          crossAxisAlignment:CrossAxisAlignment.start,
+          children:[
+            const AppScreenHeader(title:'Emergency Contacts',prominent:true),
+            const SizedBox(height:18),
+            Text(
+              'A friend becomes a trusted SOS contact only after accepting.',
+              style:AppTypography.bodyMuted,
+            ),
+            const SizedBox(height:16),
+            AppPrimaryButton(
+              label:'Add trusted contact',
+              enabled:!_busy,
+              onPressed:()=>unawaited(_chooseFriend()),
+            ),
+            const SizedBox(height:18),
+            Expanded(
+              child:_loading
+                ?const Center(child:CircularProgressIndicator(
+                    color:AppColors.primaryEnd))
+                :_error!=null
+                  ?Center(child:Column(
+                      mainAxisSize:MainAxisSize.min,
+                      children:[
+                        Text(_error!,style:AppTypography.bodyMuted,
+                          textAlign:TextAlign.center),
+                        TextButton(onPressed:()=>unawaited(_load()),
+                          child:const Text('Try again')),
                       ],
-                      TextButton(onPressed:_busy?null:()=>_mutate(() async{
-                        await _repo.removeContact(contact.id);}),
-                        child:const Text('Remove')),
-                    ]),
-                  ])));
-              },
-            ))),
-      ]))),
+                    ))
+                  :_contacts.isEmpty
+                    ?Center(child:Text('No trusted contact requests yet.',
+                        style:AppTypography.bodyMuted))
+                    :RefreshIndicator(
+                        onRefresh:_load,
+                        child:ListView.separated(
+                          physics:const AlwaysScrollableScrollPhysics(),
+                          itemCount:_contacts.length,
+                          separatorBuilder:(_,__)=>const SizedBox(height:10),
+                          itemBuilder:(context,index){
+                            final contact=_contacts[index];
+                            final outgoing=contact.ownerId==_owner;
+                            final personId=outgoing
+                              ?contact.recipientId:contact.ownerId;
+                            final name=_friendNames[personId]??'Orbit contact';
+                            return OrbitCircleSheetAction(
+                              title:'$name · ${_contactStatus(contact,outgoing)}',
+                              icon:Icons.person_outline_rounded,
+                              onTap:()=>unawaited(_manageContact(
+                                contact,name,outgoing)),
+                            );
+                          },
+                        ),
+                      ),
+            ),
+          ],
+        ),
+      ),
+    ))),
   );
 }

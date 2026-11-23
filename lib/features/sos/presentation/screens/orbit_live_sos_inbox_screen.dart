@@ -51,36 +51,72 @@ class _OrbitLiveSosInboxScreenState extends State<OrbitLiveSosInboxScreen>
       builder:(_)=>OrbitLiveSosIncidentScreen(incidentId:id,repository:_repo)));
     if(mounted)unawaited(_reload());
   }
+  /// Exactly the list treatment from the approved Notifications inbox:
+  /// existing header, typography, dividers and ListTile. No custom cards.
   @override
-  Widget build(BuildContext context)=>Scaffold(backgroundColor:AppColors.background,
-    body:SafeArea(child:Padding(padding:const EdgeInsets.fromLTRB(20,20,20,16),child:
-      Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-        const AppScreenHeader(title:'SOS Alerts',prominent:true),
-        const SizedBox(height:16),
-        Text('Only server-registered SOS incidents appear here. An alert in Orbit does not mean emergency services were contacted.',
-          style:AppTypography.body.copyWith(color:AppColors.textSecondary,fontSize:12)),
-        const SizedBox(height:12),
-        Expanded(child:_loading?const Center(child:CircularProgressIndicator())
-          :_error!=null?Center(child:Column(mainAxisSize:MainAxisSize.min,children:[
-            Text(_error!,textAlign:TextAlign.center),TextButton(onPressed:_reload,child:const Text('Retry')),
-          ])):_items.isEmpty?const Center(child:Text('No verified SOS alerts.')):
-          RefreshIndicator(onRefresh:_reload,child:ListView.separated(
-            itemCount:_items.length,separatorBuilder:(_,__)=>const SizedBox(height:10),
-            itemBuilder:(context,index){
-              final item=_items[index];
-              return Material(color:Colors.white,borderRadius:BorderRadius.circular(14),child:
-                ListTile(key:ValueKey('sos-incident-${item.id}'),
-                  leading:Icon(Icons.sos_rounded,color:item.status=='active'
-                    ?const Color(0xFFE84040):AppColors.textSecondary),
-                  title:Text(item.role=='responder'?'SOS from ${item.initiatorName}':'Your SOS',
-                    style:AppTypography.body.copyWith(fontWeight:FontWeight.w600)),
-                  subtitle:Text('${item.status} · ${item.deliveryDescription}',
-                    maxLines:3,overflow:TextOverflow.ellipsis),
-                  trailing:const Icon(Icons.chevron_right_rounded),
-                  onTap:()=>_open(item.id),
-                ));
-            },
-          ))),
-      ]))),
+  Widget build(BuildContext context)=>Scaffold(
+    backgroundColor:AppColors.background,
+    body:SafeArea(child:Padding(
+      padding:const EdgeInsets.fromLTRB(20,20,20,12),
+      child:Column(
+        crossAxisAlignment:CrossAxisAlignment.stretch,
+        children:[
+          const AppScreenHeader(title:'SOS Alerts',prominent:true),
+          const SizedBox(height:18),
+          Text(
+            'Only server-registered SOS incidents appear here. '
+            'Orbit does not automatically contact emergency services.',
+            style:AppTypography.bodyMuted,
+          ),
+          const SizedBox(height:12),
+          Expanded(
+            child:_loading
+              ?const Center(child:CircularProgressIndicator(
+                  color:AppColors.primaryEnd))
+              :_error!=null
+                ?Center(child:Column(
+                    mainAxisSize:MainAxisSize.min,
+                    children:[
+                      Text(_error!,textAlign:TextAlign.center,
+                        style:AppTypography.bodyMuted),
+                      TextButton(onPressed:()=>unawaited(_reload()),
+                        child:const Text('Try again')),
+                    ],
+                  ))
+                :_items.isEmpty
+                  ?Center(child:Text('No verified SOS alerts.',
+                      style:AppTypography.bodyMuted))
+                  :RefreshIndicator(
+                      onRefresh:_reload,
+                      child:ListView.separated(
+                        physics:const AlwaysScrollableScrollPhysics(),
+                        itemCount:_items.length,
+                        separatorBuilder:(_,__)=>const Divider(height:1),
+                        itemBuilder:(context,index){
+                          final incident=_items[index];
+                          final title=incident.role=='responder'
+                            ?'SOS from ${incident.initiatorName}'
+                            :'Your SOS';
+                          return ListTile(
+                            key:ValueKey('sos-incident-${incident.id}'),
+                            contentPadding:const EdgeInsets.symmetric(vertical:5),
+                            leading:const Icon(Icons.sos_rounded,
+                              color:AppColors.primaryEnd),
+                            title:Text(title,style:AppTypography.body,
+                              maxLines:2,overflow:TextOverflow.ellipsis),
+                            subtitle:Text(
+                              '${incident.status} · ${incident.deliveryDescription}',
+                              style:AppTypography.bodyMuted,
+                              maxLines:3,overflow:TextOverflow.ellipsis),
+                            trailing:const Icon(Icons.chevron_right_rounded),
+                            onTap:()=>unawaited(_open(incident.id)),
+                          );
+                        },
+                      ),
+                    ),
+          ),
+        ],
+      ),
+    )),
   );
 }
