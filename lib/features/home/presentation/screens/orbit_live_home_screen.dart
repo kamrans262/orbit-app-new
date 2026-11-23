@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../auth/data/orbit_identity_client.dart';
+import '../../../advertising/data/orbit_advertising_repository.dart';
 import '../../../circles/data/orbit_circle_repository.dart';
 import '../../../circles/presentation/screens/orbit_live_circles_screen.dart';
 import '../../../circles/presentation/screens/orbit_live_circle_detail_screen.dart';
@@ -35,12 +37,13 @@ import 'home_screen.dart';
 /// people, fabricated location/presence, or unauthorized stored thumbnails.
 class OrbitLiveHomeScreen extends StatefulWidget {
   const OrbitLiveHomeScreen({super.key,this.dashboard,this.circles,
-    this.social,this.identity,this.moments});
+    this.social,this.identity,this.moments,this.advertising});
   final OrbitDashboardRepository? dashboard;
   final OrbitCircleRepository? circles;
   final OrbitSocialRepository? social;
   final OrbitIdentityClient? identity;
   final OrbitMomentRepository? moments;
+  final OrbitAdvertisingRepository? advertising;
   @override
   State<OrbitLiveHomeScreen> createState()=>_OrbitLiveHomeScreenState();
 }
@@ -60,6 +63,12 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
   late final OrbitNotificationRepository _notifications=OrbitNotificationRepository(identity:_identity);
   late final OrbitPlanRepository _plans=OrbitPlanRepository(identity:_identity);
   late final OrbitSosRepository _sos=OrbitSosRepository(identity:_identity);
+  late final OrbitAdvertisingRepository _advertising=widget.advertising??
+      OrbitAdvertisingRepository(identity:_identity);
+  OrbitSponsoredDecision? _sponsored;
+  bool _sponsorImpressionAccepted=false;
+  bool _sponsorLoading=false;
+  int _sponsorEpoch=0;
   final Set<String> _shownSos=<String>{};
   bool _refreshingSos=false;
 
@@ -247,6 +256,12 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
   }
 
   void _clearProtected(){
+    ++_sponsorEpoch;
+    _sponsorLoading=false;
+    final ad=_sponsored;
+    if(ad!=null)unawaited(MemoryImage(ad.imageBytes).evict());
+    _sponsored=null;
+    _sponsorImpressionAccepted=false;
     for(final item in _recent) {
       final bytes=item.encryptedImageBytes;
       if(bytes!=null) unawaited(MemoryImage(bytes).evict());
@@ -497,7 +512,77 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
       }
     }finally{
       _loading=false;
-      if(mounted && _owner.isNotEmpty)unawaited(_refreshPlans());
+      if(mounted && _owner.isNotEmpty){
+        unawaited(_refreshPlans());
+        unawaited(_refreshSponsored());
+      }
+    }
+  }
+
+  /// Reuse only the existing Home promo slot. The M20 decision is checked
+  /// again every foreground refresh, never cached across accounts or pauses.
+  Future<void> _refreshSponsored() async {
+    if(_sponsorLoading||!mounted||_owner.isEmpty ||
+       WidgetsBinding.instance.lifecycleState!=AppLifecycleState.resumed ||
+       ModalRoute.of(context)?.isCurrent!=true)return;
+    _sponsorLoading=true;
+    final serial=++_sponsorEpoch;
+    final owner=_owner;
+    final previous=_sponsored;
+    if(mounted)setState(()=>_sponsored=null);
+    OrbitSponsoredDecision? next;
+    try{
+      next=await _advertising.load(OrbitAdvertisingRepository.homePlacement,
+        previous:previous);
+      if(!mounted||serial!=_sponsorEpoch||_owner!=owner ||
+         await _identity.currentLocalSocialOwner()!=owner){
+        if(next!=null&&!identical(next.imageBytes,previous?.imageBytes)){
+          unawaited(MemoryImage(next.imageBytes).evict());
+        }
+        return;
+      }
+      setState((){
+        if(previous?.id!=next?.id)_sponsorImpressionAccepted=false;
+        _sponsored=next;
+      });
+    }catch(_){
+      if(mounted&&serial==_sponsorEpoch&&_owner==owner){
+        setState((){
+          _sponsored=null;
+          _sponsorImpressionAccepted=false;
+        });
+      }
+    }finally{
+      if(previous!=null&&!identical(previous.imageBytes,next?.imageBytes)){
+        unawaited(MemoryImage(previous.imageBytes).evict());
+      }
+      if(serial==_sponsorEpoch)_sponsorLoading=false;
+    }
+  }
+
+  Future<void> _sponsorVisible(int milliseconds) async {
+    final ad=_sponsored;
+    if(ad==null||_sponsorImpressionAccepted)return;
+    try{
+      final accepted=await _advertising.impression(ad,milliseconds);
+      if(mounted&&identical(_sponsored,ad)&&accepted){
+        _sponsorImpressionAccepted=true;
+      }
+    }catch(_){
+      // No invented impression on network, policy or device failure.
+    }
+  }
+
+  Future<void> _openSponsored() async {
+    final ad=_sponsored;
+    if(ad==null||ad.expired||!_sponsorImpressionAccepted)return;
+    try{
+      final accepted=await _advertising.click(ad);
+      if(!accepted||!mounted||!identical(_sponsored,ad)||
+         await _identity.currentLocalSocialOwner()!=ad.owner)return;
+      await launchUrl(ad.destination,mode:LaunchMode.externalApplication);
+    }catch(_){
+      // Failed measurement / revocation never opens a stale advertiser URL.
     }
   }
 
@@ -618,7 +703,13 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
       QuickActionData(id:'plans',title:'Plans',icon:Icons.event_note_outlined,
         iconColor:Color(0xFF7C3AED),iconBackground:Color(0xFFF2EAFE)),
     ],
-    upcomingPlans:_upcomingPlans,promoBanner:null,
+    upcomingPlans:_upcomingPlans,
+    promoBanner:_sponsored==null?null:PromoBannerData(
+      id:_sponsored!.id,backgroundImagePath:'',logoImagePath:'',
+      title:_sponsored!.title,subtitle:_sponsored!.subtitle,
+      imageBytes:_sponsored!.imageBytes),
+    promoMinimumVisibleMs:_sponsored?.minimumVisibleMs??0,
+    onPromoVisible:(elapsed)=>unawaited(_sponsorVisible(elapsed)),
     favoritePeople:_peopleWithPresence,recentMoments:_recent,
     onNotificationPressed:()=>unawaited(_openNotifications()),
     onQuickActionPressed:(action){
@@ -640,7 +731,7 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
     },
     onPlanPressed:(plan)=>unawaited(_openPlan(plan.id)),
     onSeeAllPlansPressed:()=>unawaited(_openPlans()),
-    onPromoPressed:(){},
+    onPromoPressed:()=>unawaited(_openSponsored()),
     onSeeAllFriendsPressed:()=>Navigator.of(context).push<void>(
       MaterialPageRoute(builder:(_)=>const OrbitLiveFriendsScreen())),
     onSeeAllMomentsPressed:_openMoments,
