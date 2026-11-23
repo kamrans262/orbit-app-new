@@ -180,6 +180,16 @@ void main() {
     await expectLater(repo.myHistory(),throwsA(isA<OrbitIdentityException>()));
   });
 
+  test('M17 naive server timestamps are interpreted as UTC not local',(){
+    final plain=orbitModerationUtcTimestamp('2024-01-02 00:00:00');
+    final tagged=orbitModerationUtcTimestamp('2024-01-02T00:00:00Z');
+    expect(plain,tagged);
+    expect(plain?.isUtc,true);
+    expect(plain?.toIso8601String(),'2024-01-02T00:00:00.000Z');
+    expect(orbitModerationUtcTimestamp('invalid'),null);
+    expect(orbitModerationUtcTimestamp(null),null);
+  });
+
   test('M17 maps private appeal to its action and displays expired M13 block',(){
     final matching=OrbitModerationAppeal.fromJson({
       'id':'appeal-id','action_id':'action-id','status':'pending',
