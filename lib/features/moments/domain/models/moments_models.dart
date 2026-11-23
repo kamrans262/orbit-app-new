@@ -106,11 +106,14 @@ class MomentTextFeedItem extends MomentFeedItem {
     required this.author,
     required this.timeLabel,
     required this.text,
+    this.isCheckIn = false,
   });
 
   final MomentAuthorData author;
   final String timeLabel;
   final String text;
+  /// Existing text-card UI, repurposed for a verified M12 Check-In.
+  final bool isCheckIn;
 
   @override
   MomentFeedItemType get type => MomentFeedItemType.textPost;

@@ -79,7 +79,7 @@ class MomentTextCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 IconButton(
-                  tooltip: 'Moment options',
+                  tooltip: data.isCheckIn ? 'View Check-In' : 'Moment options',
                   onPressed: onMenuPressed,
                   iconSize: 18,
                   visualDensity: VisualDensity.compact,

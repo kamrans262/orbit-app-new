@@ -1,0 +1,92 @@
+name: Orbit M18 Flutter Activity privacy and UI preservation
+on:
+  push:
+    branches: [feature/m18-activity-flutter-2026-11-24]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  flutter-activity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Analyze added repository and approved reused UI
+        run: |
+          dart analyze lib/features/activity \
+            lib/features/moments/domain/models/moments_models.dart \
+            lib/features/moments/presentation/widgets/moment_text_card.dart \
+            lib/features/moments/presentation/screens/moments_screen.dart \
+            lib/features/moments/presentation/screens/orbit_live_moments_screen.dart \
+            lib/features/check_in/presentation/navigation/orbit_check_in_navigation.dart \
+            test/features/activity
+      - name: Verify M18 private source and existing widgets
+        run: flutter test test/features/activity
+      - name: Existing M7 and M12 approved UI regression
+        run: |
+          flutter test test/features/moments/presentation/moments_screen_test.dart
+          flutter test test/features/check_in/presentation/check_in_screen_test.dart
+          flutter test test/features/home/presentation/m8_home_sections_test.dart
+      - name: Preserve M14, M17 contracts
+        run: |
+          flutter test test/features/notifications/orbit_notification_contract_test.dart
+          flutter test test/features/moderation/orbit_m17_moderation_contract_test.dart
+
+  android-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: CI-only Firebase compile registration, never committed
+        run: |
+          test ! -e android/app/google-services.json
+          cat > android/app/google-services.json <<'EOF'
+          {
+            "project_info": {
+              "project_number": "123456789012",
+              "project_id": "orbit-ci-compile-only",
+              "storage_bucket": "orbit-ci-compile-only.invalid"
+            },
+            "client": [{
+              "client_info": {
+                "mobilesdk_app_id": "1:123456789012:android:abcdef0123456789",
+                "android_client_info": {"package_name": "com.orbit.orbit_app"}
+              },
+              "api_key": [{"current_key": "CI_ONLY_NOT_A_REAL_GOOGLE_API_KEY"}]
+            }],
+            "configuration_version": "1"
+          }
+          EOF
+          test -z "$(git ls-files android/app/google-services.json)"
+      - run: flutter build apk --debug
+      - run: test -s build/app/outputs/flutter-apk/app-debug.apk
+
+  ios-no-sign-build:
+    runs-on: macos-15
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter build ios --debug --no-codesign
+      - run: test -d build/ios/iphoneos/Runner.app

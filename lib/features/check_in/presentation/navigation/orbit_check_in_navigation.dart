@@ -407,6 +407,11 @@ abstract final class OrbitCheckInNavigation {
     }
   }
 
+  /// Reuse exactly the approved Check-In detail sheet from Activity.
+  static Future<void> openDetail(BuildContext context,String id,
+      {OrbitCheckInRepository? repository}) =>
+    _openFreshDetail(context,repository??OrbitCheckInRepository(),id);
+
   static Future<void> showFeed(BuildContext context,
       {OrbitCheckInRepository? repository,String? cursor}) async {
     final repo=repository??OrbitCheckInRepository();

@@ -10,6 +10,9 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_primary_button.dart';
 
 import '../../data/orbit_moment_repository.dart';
+import '../../../activity/data/orbit_activity_repository.dart';
+import '../../../check_in/data/orbit_check_in_repository.dart';
+import '../../../check_in/presentation/navigation/orbit_check_in_navigation.dart';
 import '../../data/orbit_m7_rollout.dart';
 import '../../data/orbit_moment_offline_cache.dart';
 import '../../../auth/data/orbit_identity_client.dart';
@@ -23,15 +26,21 @@ import '../screens/orbit_live_moment_viewer.dart';
 /// server-authorized data to the existing styled MomentsScreen only.
 class OrbitLiveMomentsScreen extends StatefulWidget {
   const OrbitLiveMomentsScreen({required this.onTabSelected,this.onAddPressed,
-    this.circleId,this.profileId,super.key});
+    this.circleId,this.profileId,this.activity,super.key});
   final ValueChanged<int> onTabSelected;
   final VoidCallback? onAddPressed;
   final String? circleId, profileId;
+  final OrbitActivityRepository? activity;
   @override
   State<OrbitLiveMomentsScreen> createState()=>_OrbitLiveMomentsScreenState();
 }
 class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with WidgetsBindingObserver {
   final OrbitMomentRepository _repo=OrbitMomentRepository();
+  late final OrbitActivityRepository _activity=widget.activity??
+      OrbitActivityRepository();
+  final OrbitCheckInRepository _checkIns=OrbitCheckInRepository();
+  List<({String activityId,OrbitCheckInRecord record,DateTime at})>
+      _activityCheckIns=const [];
   final OrbitMomentOfflineCache _offline=OrbitMomentOfflineCache();
   List<OrbitLiveMoment> _items=const [];
   List<OrbitLiveMoment> _rail=const [];
@@ -88,6 +97,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         _evictDecodedMedia();
         _items=const [];
         _rail=const [];
+        _activityCheckIns=const [];
         _names.clear();
         _likes.clear();
         _bookmarked.clear();
@@ -105,6 +115,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
     _authorizationRefresh?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _evictDecodedMedia();
+    _activityCheckIns=const [];
     super.dispose();
   }
 
@@ -149,6 +160,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         _evictDecodedMedia();
         _items=const [];
         _rail=const [];
+        _activityCheckIns=const [];
         _names.clear();
         _likes.clear();
         _bookmarked.clear();
@@ -165,6 +177,8 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
     final epoch=++_loadEpoch;
     setState((){
       if(!incremental)_busy=true;
+      // M18 source previews must never remain while a fresh ACL is checked.
+      _activityCheckIns=const [];
       _error=null;
     });
     try {
@@ -260,10 +274,22 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         }
       }catch(_){}
       if(!mounted || epoch!=_loadEpoch)return;
+      List<({String activityId,OrbitCheckInRecord record,DateTime at})>
+          activityCheckIns=const [];
+      try {
+        activityCheckIns=await _loadActivityCheckIns();
+      }on OrbitIdentityException catch(e){
+        if(e.statusCode==401||e.statusCode==403||e.statusCode==409)rethrow;
+        // An unapplied M18 backend must not break the existing M7 feed.
+      }catch(_){
+        // Never show a previous M18 Activity cache after a failed refresh.
+      }
+      if(!mounted || epoch!=_loadEpoch)return;
       setState((){
         _showingOfflinePreviews=false;
         _evictDecodedMedia();
         _items=moments;_rail=rail;_options=options;
+        _activityCheckIns=activityCheckIns;
         _hasMore=hasMore && _feedLimit<240;
         _likes..clear()..addAll(moments.where((item)=>item.myReaction=='like').map((item)=>item.id));
         _bookmarked..clear()..addAll(saved);
@@ -288,6 +314,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       if(mounted && epoch==_loadEpoch)setState((){
         _evictDecodedMedia();
         _items=const [];_rail=const [];
+        _activityCheckIns=const [];
         _names.clear();_likes.clear();_bookmarked.clear();
         _showingOfflinePreviews=false;_busy=false;
         _error='Unable to verify private Moments. Check your connection.';
@@ -502,6 +529,63 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       ),
     );
   }
+  Future<List<({String activityId,OrbitCheckInRecord record,DateTime at})>>
+      _loadActivityCheckIns() async {
+    // Never mix Circle- or profile-specific Moments with a global feed.
+    if(widget.circleId!=null||widget.profileId!=null)return const [];
+    final owner=await OrbitIdentityClient.instance.currentLocalSocialOwner();
+    if(owner==null||owner.isEmpty)return const [];
+    final capabilities=await _activity.capabilities();
+    if(!capabilities.available || !capabilities.checkIns)return const [];
+    // Backend changes endpoint explicitly instructs authoritative refresh.
+    await _activity.requiresRefresh();
+    final pointers=await _activity.currentPointers(
+      maximum:(_feedLimit+1).clamp(1,240));
+    final selected=<OrbitActivityItem>[],seen=<String>{};
+    for(final pointer in pointers) {
+      if(pointer.sourceType!='check_in'||!seen.add(pointer.sourceId))continue;
+      selected.add(pointer);
+      if(selected.length>=24)break; // Bounded requests and private memory.
+    }
+    final resolved=<({String activityId,OrbitCheckInRecord record,DateTime at})>[];
+    for(var offset=0;offset<selected.length;offset+=3) {
+      final batch=selected.skip(offset).take(3);
+      final fetched=await Future.wait(batch.map((entry) async {
+        try {
+          // M12 enforces the current audience version and block relationship.
+          final detail=await _checkIns.detail(entry.sourceId);
+          if(detail.id!=entry.sourceId)return null;
+          return (activityId:entry.id,record:detail,at:entry.occurredAt);
+        }on OrbitIdentityException catch(e){
+          if(e.statusCode==401||e.statusCode==403||e.statusCode==409)rethrow;
+          return null;
+        }catch(_){return null;}
+      }));
+      resolved.addAll(fetched.whereType<
+        ({String activityId,OrbitCheckInRecord record,DateTime at})>());
+    }
+    if(owner!=await OrbitIdentityClient.instance.currentLocalSocialOwner()){
+      throw OrbitIdentityException('Activity owner changed.',409);
+    }
+    return List<({String activityId,OrbitCheckInRecord record,DateTime at})>
+      .unmodifiable(resolved);
+  }
+
+  Future<void> _openActivityCheckIn(String cardId) async {
+    if(!mounted || !cardId.startsWith('activity-check-in:'))return;
+    try {
+      final pointer=await _activity.item(
+        cardId.substring('activity-check-in:'.length));
+      if(pointer.sourceType!='check_in' || !mounted)return;
+      await OrbitCheckInNavigation.openDetail(context,pointer.sourceId,
+        repository:_checkIns);
+    }catch(_){
+      // No local preview or fake sheet after source revocation.
+    }finally{
+      if(mounted)unawaited(_load());
+    }
+  }
+
   @override
   Widget build(BuildContext context){
     final groups=<String,OrbitLiveMoment>{};
@@ -535,7 +619,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         isCircle:m.contextId.startsWith('circle:'),
         isUnseen:groupUnseen[m.contextId+'|'+m.creatorId]??false),
     ];
-    final feed=<MomentFeedItem>[
+    final momentCards=<MomentFeedItem>[
       for(final m in _items)MomentImageFeedItem(
         id:m.id,
         author:MomentAuthorData(id:m.creatorId,
@@ -549,6 +633,22 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         isBookmarked:_bookmarked.contains(m.id),
       ),
     ];
+    // Render M18 authorized Check-Ins with an already approved text card.
+    // The M7 image stream remains authoritative and is never hidden when
+    // the M18 projector is late, disabled, or not yet deployed.
+    final ordered=<({DateTime at,MomentFeedItem card})>[
+      for(var i=0;i<_items.length;i++)
+        (at:_items[i].publishedAt,card:momentCards[i]),
+      if(!_showingOfflinePreviews)
+        for(final entry in _activityCheckIns)
+          (at:entry.at,card:MomentTextFeedItem(
+            id:'activity-check-in:'+entry.activityId,
+            author:MomentAuthorData(id:entry.record.creatorId,
+              name:entry.record.creatorName),
+            timeLabel:_relative(entry.at),
+            text:'Check-In · '+entry.record.label,isCheckIn:true)),
+    ]..sort((a,b)=>b.at.compareTo(a.at));
+    final feed=<MomentFeedItem>[for(final entry in ordered)entry.card];
     return Stack(children:[
       MomentsScreen(
       key:const Key('orbit_m7_live_moments'),
@@ -573,7 +673,11 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       onBookmarkChanged:(item,value)=>unawaited(_setBookmark(item,value)),
       onSharePressed:(item)=>unawaited(_shareAuthorizedMoment(item)),
       onTextMenuPressed:(item){},
-      onFeedItemPressed:(item)=>_openById(item.id),
+      onFeedItemPressed:(item){
+        if(item is MomentTextFeedItem && item.isCheckIn){
+          unawaited(_openActivityCheckIn(item.id));
+        }else{_openById(item.id);}
+      },
       onTabSelected:widget.onTabSelected,onAddPressed:(){},
       cameraBuilder:(_)=>_camera(),
     ),

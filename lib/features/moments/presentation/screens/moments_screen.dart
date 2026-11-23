@@ -661,6 +661,11 @@ class _MomentsScreenState extends State<MomentsScreen> {
   }
 
   Future<void> _handleTextMomentMenu(MomentTextFeedItem item) async {
+    if(item.isCheckIn){
+      // Existing M12 detail reauthorizes; no M7 report menu for Check-In.
+      widget.onFeedItemPressed(item);
+      return;
+    }
     widget.onTextMenuPressed(item);
     if (!mounted) {
       return;
