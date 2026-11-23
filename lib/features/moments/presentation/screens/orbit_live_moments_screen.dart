@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../core/popups/orbit_popup_variants.dart';
@@ -11,6 +12,7 @@ import '../../../../core/widgets/app_primary_button.dart';
 
 import '../../data/orbit_moment_repository.dart';
 import '../../../activity/data/orbit_activity_repository.dart';
+import '../../../advertising/data/orbit_advertising_repository.dart';
 import '../../../check_in/data/orbit_check_in_repository.dart';
 import '../../../check_in/presentation/navigation/orbit_check_in_navigation.dart';
 import '../../data/orbit_m7_rollout.dart';
@@ -26,11 +28,12 @@ import '../screens/orbit_live_moment_viewer.dart';
 /// server-authorized data to the existing styled MomentsScreen only.
 class OrbitLiveMomentsScreen extends StatefulWidget {
   const OrbitLiveMomentsScreen({required this.onTabSelected,this.onAddPressed,
-    this.circleId,this.profileId,this.activity,super.key});
+    this.circleId,this.profileId,this.activity,this.advertising,super.key});
   final ValueChanged<int> onTabSelected;
   final VoidCallback? onAddPressed;
   final String? circleId, profileId;
   final OrbitActivityRepository? activity;
+  final OrbitAdvertisingRepository? advertising;
   @override
   State<OrbitLiveMomentsScreen> createState()=>_OrbitLiveMomentsScreenState();
 }
@@ -39,6 +42,12 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
   late final OrbitActivityRepository _activity=widget.activity??
       OrbitActivityRepository();
   final OrbitCheckInRepository _checkIns=OrbitCheckInRepository();
+  late final OrbitAdvertisingRepository _advertising=widget.advertising??
+      OrbitAdvertisingRepository();
+  OrbitSponsoredDecision? _sponsored;
+  bool _sponsorImpressionAccepted=false;
+  bool _sponsorLoading=false;
+  int _sponsorEpoch=0;
   List<({String activityId,OrbitCheckInRecord record,DateTime at})>
       _activityCheckIns=const [];
   final OrbitMomentOfflineCache _offline=OrbitMomentOfflineCache();
@@ -89,6 +98,73 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
     _places.clear();
   }
 
+  void _clearSponsored(){
+    ++_sponsorEpoch;
+    _sponsorLoading=false;
+    final item=_sponsored;
+    if(item!=null)unawaited(MemoryImage(item.imageBytes).evict());
+    _sponsored=null;
+    _sponsorImpressionAccepted=false;
+  }
+
+  Future<void> _refreshSponsored() async {
+    if(!mounted||_sponsorLoading||_busy||_showingOfflinePreviews||
+       widget.circleId!=null||widget.profileId!=null||
+       WidgetsBinding.instance.lifecycleState!=AppLifecycleState.resumed ||
+       ModalRoute.of(context)?.isCurrent!=true)return;
+    _sponsorLoading=true;
+    final serial=++_sponsorEpoch;
+    final previous=_sponsored;
+    setState(()=>_sponsored=null);
+    OrbitSponsoredDecision? next;
+    try{
+      next=await _advertising.load(OrbitAdvertisingRepository.momentsPlacement,
+        previous:previous);
+      if(!mounted||serial!=_sponsorEpoch)return;
+      setState((){
+        if(previous?.id!=next?.id)_sponsorImpressionAccepted=false;
+        _sponsored=next;
+      });
+    }catch(_){
+      if(mounted&&serial==_sponsorEpoch){
+        setState((){
+          _sponsored=null;
+          _sponsorImpressionAccepted=false;
+        });
+      }
+    }finally{
+      if(previous!=null&&!identical(previous.imageBytes,next?.imageBytes)){
+        unawaited(MemoryImage(previous.imageBytes).evict());
+      }
+      if(serial==_sponsorEpoch)_sponsorLoading=false;
+    }
+  }
+
+  Future<void> _sponsorVisible(int milliseconds) async {
+    final item=_sponsored;
+    if(item==null||_sponsorImpressionAccepted)return;
+    try{
+      final accepted=await _advertising.impression(item,milliseconds);
+      if(mounted&&identical(_sponsored,item)&&accepted){
+        _sponsorImpressionAccepted=true;
+      }
+    }catch(_){
+      // Never count a decision as a view; no retrying fake receipts.
+    }
+  }
+
+  Future<void> _openSponsored() async {
+    final item=_sponsored;
+    if(item==null||item.expired||!_sponsorImpressionAccepted)return;
+    try{
+      final accepted=await _advertising.click(item);
+      if(!accepted||!mounted||!identical(_sponsored,item))return;
+      await launchUrl(item.destination,mode:LaunchMode.externalApplication);
+    }catch(_){
+      // Revoked ad or failed measurement never opens a third-party target.
+    }
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if(state==AppLifecycleState.paused || state==AppLifecycleState.inactive) {
@@ -98,6 +174,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         _items=const [];
         _rail=const [];
         _activityCheckIns=const [];
+        _clearSponsored();
         _names.clear();
         _likes.clear();
         _bookmarked.clear();
@@ -116,6 +193,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
     WidgetsBinding.instance.removeObserver(this);
     _evictDecodedMedia();
     _activityCheckIns=const [];
+    _clearSponsored();
     super.dispose();
   }
 
@@ -161,6 +239,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         _items=const [];
         _rail=const [];
         _activityCheckIns=const [];
+        _clearSponsored();
         _names.clear();
         _likes.clear();
         _bookmarked.clear();
@@ -300,6 +379,8 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         _places..clear()..addAll(places);
         _busy=false;
       });
+      // A missing/disabled M20 backend never blocks or redesigns M7 Moments.
+      unawaited(_refreshSponsored());
     }on OrbitIdentityException catch(error){
       if(error.statusCode==null || (error.statusCode!=null &&
           error.statusCode!>=500)){
@@ -315,6 +396,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         _evictDecodedMedia();
         _items=const [];_rail=const [];
         _activityCheckIns=const [];
+        _clearSponsored();
         _names.clear();_likes.clear();_bookmarked.clear();
         _showingOfflinePreviews=false;_busy=false;
         _error='Unable to verify private Moments. Check your connection.';
@@ -324,6 +406,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         _evictDecodedMedia();
         _items=const [];
         _rail=const [];
+        _clearSponsored();
         _names.clear();
         _likes.clear();
         _busy=false;
@@ -649,6 +732,20 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
             text:'Check-In · '+entry.record.label,isCheckIn:true)),
     ]..sort((a,b)=>b.at.compareTo(a.at));
     final feed=<MomentFeedItem>[for(final entry in ordered)entry.card];
+    // M20 uses the already approved Moments promo card; no new placement in
+    // Circle/profile/private/offline/notifications/messaging/SOS screens.
+    final ad=_sponsored;
+    if(ad!=null&&!ad.expired&&!_showingOfflinePreviews&&
+       widget.circleId==null&&widget.profileId==null){
+      feed.insert(feed.isEmpty?0:1,MomentPromoFeedItem(
+        id:'ad:'+ad.id,
+        backgroundImagePath:'',logoImagePath:'',
+        title:ad.title,subtitle:ad.subtitle,
+        imageBytes:ad.imageBytes,
+        minimumVisibleMs:ad.minimumVisibleMs,
+        onVisible:(milliseconds)=>unawaited(_sponsorVisible(milliseconds)),
+      ));
+    }
     return Stack(children:[
       MomentsScreen(
       key:const Key('orbit_m7_live_moments'),
@@ -674,7 +771,9 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       onSharePressed:(item)=>unawaited(_shareAuthorizedMoment(item)),
       onTextMenuPressed:(item){},
       onFeedItemPressed:(item){
-        if(item is MomentTextFeedItem && item.isCheckIn){
+        if(item is MomentPromoFeedItem){
+          unawaited(_openSponsored());
+        }else if(item is MomentTextFeedItem && item.isCheckIn){
           unawaited(_openActivityCheckIn(item.id));
         }else{_openById(item.id);}
       },
