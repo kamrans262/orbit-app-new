@@ -31,15 +31,6 @@ void main() {
   testWidgets('Profile supports dynamic stats and arbitrary masonry content', (
     tester,
   ) async {
-    // The original approved Profile is a mobile viewport, not Flutter's
-    // default 800x600 desktop test surface. Existing compact-size tests below
-    // continue verifying 320, 360, 390 and 430-pixel mobile layouts.
-    tester.view.physicalSize = const Size(390, 844);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(() {
-      tester.view.resetPhysicalSize();
-      tester.view.resetDevicePixelRatio();
-    });
     final moments = List<ProfileMomentData>.generate(
       5,
       (index) =>
