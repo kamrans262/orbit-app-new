@@ -15,6 +15,7 @@ import '../widgets/home_circle_avatar_tile.dart';
 import '../widgets/home_circle_summary_tile.dart';
 import '../widgets/home_recent_moment_tile.dart';
 import '../widgets/promo_banner_card.dart';
+import '../../../advertising/presentation/orbit_ad_visibility.dart';
 import '../widgets/quick_action_card.dart';
 import '../widgets/upcoming_plan_card.dart';
 
@@ -48,6 +49,8 @@ class HomeScreen extends StatefulWidget {
     required this.onQuickActionPressed,
     required this.onPlanPressed,
     required this.onPromoPressed,
+    this.onPromoVisible,
+    this.promoMinimumVisibleMs=0,
     required this.onFavoritePersonPressed,
     required this.onFavoriteToggle,
     required this.onMomentPressed,
@@ -231,6 +234,9 @@ class HomeScreen extends StatefulWidget {
   final ValueChanged<QuickActionData> onQuickActionPressed;
   final ValueChanged<UpcomingPlanData> onPlanPressed;
   final VoidCallback onPromoPressed;
+  /// Invisible exposure observation; never changes the approved banner UI.
+  final ValueChanged<int>? onPromoVisible;
+  final int promoMinimumVisibleMs;
   final ValueChanged<FavoritePersonData> onFavoritePersonPressed;
   final ValueChanged<FavoritePersonData> onFavoriteToggle;
   final ValueChanged<MomentData> onMomentPressed;
@@ -451,10 +457,21 @@ class _HomeScreenState extends State<HomeScreen> {
               horizontal: HomeScreen._horizontalPadding,
             ),
             sliver: SliverToBoxAdapter(
-              child: PromoBannerCard(
-                data: widget.promoBanner!,
-                onTap: widget.onPromoPressed,
-              ),
+              child: widget.onPromoVisible!=null&&
+                  widget.promoMinimumVisibleMs>0
+                  ? OrbitAdVisibility(
+                      key:ValueKey('sponsor-home-'+widget.promoBanner!.id),
+                      minimumVisibleMs:widget.promoMinimumVisibleMs,
+                      onVisible:widget.onPromoVisible!,
+                      child:PromoBannerCard(
+                        data:widget.promoBanner!,
+                        onTap:widget.onPromoPressed,
+                      ),
+                    )
+                  : PromoBannerCard(
+                      data: widget.promoBanner!,
+                      onTap: widget.onPromoPressed,
+                    ),
             ),
           ),
         if (widget.promoBanner != null)

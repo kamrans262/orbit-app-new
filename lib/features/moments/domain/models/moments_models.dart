@@ -88,8 +88,14 @@ class MomentPromoFeedItem extends MomentFeedItem {
     required this.logoImagePath,
     required this.title,
     required this.subtitle,
+    this.imageBytes,
+    this.minimumVisibleMs=0,
+    this.onVisible,
   });
 
+  final Uint8List? imageBytes;
+  final int minimumVisibleMs;
+  final ValueChanged<int>? onVisible;
   final String backgroundImagePath;
   final String logoImagePath;
   final String title;

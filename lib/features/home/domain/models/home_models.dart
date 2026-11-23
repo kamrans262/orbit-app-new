@@ -56,8 +56,10 @@ class PromoBannerData {
     required this.logoImagePath,
     required this.title,
     required this.subtitle,
+    this.imageBytes,
   });
 
+  final Uint8List? imageBytes;
   final String id;
   final String backgroundImagePath;
   final String logoImagePath;

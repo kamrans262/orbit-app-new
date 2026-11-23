@@ -28,6 +28,7 @@ class PromoBannerCard extends StatelessWidget {
             Positioned.fill(
               child: HomeMediaImage(
                 path: data.backgroundImagePath,
+                bytes: data.imageBytes,
                 fit: BoxFit.cover,
                 alignment: Alignment.centerRight,
                 fallback: const ColoredBox(color: Color(0xFFF4F0FF)),

@@ -9,6 +9,7 @@ import '../../../../core/widgets/app_bottom_navigation_bar.dart';
 import '../../../../core/widgets/app_circular_icon_button.dart';
 import '../../../home/domain/models/home_models.dart';
 import '../../../home/presentation/widgets/promo_banner_card.dart';
+import '../../../advertising/presentation/orbit_ad_visibility.dart';
 import '../../../profile/presentation/navigation/profile_navigation.dart';
 import '../../domain/models/moments_models.dart';
 import '../../../profile/presentation/screens/report_user_screen.dart';
@@ -635,16 +636,25 @@ class _MomentsScreenState extends State<MomentsScreen> {
         );
       case MomentFeedItemType.promo:
         final promo = item as MomentPromoFeedItem;
-        return PromoBannerCard(
+        final banner=PromoBannerCard(
           data: PromoBannerData(
             id: promo.id,
             backgroundImagePath: promo.backgroundImagePath,
             logoImagePath: promo.logoImagePath,
             title: promo.title,
             subtitle: promo.subtitle,
+            imageBytes: promo.imageBytes,
           ),
           onTap: () => widget.onFeedItemPressed(promo),
         );
+        return promo.onVisible!=null&&promo.minimumVisibleMs>0
+            ? OrbitAdVisibility(
+                key:ValueKey('sponsor-moment-'+promo.id),
+                minimumVisibleMs:promo.minimumVisibleMs,
+                onVisible:promo.onVisible!,
+                child:banner,
+              )
+            : banner;
       case MomentFeedItemType.textPost:
         final textItem = item as MomentTextFeedItem;
         return MomentTextCard(
