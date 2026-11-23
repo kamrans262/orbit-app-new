@@ -81,6 +81,8 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
   StreamSubscription<void>? _pushEvents;
   StreamSubscription<void>? _notificationUpdates;
   StreamSubscription<void>? _notificationOpened;
+  StreamSubscription<void>? _sosPushUpdates;
+  StreamSubscription<void>? _sosPushOpened;
   int? _notificationUnread;
   bool _refreshingUnread=false;
   int _epoch=0;
@@ -104,6 +106,14 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
     _notificationOpened=OrbitNotificationPushRuntime.instance.opened.listen((_){
       WidgetsBinding.instance.addPostFrameCallback((_){
         if(mounted)unawaited(_openNotifications());
+      });
+    });
+    _sosPushUpdates=OrbitNotificationPushRuntime.instance.sosUpdates.listen((_){
+      if(mounted)unawaited(_refreshSos());
+    });
+    _sosPushOpened=OrbitNotificationPushRuntime.instance.sosOpened.listen((_){
+      WidgetsBinding.instance.addPostFrameCallback((_){
+        if(mounted)Navigator.of(context).pushNamed(AppRoutes.sosInbox);
       });
     });
     unawaited(OrbitNotificationPushRuntime.instance.configure());
@@ -287,6 +297,8 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
     unawaited(_pushEvents?.cancel());
     unawaited(_notificationUpdates?.cancel());
     unawaited(_notificationOpened?.cancel());
+    unawaited(_sosPushUpdates?.cancel());
+    unawaited(_sosPushOpened?.cancel());
     // The shared notification runtime is session-scoped, not Home-scoped.
     // Disposing a route must not unregister an otherwise trusted device.
     if(OrbitM7Rollout.enabled) unawaited(OrbitMomentPushRuntime.instance.stop());

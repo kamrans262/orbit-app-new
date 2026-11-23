@@ -20,9 +20,14 @@ class OrbitNotificationPushRuntime {
   final OrbitNotificationRepository _repository=OrbitNotificationRepository();
   final StreamController<void> _updates=StreamController<void>.broadcast();
   final StreamController<void> _opened=StreamController<void>.broadcast();
+  // Generic safety hint: never trust IDs, location or user data from FCM.
+  final StreamController<void> _sosUpdates=StreamController<void>.broadcast();
+  final StreamController<void> _sosOpened=StreamController<void>.broadcast();
 
   Stream<void> get updates=>_updates.stream;
   Stream<void> get opened=>_opened.stream;
+  Stream<void> get sosUpdates=>_sosUpdates.stream;
+  Stream<void> get sosOpened=>_sosOpened.stream;
 
   /// Safe, user-visible status; never contains tokens, account IDs or keys.
   final ValueNotifier<String> registrationStatus =
@@ -147,16 +152,18 @@ class OrbitNotificationPushRuntime {
       },onError:(_){});
       _foreground=FirebaseMessaging.onMessage.listen((message){
         if(message.data['type']=='notification_available')_updates.add(null);
+        if(message.data['type']=='sos_available')_sosUpdates.add(null);
       },onError:(_){});
       _tapped=FirebaseMessaging.onMessageOpenedApp.listen((message){
         if(message.data['type']=='notification_available')_opened.add(null);
+        if(message.data['type']=='sos_available')_sosOpened.add(null);
       },onError:(_){});
       // Only a provider-confirmed generic event may request opening the
       // authenticated inbox. Never navigate to a payload-specified target.
       final initial=await messaging.getInitialMessage();
-      if(initial?.data['type']=='notification_available' &&
-         await _identity.currentLocalSocialOwner()==owner){
-        _opened.add(null);
+      if(await _identity.currentLocalSocialOwner()==owner){
+        if(initial?.data['type']=='notification_available')_opened.add(null);
+        if(initial?.data['type']=='sos_available')_sosOpened.add(null);
       }
     }on OrbitIdentityException catch(error){
       // Show only a safe HTTP status, never a token or server response body.

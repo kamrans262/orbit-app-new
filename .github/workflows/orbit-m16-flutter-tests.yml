@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/orbit-m16-flutter-tests.yml'
       - 'lib/features/sos/**'
+      - 'lib/features/notifications/data/orbit_notification_push_runtime.dart'
       - 'lib/features/home/presentation/screens/orbit_live_home_screen.dart'
       - 'lib/app/app.dart'
       - 'lib/app/routing/app_routes.dart'
@@ -29,6 +30,7 @@ jobs:
       - name: Analyze SOS, Home and app routing
         run: |
           dart analyze lib/features/sos \
+            lib/features/notifications/data/orbit_notification_push_runtime.dart \
             lib/features/home/presentation/screens/orbit_live_home_screen.dart \
             lib/app/app.dart lib/app/routing/app_routes.dart \
             test/features/sos

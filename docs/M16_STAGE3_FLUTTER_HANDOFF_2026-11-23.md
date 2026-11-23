@@ -21,3 +21,7 @@ Existing SOS alert (3-second hold, dark palette, trigger rings, quick-action ico
 ## Verification / remaining Stage 4 gates
 
 Run the dedicated CI workflow for Dart analysis, SOS widget and contract tests, M8/M14/M15 integration regressions, and an Android debug build. Real iOS/Android foreground/background push, FCM taps, network loss during send, simultaneous trusted responders, permission revocation, and live physical GPS remain device-level release gates. Flutter cannot make SOS dispatch while entirely offline: M22 Relay is not implemented. The PRD's auto-recording versus explicit consent conflict remains open. Production migration/deployment requires separate authorization.
+
+## M14 push-entry integration
+
+The existing Firebase runtime now recognizes the generic `sos_available` hint separately from `notification_available`. Foreground SOS invalidations refresh the authenticated responder inbox while Home is visible. Tapping a background SOS push opens SOS history, **never** a payload-supplied incident or coordinate. Push acceptance does not imply responder acknowledgement; real push and iOS critical-alert entitlements require physical-device verification.
