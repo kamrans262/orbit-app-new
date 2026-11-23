@@ -93,3 +93,17 @@ git fetch origin && git switch feature/m16-sos-safety-flutter-2026-11-23 && git 
 “**SOS registered with Orbit**” means HTTPS intake accepted. “**Push accepted by provider**” means only FCM accepted a message. “**Responder acknowledged**” requires the authenticated responder's server-side acknowledgement. None means emergency services were called, that a phone visibly displayed an alert, or that a responder arrived.
 
 **Conclusion:** The Stage 4 **engineering code/CI audit and identified local fixes are complete**. **M16 safety release certification and full original PRD/TRD sign-off remain blocked**; do not deploy or advertise SOS as a dependable emergency service yet.
+
+## 23 Nov 2026 follow-up: Stage 4 authoritative status closure
+
+The original engineering audit predated the approved UI alignment commit. Subsequently:
+- Flutter approved-UI alignment: `1b07380b1e91e174b5de1b3dba58e521494b45ac`; original SOS alert/responder map preserved, shared Orbit Contacts/History components restored.
+- Laravel incident availability: `2159bb26def3d900765494a3dec01fd7d3668856`; resolved and cancelled SOS incidents no longer announce an active in-app responder alert. **10 dedicated SOS tests / 105 assertions and 72 earlier-module regression tests / 765 assertions passed in the updated CI run.**
+- Flutter status and acknowledgement: `284c1f61efa6d103d557bfdafb626c438c76d744`; closed historical incidents cannot display an active-alert receipt; responder success is individual, not inferred from a group count.
+- This follow-up additionally hides the already-acknowledged responder action by checking `canAcknowledge` from the server-originated `my_response` field; no new UI component or design token.
+- An unsigned iOS CI build was added to the M16 workflow, reusing the exact Flutter SDK and Apple build approach from the approved M15 workflow. **A successful unsigned build, if obtained, does not certify APNs, real-device SOS push or iOS Critical Alerts.**
+- Companion `Orbit_M16_Stage4_Traceability_Readiness_2026-11-23.xlsx` has 36 provisional technical controls with code evidence, release gates, 12 physical QA cases and prepared non-deployment commands. Its `SOS-XX` rows are NOT claimed to be original PRD/TRD identifiers; original client source documents remain unavailable for exact source comparison.
+
+### M16 source freeze and release gate
+
+The Stage 4 changes remain on the established M16 Flutter and Laravel branches. No merge to main, Hostinger migration, FCM production credential change or app publication was performed. The automated implementation tests are passed as specified above, but **M16 is not certified for real emergency use**. Retention/erasure policy, automatic audio consent conflict, external dispatch expectations, M22 offline Relay and two-device push/critical-alert tests must be resolved with genuine evidence and release approval.

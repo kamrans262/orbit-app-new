@@ -79,3 +79,26 @@ jobs:
           test -z "$(git ls-files android/app/google-services.json)"
       - run: flutter build apk --debug
       - run: test -s build/app/outputs/flutter-apk/app-debug.apk
+
+
+  ios-no-sign-build:
+    # Compiles against Apple's SDK; unsigned output is never distributed.
+    runs-on: macos-15
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - name: Record Apple SDK and CocoaPods
+        run: |
+          xcodebuild -version
+          pod --version
+      - name: Resolve existing Flutter plugins
+        run: flutter pub get
+      - name: Build unsigned iOS debug app
+        run: flutter build ios --debug --no-codesign
+      - name: Verify unsigned app bundle
+        run: test -d build/ios/iphoneos/Runner.app

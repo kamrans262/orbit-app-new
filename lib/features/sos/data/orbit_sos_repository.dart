@@ -70,6 +70,11 @@ class OrbitSosIncident {
     return 'No eligible responder confirmed. Contact emergency services directly.';
   }
 
+  /// Never let another recipient's acknowledgement turn a pending
+  /// responder's own action into a false confirmation.
+  bool get canAcknowledge =>
+      role=='responder' && status=='active' && myResponse=='pending';
+
   String get recordingDescription => recordingActive
       ? 'Recording status confirmed' : recordingConsented
       ? 'Consent saved; audio recording is not running'

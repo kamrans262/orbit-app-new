@@ -52,6 +52,17 @@ void main(){
     });
     expect(incoming.myResponse,'pending');
     expect(incoming.acknowledgements,1);
+    expect(incoming.canAcknowledge,true);
+    final acknowledged=OrbitSosIncident.fromJson({
+      ...sosRecord(),'my_role':'responder','my_response':'acknowledged',
+      'responder_acknowledgements':2,
+    });
+    expect(acknowledged.canAcknowledge,false);
+    final closed=OrbitSosIncident.fromJson({
+      ...sosRecord(status:'resolved'),
+      'my_role':'responder','my_response':'pending',
+    });
+    expect(closed.canAcknowledge,false);
     expect(event.deliveryDescription,contains('push delivery not confirmed'));
     expect(event.recordingDescription,'Not recording');
     expect(()=>OrbitSosIncident.fromJson({...sosRecord(),'revision':'1'}),

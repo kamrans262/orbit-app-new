@@ -146,7 +146,7 @@ class _OrbitLiveSosIncidentScreenState extends State<OrbitLiveSosIncidentScreen>
         ?(_)=>_act(true):null,
       onCancel:incident.role=='initiator' && incident.status=='active'
         ?(_)=>_act(false):null,
-      onEngage:incident.role=='responder' && incident.status=='active'
+      onEngage:incident.canAcknowledge
         ?(_)=>_acknowledge():null,
     );
   }
