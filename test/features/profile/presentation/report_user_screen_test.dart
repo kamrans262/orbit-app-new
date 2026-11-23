@@ -80,6 +80,47 @@ void main() {
     },
   );
 
+  testWidgets('M17 demo cannot simulate a successful moderation submission', (
+    tester,
+  ) async {
+    await _pump(tester, ReportUserScreen.demo());
+    final button = find.byKey(ReportUserKeys.submitButton);
+    await tester.ensureVisible(button);
+    await tester.pumpAndSettle();
+    await tester.tap(button.hitTestable());
+    await tester.pumpAndSettle();
+    expect(find.text('Reporting is unavailable. Please try again later.'),
+        findsOneWidget);
+    expect(find.text('Report submitted. Thank you.'), findsNothing);
+    expect(find.text('Submit Report'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('M17 failed request permits retry and never displays success', (
+    tester,
+  ) async {
+    var requests = 0;
+    await _pump(tester, ReportUserScreen(
+      args: const ReportUserArgs(userId:'person-one',displayName:'Example Person'),
+      initialReason: ReportReason.spam,
+      onSubmit: (request) async {
+        requests++;
+        throw StateError('Backend unavailable');
+      },
+    ));
+    final button=find.byKey(ReportUserKeys.submitButton);
+    await tester.ensureVisible(button);
+    await tester.pumpAndSettle();
+    await tester.tap(button.hitTestable());
+    await tester.pumpAndSettle();
+    expect(requests, 1);
+    expect(find.text('Report not confirmed. Please retry when connected.'),
+      findsOneWidget);
+    expect(find.text('Report submitted. Thank you.'), findsNothing);
+    expect(find.text('Submit Report'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('dynamic long reported-user names wrap without overflow', (
     tester,
   ) async {
