@@ -722,7 +722,7 @@ class OrbitIdentityClient {
       throw ArgumentError.value(signedUrl,'signedUrl','Unsafe ad asset URL');
     }
     if(_access==null)await refresh();
-    final request=http.Request('GET',uri!)
+    final request=http.Request('GET',uri)
       ..followRedirects=false
       ..headers['Accept']='image/png,image/jpeg,image/webp';
     if(_access!=null)request.headers['Authorization']='Bearer $_access';

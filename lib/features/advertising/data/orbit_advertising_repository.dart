@@ -64,7 +64,7 @@ class OrbitAdvertisingRepository {
     // Same idempotency UUID until expiry: no 25-second Home refresh cap burn.
     final reusable=previous!=null&&previous.owner==owner&&
       previous.placement==placement&&!previous.expired;
-    final requestId=reusable?previous!.requestId:const Uuid().v4();
+    final requestId=reusable?previous.requestId:const Uuid().v4();
     final entry=await _data('POST','/ads/decisions',owner,body:{
       'placement':placement,'request_id':requestId,
     });
@@ -88,7 +88,7 @@ class OrbitAdvertisingRepository {
        url.host=='localhost'||url.host.contains('..'))
       throw const FormatException('Unsafe sponsored destination.');
     final imageUrl=creative['image_url'] as String;
-    final priorBytes=reusable&&previous!=null&&previous.id==id&&!previous.expired
+    final priorBytes=reusable&&previous.id==id&&!previous.expired
         ?previous.imageBytes:null;
     final bytes=priorBytes??await _identity.advertisingAsset(imageUrl);
     if(await _identity.currentLocalSocialOwner()!=owner)
