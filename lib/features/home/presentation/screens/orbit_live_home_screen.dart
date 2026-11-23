@@ -529,7 +529,7 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
     final serial=++_sponsorEpoch;
     final owner=_owner;
     final previous=_sponsored;
-    if(mounted)setState(()=>_sponsored=null);
+    // Keep a verified card stable while refreshing its server authorization.
     OrbitSponsoredDecision? next;
     try{
       next=await _advertising.load(OrbitAdvertisingRepository.homePlacement,
@@ -704,7 +704,7 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
         iconColor:Color(0xFF7C3AED),iconBackground:Color(0xFFF2EAFE)),
     ],
     upcomingPlans:_upcomingPlans,
-    promoBanner:_sponsored==null?null:PromoBannerData(
+    promoBanner:_sponsored==null||_sponsored!.expired?null:PromoBannerData(
       id:_sponsored!.id,backgroundImagePath:'',logoImagePath:'',
       title:_sponsored!.title,subtitle:_sponsored!.subtitle,
       imageBytes:_sponsored!.imageBytes),

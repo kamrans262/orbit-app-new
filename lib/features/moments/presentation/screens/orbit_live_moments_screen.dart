@@ -115,7 +115,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
     _sponsorLoading=true;
     final serial=++_sponsorEpoch;
     final previous=_sponsored;
-    setState(()=>_sponsored=null);
+    // Keep a verified card stable while refreshing its server authorization.
     OrbitSponsoredDecision? next;
     try{
       next=await _advertising.load(OrbitAdvertisingRepository.momentsPlacement,
