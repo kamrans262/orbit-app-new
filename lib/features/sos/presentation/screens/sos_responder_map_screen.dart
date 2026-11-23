@@ -317,7 +317,7 @@ class _SosResponderMapScreenState extends State<SosResponderMapScreen> {
                 Text(
                   isPreview
                       ? 'This is a UI preview. Alerts, recording, location sharing and responder notifications are not active.'
-                      : '${session!.circleName}  •  ${session.status}',
+                      : '${session.circleName}  •  ${session.status}',
                   style: const TextStyle(
                     fontFamily: AppTypography.fontFamily,
                     fontSize: 12,

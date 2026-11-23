@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/popups/orbit_popup_modal.dart';
@@ -158,7 +157,7 @@ class _OrbitLiveSosScreenState extends State<OrbitLiveSosScreen>
             final sample=await _location.current();
             lat=sample.latitude;lng=sample.longitude;
             captured=sample.timestamp;
-            if(captured==null || DateTime.now().difference(captured).inSeconds.abs()>100){
+            if(DateTime.now().difference(captured).inSeconds.abs()>100){
               withLocation=false;
             }
           }else{withLocation=false;}

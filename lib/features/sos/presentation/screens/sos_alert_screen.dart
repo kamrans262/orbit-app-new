@@ -275,7 +275,7 @@ class _SosAlertScreenState extends State<SosAlertScreen> {
                           Icons.map_outlined,
                           color: Colors.white70,
                         ),
-                        label: const Text(
+                        label: Text(
                           widget.onViewHistory!=null
                             ? 'View SOS Alerts & History'
                             : 'Preview Responder Map (UI only)',
@@ -287,7 +287,7 @@ class _SosAlertScreenState extends State<SosAlertScreen> {
                         ),
                       ),
                       const SizedBox(height: 7),
-                      const Text(
+                      Text(
                         widget.onViewHistory!=null
                           ? 'Only server-confirmed incidents are shown in SOS history.'
                           : 'Preview does not activate SOS, alert contacts, or share your location.',
