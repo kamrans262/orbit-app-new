@@ -12,13 +12,15 @@ class OrbitSosIncident {
     required this.serverAccepted, required this.responders,
     required this.acknowledgements, required this.pushAccepted,
     required this.inAppAvailable, required this.locationActive,
-    required this.recordingConsented, required this.recordingActive});
+    required this.recordingConsented, required this.recordingActive,
+    this.myResponse});
 
   final String id, status, role;
   final int revision, acknowledgements, pushAccepted;
   final DateTime createdAt;
   final bool serverAccepted, inAppAvailable, locationActive;
   final bool recordingConsented, recordingActive;
+  final String? myResponse;
   final List<OrbitSosResponder> responders;
 
   static OrbitSosIncident fromJson(Map<String, dynamic> data) {
@@ -46,6 +48,7 @@ class OrbitSosIncident {
       locationActive: data['location_sharing_active'] == true,
       recordingConsented: data['recording_consented'] == true,
       recordingActive: data['recording_active'] == true,
+      myResponse:data['my_response'] as String?,
     );
   }
 
@@ -264,7 +267,9 @@ class OrbitSosRepository {
     }
     final result=OrbitSosIncident.fromJson(await _data('POST','/sos/incidents',body:intent.body));
     if(!result.serverAccepted)throw const FormatException('SOS was not confirmed by server.');
-    await _vault.clear();
+    // A verified server response must not be downgraded to "not sent" merely
+    // because local encrypted-vault cleanup temporarily failed.
+    try{await _vault.clear();}catch(_){}
     return result;
   }
 }

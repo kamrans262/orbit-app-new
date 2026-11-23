@@ -179,8 +179,9 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
       for(final incident in alerts){
         if(incident.role!='responder' || incident.status!='active' ||
             _shownSos.contains(incident.id))continue;
-        // Only an unacknowledged responder incident needs an attention cue.
-        if(incident.acknowledgements>0)continue;
+        // Aggregate acknowledgements may belong to OTHER responders.
+        // Only the current recipient's own verified state can suppress this cue.
+        if(incident.myResponse!='pending')continue;
         _shownSos.add(incident.id);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           duration:const Duration(seconds:12),

@@ -188,7 +188,11 @@ class _OrbitLiveSosScreenState extends State<OrbitLiveSosScreen>
     }catch(error){
       if(mounted){
         try{final stored=await _repo.pending();if(mounted)setState(()=>_unconfirmed=stored);}catch(_){}
-        if(error is OrbitIdentityException && error.statusCode!=null){
+        if(error is OrbitIdentityException &&
+            const {400,401,403,404,409,422}.contains(error.statusCode)){
+          // A definitive HTTP rejection is not an ambiguous transport loss.
+          try{await _repo.discardPending();}catch(_){}
+          if(mounted)setState(()=>_unconfirmed=null);
           _notify('SOS request was rejected. No responder delivery is confirmed.');
         }else{
           _notify('SOS was not confirmed. It may have reached Orbit. Check SOS history before retrying.');

@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_screen_header.dart';
-import '../../../auth/data/orbit_identity_client.dart';
 import '../../../circles/presentation/widgets/orbit_circle_sheet.dart';
 import '../../../friends/data/orbit_social_repository.dart';
 import '../../data/orbit_sos_repository.dart';
@@ -21,6 +20,7 @@ class _OrbitLiveSosContactsScreenState extends State<OrbitLiveSosContactsScreen>
   late final OrbitSosRepository _repo=widget.repository??OrbitSosRepository();
   late final OrbitSocialRepository _social=widget.social??OrbitSocialRepository();
   List<OrbitSosContact> _contacts=[];
+  Map<String,String> _friendNames={};
   String? _owner,_error;
   bool _loading=true,_busy=false;
   int _epoch=0;
@@ -34,10 +34,20 @@ class _OrbitLiveSosContactsScreenState extends State<OrbitLiveSosContactsScreen>
     try{
       final owner=await _repo.owner();
       final items=await _repo.contacts();
+      final names=<String,String>{};
+      try{
+        for(var page=1;page<=10;page++){
+          final friends=await _social.friends(page:page);
+          for(final friend in friends.items)names[friend.id]=friend.name;
+          if(!friends.hasMore)break;
+        }
+      }catch(_){
+        // Never infer a display name from a UUID or a stale offline roster.
+      }
       if(mounted&&call==_epoch&&await _repo.owner()==owner)setState((){
-        _contacts=items;_owner=owner;_loading=false;});
+        _contacts=items;_friendNames=names;_owner=owner;_loading=false;});
     }catch(_){if(mounted&&call==_epoch)setState((){
-      _contacts=[];_loading=false;_error='Trusted contacts cannot be verified right now.';});}
+      _contacts=[];_friendNames={};_loading=false;_error='Trusted contacts cannot be verified right now.';});}
   }
   Future<void> _mutate(Future<void> Function() work) async {
     if(_busy)return;
@@ -95,9 +105,11 @@ class _OrbitLiveSosContactsScreenState extends State<OrbitLiveSosContactsScreen>
               itemBuilder:(context,index){
                 final contact=_contacts[index];
                 final outgoing=contact.ownerId==_owner;
+                final personId=outgoing?contact.recipientId:contact.ownerId;
+                final name=_friendNames[personId]??'Orbit contact';
                 return Card(child:Padding(padding:const EdgeInsets.all(13),child:
                   Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-                    Text(outgoing?'Your contact request':'Incoming SOS contact request',
+                    Text(outgoing?name:'Request from $name',
                       style:AppTypography.body.copyWith(fontWeight:FontWeight.w600)),
                     Text('Status: ${contact.state}. ${outgoing?"Awaiting your friend’s choice":"Your consent is required"}.',
                       style:AppTypography.body.copyWith(fontSize:12)),

@@ -46,6 +46,12 @@ void main(){
     final event=OrbitSosIncident.fromJson(sosRecord());
     expect(event.serverAccepted,true);
     expect(event.acknowledgements,0);
+    final incoming=OrbitSosIncident.fromJson({
+      ...sosRecord(),'my_role':'responder','my_response':'pending',
+      'responder_acknowledgements':1,
+    });
+    expect(incoming.myResponse,'pending');
+    expect(incoming.acknowledgements,1);
     expect(event.deliveryDescription,contains('push delivery not confirmed'));
     expect(event.recordingDescription,'Not recording');
     expect(()=>OrbitSosIncident.fromJson({...sosRecord(),'revision':'1'}),
