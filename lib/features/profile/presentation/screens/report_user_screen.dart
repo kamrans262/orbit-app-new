@@ -4,6 +4,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_primary_button.dart';
 import '../../../../core/widgets/app_screen_header.dart';
 import '../../domain/models/report_user_models.dart';
+import '../../../moderation/data/orbit_moderation_repository.dart';
 
 abstract final class ReportUserKeys {
   static const scrollView = Key('report_user_scroll_view');
@@ -40,8 +41,11 @@ class ReportUserScreen extends StatefulWidget {
     required String userId,
     required String displayName,
     String? avatarUrl,
+    OrbitModerationRepository? repository,
   }) {
+    final moderation = repository ?? OrbitModerationRepository();
     return ReportUserScreen(
+      onSubmit: (request) async => await moderation.submitReport(request),
       args: ReportUserArgs(
         userId: userId,
         displayName: displayName,
@@ -72,6 +76,7 @@ class _ReportUserScreenState extends State<ReportUserScreen> {
 
   ReportReason? _selectedReason;
   bool _isSubmitting = false;
+  bool _submitted = false;
 
   @override
   void initState() {
@@ -86,6 +91,7 @@ class _ReportUserScreenState extends State<ReportUserScreen> {
         oldWidget.initialReason != widget.initialReason) {
       _selectedReason = widget.initialReason;
       _isSubmitting = false;
+      _submitted = false;
     }
   }
 
@@ -189,11 +195,12 @@ class _ReportUserScreenState extends State<ReportUserScreen> {
           ),
           const SizedBox(height: _sectionGap),
           IgnorePointer(
-            ignoring: _isSubmitting,
+            ignoring: _isSubmitting || _submitted,
             child: KeyedSubtree(
               key: ReportUserKeys.submitButton,
               child: AppPrimaryButton(
-                label: _isSubmitting ? 'Submitting...' : 'Submit Report',
+                label: _submitted ? 'Submitted'
+                    : _isSubmitting ? 'Submitting...' : 'Submit Report',
                 onPressed: _handleSubmit,
               ),
             ),
@@ -204,14 +211,23 @@ class _ReportUserScreenState extends State<ReportUserScreen> {
   }
 
   void _handleReasonChanged(ReportReason reason) {
-    if (_isSubmitting || _selectedReason == reason) {
+    if (_isSubmitting || _submitted || _selectedReason == reason) {
       return;
     }
     setState(() => _selectedReason = reason);
   }
 
   Future<void> _handleSubmit() async {
-    if (_isSubmitting) {
+    if (_isSubmitting || _submitted) {
+      return;
+    }
+    if (widget.onSubmit == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Reporting is unavailable. Please try again later.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
       return;
     }
 
@@ -233,17 +249,9 @@ class _ReportUserScreenState extends State<ReportUserScreen> {
 
     setState(() => _isSubmitting = true);
     try {
-      final submit = widget.onSubmit;
-      if (submit != null) {
-        await submit(request);
-      } else {
-        await Future<void>.delayed(const Duration(milliseconds: 250));
-      }
-
-      if (!mounted) {
-        return;
-      }
-
+      await widget.onSubmit!(request);
+      if (!mounted) return;
+      setState(() => _submitted = true);
       widget.onSubmitted?.call(request);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -257,7 +265,7 @@ class _ReportUserScreenState extends State<ReportUserScreen> {
       }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Unable to submit the report. Please try again.'),
+          content: Text('Report not confirmed. Please retry when connected.'),
           behavior: SnackBarBehavior.floating,
         ),
       );

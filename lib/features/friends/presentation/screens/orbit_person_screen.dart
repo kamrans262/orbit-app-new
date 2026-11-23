@@ -5,6 +5,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../profile/domain/models/profile_models.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
 import '../../../profile/presentation/widgets/settings_list_item.dart';
+import '../../../profile/presentation/screens/report_user_screen.dart';
 import '../../../../core/widgets/app_action_row.dart';
 import '../../data/orbit_social_repository.dart';
 import 'orbit_friend_requests_screen.dart';
@@ -125,10 +126,17 @@ class _OrbitPersonScreenState extends State<OrbitPersonScreen> {
               leadingIcon: Icons.flag_outlined,
               iconBackgroundColor: const Color(0xFFF2EAFE),
               leadingIconColor: const Color(0xFF7C3AED),
-              title: 'Report user (moderation not yet available)',
+              title: 'Report user',
               onTap: () {
                 Navigator.of(ctx).pop();
-                _futureFeature('Reporting');
+                if (!mounted) return;
+                Navigator.of(context).push<void>(
+                  AppFadeSlidePageRoute<void>(
+                    builder: (_) => ReportUserScreen.forUser(
+                      userId: _person.id, displayName: _person.name,
+                    ),
+                  ),
+                );
               },
             ),
           ]),
