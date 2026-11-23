@@ -15,6 +15,9 @@
   static const String notifications = '/notifications';
   // The original onboarding permission route remains unchanged.
   static const String notificationInbox = '/inbox/notifications';
+  static const String sos = '/sos';
+  static const String sosInbox = '/sos/inbox';
+  static const String sosIncident = '/sos/incident';
   static const String plans = '/plans';
   static const String planDetail = '/plans/detail';
   static const String planCreate = '/plans/create';

@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import '../features/home/presentation/screens/orbit_live_home_screen.dart';
 import '../features/notifications/presentation/orbit_live_notifications_screen.dart';
 import '../features/plans/presentation/screens/orbit_live_plans_screen.dart';
+import '../features/sos/presentation/screens/orbit_live_sos_screen.dart';
+import '../features/sos/presentation/screens/orbit_live_sos_inbox_screen.dart';
+import '../features/sos/presentation/screens/orbit_live_sos_incident_screen.dart';
 import '../features/plans/presentation/screens/orbit_live_plan_detail_screen.dart';
 import '../features/plans/presentation/screens/orbit_live_plan_editor_screen.dart';
 import '../features/plans/presentation/screens/orbit_live_plan_reminder_screen.dart';
@@ -472,6 +475,20 @@ class _OrbitAppState extends State<OrbitApp> {
           case AppRoutes.notificationInbox:
             return MaterialPageRoute<void>(settings:settings,
               builder:(_)=>const OrbitLiveNotificationsScreen());
+          case AppRoutes.sos:
+            return MaterialPageRoute<void>(settings:settings,
+              builder:(_)=>const OrbitLiveSosScreen());
+          case AppRoutes.sosInbox:
+            return MaterialPageRoute<void>(settings:settings,
+              builder:(_)=>const OrbitLiveSosInboxScreen());
+          case AppRoutes.sosIncident:
+            if(settings.arguments is String) {
+              return MaterialPageRoute<void>(settings:settings,
+                builder:(_)=>OrbitLiveSosIncidentScreen(
+                  incidentId:settings.arguments as String));
+            }
+            return MaterialPageRoute<void>(settings:settings,
+              builder:(_)=>const OrbitLiveSosInboxScreen());
           case AppRoutes.plans:
             return MaterialPageRoute<void>(settings:settings,
               builder:(_)=>const OrbitLivePlansScreen());

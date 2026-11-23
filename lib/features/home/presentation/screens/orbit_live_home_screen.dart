@@ -22,6 +22,7 @@ import '../../../moments/presentation/screens/orbit_live_moments_screen.dart';
 import '../../../notifications/data/orbit_notification_repository.dart';
 import '../../../notifications/data/orbit_notification_push_runtime.dart';
 import '../../../plans/data/orbit_plan_repository.dart';
+import '../../../sos/data/orbit_sos_repository.dart';
 import '../../../../app/routing/app_routes.dart';
 import '../../data/orbit_dashboard_repository.dart';
 import '../../data/orbit_m8_rollout.dart';
@@ -58,6 +59,9 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
   late final OrbitCheckInRepository _checkins=OrbitCheckInRepository(identity:_identity);
   late final OrbitNotificationRepository _notifications=OrbitNotificationRepository(identity:_identity);
   late final OrbitPlanRepository _plans=OrbitPlanRepository(identity:_identity);
+  late final OrbitSosRepository _sos=OrbitSosRepository(identity:_identity);
+  final Set<String> _shownSos=<String>{};
+  bool _refreshingSos=false;
 
   List<MomentData> _recent=const [];
   List<UpcomingPlanData> _upcomingPlans=const [];
@@ -110,12 +114,14 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
           ModalRoute.of(context)?.isCurrent==true) {
         unawaited(_reload());
         unawaited(_refreshPings());
+        unawaited(_refreshSos());
         unawaited(_refreshNotificationUnread());
       }
     });
     unawaited(_reload());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if(mounted)unawaited(_refreshPings());
+      if(mounted)unawaited(_refreshSos());
       if(mounted)unawaited(_checkins.flushPending().catchError((Object _){}));
     });
   }
@@ -155,6 +161,41 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
     } finally {
       _refreshingPing=false;
     }
+  }
+
+  // Authenticated foreground-only check. No OS push or offline delivery
+  // assertion is made; the responder opens the authoritative incident screen.
+  Future<void> _refreshSos() async {
+    if(_refreshingSos || !mounted ||
+        WidgetsBinding.instance.lifecycleState!=AppLifecycleState.resumed ||
+        ModalRoute.of(context)?.isCurrent!=true)return;
+    _refreshingSos=true;
+    try {
+      final actor=await _identity.currentLocalSocialOwner();
+      if(actor==null)return;
+      final alerts=await _sos.incidents();
+      if(!mounted || ModalRoute.of(context)?.isCurrent!=true ||
+          await _identity.currentLocalSocialOwner()!=actor)return;
+      for(final incident in alerts){
+        if(incident.role!='responder' || incident.status!='active' ||
+            _shownSos.contains(incident.id))continue;
+        // Only an unacknowledged responder incident needs an attention cue.
+        if(incident.acknowledgements>0)continue;
+        _shownSos.add(incident.id);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          duration:const Duration(seconds:12),
+          content:const Text('An SOS alert from an Orbit contact needs attention.'),
+          action:SnackBarAction(label:'View',onPressed:(){
+            if(mounted)Navigator.of(context).pushNamed(
+              AppRoutes.sosIncident,arguments:incident.id);
+          }),
+        ));
+        break;
+      }
+    }catch(_){
+      // Missing M16 backend, offline server or revoked access never produces
+      // a synthetic emergency alert.
+    }finally{_refreshingSos=false;}
   }
 
   void _presenceChanged() {
@@ -209,6 +250,7 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
     _byId.clear();
     _authors.clear();
     _shownPings.clear();
+    _shownSos.clear();
     _notificationUnread=null;
   }
 
@@ -227,6 +269,7 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
       unawaited(_reload());
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if(mounted)unawaited(_refreshPings());
+        if(mounted)unawaited(_refreshSos());
         if(mounted)unawaited(_checkins.flushPending().catchError((Object _){}));
       });
     }
@@ -568,6 +611,9 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
     onQuickActionPressed:(action){
       if(action.id=='moment'){_openMoments();}
       else if(action.id=='plans'){unawaited(_openPlans());}
+      else if(action.id=='sos'){
+        Navigator.of(context).pushNamed(AppRoutes.sos);
+      }
       else if(action.id=='messages'){
         unawaited(OrbitMessagingNavigation.openList(context));
       }

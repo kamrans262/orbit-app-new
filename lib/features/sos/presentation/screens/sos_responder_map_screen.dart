@@ -59,6 +59,7 @@ abstract final class SosResponderMapKeys {
   static const emptyResponders = Key('sos_responder_empty_responders');
   static const resolveButton = Key('sos_responder_resolve_button');
   static const engageButton = Key('sos_responder_engage_button');
+  static const cancelButton = Key('sos_responder_cancel_button');
 }
 
 /// Orbit UI-only responder view. `session` must come from the SOS backend.
@@ -69,6 +70,7 @@ class SosResponderMapScreen extends StatefulWidget {
     this.session,
     this.liveMap,
     this.onResolve,
+    this.onCancel,
     this.onEngage,
     super.key,
   });
@@ -76,6 +78,7 @@ class SosResponderMapScreen extends StatefulWidget {
   final SosResponderSession? session;
   final Widget? liveMap;
   final Future<bool> Function(String sosId)? onResolve;
+  final Future<bool> Function(String sosId)? onCancel;
   final Future<bool> Function(String sosId)? onEngage;
 
   @override
@@ -99,21 +102,21 @@ class _SosResponderMapScreenState extends State<SosResponderMapScreen> {
 
   bool get _isOriginator => widget.session?.isOriginator ?? true;
 
-  Future<void> _performAction({required bool resolve}) async {
+  Future<void> _performAction({required bool resolve,bool cancel=false}) async {
     if (_busy || !_hasConfirmedSession) return;
-    final handler = resolve ? widget.onResolve : widget.onEngage;
+    final handler = cancel?widget.onCancel:(resolve ? widget.onResolve : widget.onEngage);
     if (handler == null) return;
-    if (resolve) {
+    if (resolve || cancel) {
       final confirmed = await showOrbitPopupModal<bool>(
         context: context,
         barrierDismissible: true,
         builder: (dialogContext) => OrbitPopupModal(
-          title: 'Resolve this SOS?',
-          description:
-              'Only confirm after your emergency is over. '
-              'The server must acknowledge resolution.',
+          title: cancel?'Cancel this SOS?':'Resolve this SOS?',
+          description:cancel
+              ?'This closes the SOS. Only proceed if you no longer need responder alerts.'
+              :'Only confirm after your emergency is over. The server must acknowledge resolution.',
           primaryAction: OrbitPopupDestructiveButton(
-            label: 'Resolve SOS',
+            label: cancel?'Cancel SOS':'Resolve SOS',
             onPressed: () => Navigator.of(dialogContext).pop(true),
           ),
           secondaryAction: OrbitPopupTextButton(
@@ -132,7 +135,7 @@ class _SosResponderMapScreenState extends State<SosResponderMapScreen> {
       final acknowledged = await handler(widget.session!.id);
       if (!mounted) return;
       if (acknowledged) {
-        if (resolve) {
+        if (resolve || cancel) {
           Navigator.of(context).maybePop();
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -209,6 +212,14 @@ class _SosResponderMapScreenState extends State<SosResponderMapScreen> {
                         ? null
                         : () => _performAction(resolve: true),
                   ),
+                if (_isOriginator && widget.onCancel != null) ...<Widget>[
+                  const SizedBox(height: 10),
+                  _actionButton(
+                    label: _busy ? 'Please wait...' : 'Cancel SOS',
+                    key: SosResponderMapKeys.cancelButton,
+                    onPressed: _busy ? null : () => _performAction(resolve:false,cancel:true),
+                  ),
+                ],
                 if (!_isOriginator && widget.onEngage != null)
                   _actionButton(
                     label: _busy ? 'Please wait...' : "I'm coming",
@@ -294,7 +305,7 @@ class _SosResponderMapScreenState extends State<SosResponderMapScreen> {
                 Text(
                   isPreview
                       ? 'Preview only — no SOS was sent'
-                      : 'SOS service confirmed',
+                      : 'SOS registered with Orbit',
                   style: const TextStyle(
                     fontFamily: AppTypography.fontFamily,
                     fontSize: 14,

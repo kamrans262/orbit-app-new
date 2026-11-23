@@ -27,7 +27,7 @@ void main() {
       const Offset(0, -300),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Call\n911'), findsOneWidget);
+    expect(find.text('Call\nEmergency'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

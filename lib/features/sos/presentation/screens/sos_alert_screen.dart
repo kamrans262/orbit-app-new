@@ -16,6 +16,13 @@ class SosAlertScreen extends StatefulWidget {
   const SosAlertScreen({
     this.onAlertTriggered,
     this.onActivateSos,
+    this.onConfirmedSession,
+    this.onViewHistory,
+    this.shareLocationSelected = false,
+    this.recordingConsentSelected = false,
+    this.pendingUnconfirmed = false,
+    this.onRetryPending,
+    this.onDiscardPending,
     this.onEmergencyContacts,
     this.onShareLocation,
     this.onRecordAudio,
@@ -31,6 +38,11 @@ class SosAlertScreen extends StatefulWidget {
   /// The existing onAlertTriggered callback is retained for older clients.
   final Future<SosResponderSession?> Function(SosAlertSubmission)?
   onActivateSos;
+  /// Optional live integration; preserves the old UI-only navigation for demos.
+  final Future<void> Function(SosResponderSession)? onConfirmedSession;
+  final VoidCallback? onViewHistory;
+  final bool shareLocationSelected, recordingConsentSelected, pendingUnconfirmed;
+  final VoidCallback? onRetryPending, onDiscardPending;
   final VoidCallback? onEmergencyContacts;
   final VoidCallback? onShareLocation;
   final VoidCallback? onRecordAudio;
@@ -77,11 +89,16 @@ class _SosAlertScreenState extends State<SosAlertScreen> {
         );
         return;
       }
-      await Navigator.of(context).push<void>(
-        AppFadeSlidePageRoute<void>(
-          builder: (_) => SosResponderMapScreen(session: session),
-        ),
-      );
+      final showConfirmed=widget.onConfirmedSession;
+      if(showConfirmed!=null){
+        await showConfirmed(session);
+      }else{
+        await Navigator.of(context).push<void>(
+          AppFadeSlidePageRoute<void>(
+            builder: (_) => SosResponderMapScreen(session: session),
+          ),
+        );
+      }
     } catch (_) {
       if (mounted) {
         _sosNotice(
@@ -219,18 +236,49 @@ class _SosAlertScreenState extends State<SosAlertScreen> {
                       ),
                       const SizedBox(height: 30),
                       SosQuickActions(onAction: _handleQuickAction),
+                      if(widget.shareLocationSelected || widget.recordingConsentSelected) ...<Widget>[
+                        const SizedBox(height: 12),
+                        Text(
+                          [
+                            if(widget.shareLocationSelected)'SOS location opted in',
+                            if(widget.recordingConsentSelected)'Recording consent saved (not recording)',
+                          ].join(' · '),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontFamily: AppTypography.fontFamily,
+                            fontSize: 11,color: Color(0xFF9EA3AB)),
+                        ),
+                      ],
+                      if(widget.pendingUnconfirmed) ...<Widget>[
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Previous SOS is not confirmed. It may have reached Orbit. Review history or retry the same request.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontFamily: AppTypography.fontFamily,
+                            fontSize: 12,height: 1.4,color: Color(0xFFFFB5B5)),
+                        ),
+                        Wrap(alignment:WrapAlignment.center,spacing:12,children:[
+                          if(widget.onRetryPending!=null)TextButton(
+                            onPressed:widget.onRetryPending,
+                            child:const Text('Retry unconfirmed SOS')),
+                          if(widget.onDiscardPending!=null)TextButton(
+                            onPressed:widget.onDiscardPending,
+                            child:const Text('Discard local retry')),
+                        ]),
+                      ],
                       const SizedBox(height: 20),
                       TextButton.icon(
                         key: const ValueKey<String>(
                           'sos-preview-responder-map',
                         ),
-                        onPressed: _openResponderPreview,
+                        onPressed: widget.onViewHistory ?? _openResponderPreview,
                         icon: const Icon(
                           Icons.map_outlined,
                           color: Colors.white70,
                         ),
                         label: const Text(
-                          'Preview Responder Map (UI only)',
+                          widget.onViewHistory!=null
+                            ? 'View SOS Alerts & History'
+                            : 'Preview Responder Map (UI only)',
                           style: TextStyle(
                             fontFamily: AppTypography.fontFamily,
                             fontSize: 12,
@@ -240,7 +288,9 @@ class _SosAlertScreenState extends State<SosAlertScreen> {
                       ),
                       const SizedBox(height: 7),
                       const Text(
-                        'Preview does not activate SOS, alert contacts, or share your location.',
+                        widget.onViewHistory!=null
+                          ? 'Only server-confirmed incidents are shown in SOS history.'
+                          : 'Preview does not activate SOS, alert contacts, or share your location.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontFamily: AppTypography.fontFamily,

@@ -25,7 +25,7 @@ class SosQuickActions extends StatelessWidget {
     ),
     _SosQuickActionData(
       type: SosQuickActionType.callEmergency,
-      label: 'Call\n911',
+      label: 'Call\nEmergency',
       icon: Icons.phone_in_talk_rounded,
     ),
   ];
