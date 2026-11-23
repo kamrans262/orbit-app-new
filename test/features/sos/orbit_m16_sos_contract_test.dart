@@ -149,4 +149,26 @@ void main(){
     expect(old.responders.single.name,'Orbit contact');
   });
 
+  test('M16 closed history never implies that an alert remains active',(){
+    final resolved=OrbitSosIncident.fromJson({
+      ...sosRecord(status:'resolved',acknowledged:true),
+      'in_app_available_for_eligible_responders':false,
+      'push_provider_accepted_jobs':1,
+    });
+    expect(resolved.deliveryDescription,contains('resolved'));
+    expect(resolved.deliveryDescription,contains('acknowledged before closure'));
+    expect(resolved.deliveryDescription,isNot(contains('Available in Orbit')));
+    final cancelled=OrbitSosIncident.fromJson({
+      ...sosRecord(status:'cancelled'),
+      'in_app_available_for_eligible_responders':false,
+      'push_provider_accepted_jobs':1,
+    });
+    expect(cancelled.deliveryDescription,contains('no active responder alert'));
+    expect(cancelled.deliveryDescription,isNot(contains('Push accepted')));
+    expect(OrbitSosIncident.fromJson({...sosRecord(),
+      'my_role':'responder','my_response':'pending',
+      'responder_acknowledgements':2,
+    }).myResponse,'pending');
+  });
+
 }

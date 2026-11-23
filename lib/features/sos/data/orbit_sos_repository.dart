@@ -56,6 +56,14 @@ class OrbitSosIncident {
   }
 
   String get deliveryDescription {
+    // History must not present a resolved/cancelled incident as an active
+    // alert, even if a push provider accepted it before closure.
+    if (status != 'active') {
+      if (acknowledgements > 0) {
+        return 'SOS $status · $acknowledgements responder(s) acknowledged before closure';
+      }
+      return 'SOS $status · no active responder alert';
+    }
     if (acknowledgements > 0) return '$acknowledgements responder(s) acknowledged';
     if (pushAccepted > 0) return 'Push accepted by provider; no responder acknowledgement yet';
     if (inAppAvailable) return 'Available in Orbit; push delivery not confirmed';

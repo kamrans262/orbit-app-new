@@ -91,7 +91,7 @@ class _OrbitLiveSosIncidentScreenState extends State<OrbitLiveSosIncidentScreen>
       final result=await _repo.acknowledge(widget.incidentId);
       if(!mounted||await _repo.owner()!=owner)return false;
       unawaited(_refresh());
-      return result.role=='responder' && result.acknowledgements>0;
+      return result.role=='responder' && result.myResponse=='acknowledged';
     }catch(_){if(mounted)unawaited(_refresh());return false;}
   }
 
