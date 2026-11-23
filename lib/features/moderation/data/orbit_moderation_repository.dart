@@ -217,6 +217,18 @@ class OrbitModerationAction {
   final String id, scope, status;
   final DateTime createdAt;
   final DateTime? endsAt;
+
+  /// The original M13 restriction automatically expires. The audit row stays
+  /// 'active' as recorded, but must never be represented as an active block
+  /// once its exact server-authoritative expiry has passed.
+  String get effectiveStatus {
+    if (status == 'active' && scope == 'messaging_send' &&
+        endsAt != null && !DateTime.now().toUtc().isBefore(endsAt!.toUtc())) {
+      return 'expired';
+    }
+    return status;
+  }
+
   factory OrbitModerationAction.fromJson(Map<String, dynamic> data) {
     final id = data['id'], scope = data['scope'], status = data['status'];
     final date = DateTime.tryParse(data['created_at'] as String? ?? '');
@@ -238,9 +250,10 @@ class OrbitModerationAction {
 class OrbitModerationAppeal {
   const OrbitModerationAppeal({
     required this.id, required this.status, required this.createdAt,
-    this.decisionCode, this.decidedAt,
+    this.decisionCode, this.decidedAt, this.actionId,
   });
   final String id, status;
+  final String? actionId;
   final DateTime createdAt;
   final String? decisionCode;
   final DateTime? decidedAt;
@@ -253,6 +266,7 @@ class OrbitModerationAppeal {
     }
     return OrbitModerationAppeal(
       id: id, status: status as String, createdAt: date,
+      actionId: data['action_id'] as String?,
       decisionCode: data['decision_code'] as String?,
       decidedAt: DateTime.tryParse(data['decided_at'] as String? ?? ''),
     );

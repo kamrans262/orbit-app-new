@@ -66,8 +66,12 @@ class _OrbitLiveModerationHistoryScreenState
     }
   }
 
+  bool _alreadyAppealed(String actionId) =>
+      _appeals.any((appeal) => appeal.actionId == actionId);
+
   Future<void> _appeal(OrbitModerationAction action) async {
-    if (_posting || action.status != 'active') return;
+    if (_posting || action.status != 'active' ||
+        _alreadyAppealed(action.id)) return;
     final accepted = await confirmOrbitSocialAction(
       context,
       title: 'Request a review?',
@@ -159,7 +163,9 @@ class _OrbitLiveModerationHistoryScreenState
                         _reports.map((report) => SettingsListItem(
                           key: Key('moderation_report_${report.id}'),
                           icon: Icons.flag_outlined,
-                          label: 'Report received',
+                          label: 'Report received • '
+                              '${report.createdAt.toLocal().month}/'
+                              '${report.createdAt.toLocal().day}',
                           trailing: const Icon(Icons.check_circle_outline),
                           enabled: false,
                           onTap: () {},
@@ -170,12 +176,14 @@ class _OrbitLiveModerationHistoryScreenState
                           key: Key('moderation_action_${action.id}'),
                           icon: Icons.gavel_outlined,
                           label: action.scope == 'messaging_send'
-                            ? 'Messaging restriction • ${action.status}'
-                            : 'Moderation warning • ${action.status}',
-                          trailing: action.status == 'active'
+                            ? 'Messaging restriction • ${action.effectiveStatus}'
+                            : 'Moderation warning • ${action.effectiveStatus}',
+                          trailing: action.status == 'active' &&
+                                  !_alreadyAppealed(action.id)
                               ? const Icon(Icons.chevron_right_rounded)
                               : const Icon(Icons.check_circle_outline),
-                          enabled: action.status == 'active' && !_posting,
+                          enabled: action.status == 'active' &&
+                              !_alreadyAppealed(action.id) && !_posting,
                           onTap: () => _appeal(action),
                         )).toList()),
                       _section('Appeals',

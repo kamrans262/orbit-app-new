@@ -180,6 +180,30 @@ void main() {
     await expectLater(repo.myHistory(),throwsA(isA<OrbitIdentityException>()));
   });
 
+  test('M17 maps private appeal to its action and displays expired M13 block',(){
+    final matching=OrbitModerationAppeal.fromJson({
+      'id':'appeal-id','action_id':'action-id','status':'pending',
+      'created_at':'2026-11-24T01:00:00Z',
+    });
+    expect(matching.actionId,'action-id');
+    final expired=OrbitModerationAction.fromJson({
+      'id':'action-id','scope':'messaging_send','status':'active',
+      'created_at':'2024-01-01T00:00:00Z',
+      'ends_at':'2024-01-02T00:00:00Z',
+    });
+    expect(expired.effectiveStatus,'expired');
+    final indefinite=OrbitModerationAction.fromJson({
+      'id':'action-id-2','scope':'messaging_send','status':'active',
+      'created_at':'2024-01-01T00:00:00Z','ends_at':null,
+    });
+    expect(indefinite.effectiveStatus,'active');
+    final warning=OrbitModerationAction.fromJson({
+      'id':'action-id-3','scope':'warning','status':'reversed',
+      'created_at':'2024-01-01T00:00:00Z',
+    });
+    expect(warning.effectiveStatus,'reversed');
+  });
+
   test('M17 fails closed on fabricated appeal or action fields',(){
     expect(()=>OrbitModerationAppeal.fromJson({
       'id':'appeal','status':'resolved',
