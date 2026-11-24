@@ -69,6 +69,8 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
   bool _sponsorImpressionAccepted=false;
   bool _sponsorLoading=false;
   int _sponsorEpoch=0;
+  Timer? _sponsorExpiry;
+  bool _sponsorMeasuring=false;
   final Set<String> _shownSos=<String>{};
   bool _refreshingSos=false;
 
@@ -256,6 +258,8 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
   }
 
   void _clearProtected(){
+    _sponsorExpiry?.cancel();_sponsorExpiry=null;
+    _sponsorMeasuring=false;
     ++_sponsorEpoch;
     _sponsorLoading=false;
     final ad=_sponsored;
@@ -521,6 +525,20 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
 
   /// Reuse only the existing Home promo slot. The M20 decision is checked
   /// again every foreground refresh, never cached across accounts or pauses.
+  void _expireSponsored(OrbitSponsoredDecision? value){
+    _sponsorExpiry?.cancel();
+    if(value==null)return;
+    final remaining=value.expiresAt.difference(DateTime.now().toUtc());
+    _sponsorExpiry=Timer(remaining.isNegative?Duration.zero:remaining,(){
+      if(!mounted||!value.sameAuthorization(_sponsored))return;
+      setState((){
+        _sponsored=null;_sponsorImpressionAccepted=false;
+        _sponsorMeasuring=false;
+      });
+      unawaited(MemoryImage(value.imageBytes).evict());
+    });
+  }
+
   Future<void> _refreshSponsored() async {
     if(_sponsorLoading||!mounted||_owner.isEmpty ||
        WidgetsBinding.instance.lifecycleState!=AppLifecycleState.resumed ||
@@ -534,21 +552,28 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
     try{
       next=await _advertising.load(OrbitAdvertisingRepository.homePlacement,
         previous:previous);
-      if(!mounted||serial!=_sponsorEpoch||_owner!=owner ||
-         await _identity.currentLocalSocialOwner()!=owner){
+      final current=await _identity.currentLocalSocialOwner();
+      if(!mounted||serial!=_sponsorEpoch||_owner!=owner || current!=owner ||
+         WidgetsBinding.instance.lifecycleState!=AppLifecycleState.resumed ||
+         ModalRoute.of(context)?.isCurrent!=true){
         if(next!=null&&!identical(next.imageBytes,previous?.imageBytes)){
           unawaited(MemoryImage(next.imageBytes).evict());
         }
         return;
       }
       setState((){
-        if(previous?.id!=next?.id)_sponsorImpressionAccepted=false;
+        if(next==null||!next.sameAuthorization(previous)){
+          _sponsorImpressionAccepted=false;_sponsorMeasuring=false;
+        }
         _sponsored=next;
       });
+      _expireSponsored(next);
     }catch(_){
       if(mounted&&serial==_sponsorEpoch&&_owner==owner){
         setState((){
+          _sponsorExpiry?.cancel();_sponsorExpiry=null;
           _sponsored=null;
+          _sponsorMeasuring=false;
           _sponsorImpressionAccepted=false;
         });
       }
@@ -560,29 +585,35 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
     }
   }
 
+  bool _sponsorCurrent(OrbitSponsoredDecision value)=>mounted &&
+    value.sameAuthorization(_sponsored) && !value.expired &&
+    WidgetsBinding.instance.lifecycleState==AppLifecycleState.resumed &&
+    ModalRoute.of(context)?.isCurrent==true && _owner==value.owner;
+
   Future<void> _sponsorVisible(int milliseconds) async {
-    final ad=_sponsored;
-    if(ad==null||_sponsorImpressionAccepted)return;
+    final value=_sponsored;
+    if(value==null||_sponsorImpressionAccepted||_sponsorMeasuring||!_sponsorCurrent(value))return;
+    _sponsorMeasuring=true;
     try{
-      final accepted=await _advertising.impression(ad,milliseconds);
-      if(mounted&&identical(_sponsored,ad)&&accepted){
-        _sponsorImpressionAccepted=true;
-      }
+      final accepted=await _advertising.impression(value,milliseconds);
+      if(_sponsorCurrent(value)&&accepted)_sponsorImpressionAccepted=true;
     }catch(_){
-      // No invented impression on network, policy or device failure.
+      // Never fabricate a measurement after a denial.
+    }finally{
+      if(value.sameAuthorization(_sponsored))_sponsorMeasuring=false;
     }
   }
 
   Future<void> _openSponsored() async {
-    final ad=_sponsored;
-    if(ad==null||ad.expired||!_sponsorImpressionAccepted)return;
+    final value=_sponsored;
+    if(value==null||!_sponsorImpressionAccepted||!_sponsorCurrent(value))return;
     try{
-      final accepted=await _advertising.click(ad);
-      if(!accepted||!mounted||!identical(_sponsored,ad)||
-         await _identity.currentLocalSocialOwner()!=ad.owner)return;
-      await launchUrl(ad.destination,mode:LaunchMode.externalApplication);
+      final accepted=await _advertising.click(value);
+      final current=await _identity.currentLocalSocialOwner();
+      if(!accepted||current!=value.owner||!_sponsorCurrent(value))return;
+      await launchUrl(value.destination,mode:LaunchMode.externalApplication);
     }catch(_){
-      // Failed measurement / revocation never opens a stale advertiser URL.
+      // Revoked or unavailable advertiser destinations never open.
     }
   }
 

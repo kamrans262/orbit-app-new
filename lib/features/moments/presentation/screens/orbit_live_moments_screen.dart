@@ -48,6 +48,8 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
   bool _sponsorImpressionAccepted=false;
   bool _sponsorLoading=false;
   int _sponsorEpoch=0;
+  Timer? _sponsorExpiry;
+  bool _sponsorMeasuring=false;
   List<({String activityId,OrbitCheckInRecord record,DateTime at})>
       _activityCheckIns=const [];
   final OrbitMomentOfflineCache _offline=OrbitMomentOfflineCache();
@@ -99,12 +101,28 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
   }
 
   void _clearSponsored(){
+    _sponsorExpiry?.cancel();_sponsorExpiry=null;
+    _sponsorMeasuring=false;
     ++_sponsorEpoch;
     _sponsorLoading=false;
     final item=_sponsored;
     if(item!=null)unawaited(MemoryImage(item.imageBytes).evict());
     _sponsored=null;
     _sponsorImpressionAccepted=false;
+  }
+
+  void _expireSponsored(OrbitSponsoredDecision? value){
+    _sponsorExpiry?.cancel();
+    if(value==null)return;
+    final remaining=value.expiresAt.difference(DateTime.now().toUtc());
+    _sponsorExpiry=Timer(remaining.isNegative?Duration.zero:remaining,(){
+      if(!mounted||!value.sameAuthorization(_sponsored))return;
+      setState((){
+        _sponsored=null;_sponsorImpressionAccepted=false;
+        _sponsorMeasuring=false;
+      });
+      unawaited(MemoryImage(value.imageBytes).evict());
+    });
   }
 
   Future<void> _refreshSponsored() async {
@@ -120,15 +138,29 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
     try{
       next=await _advertising.load(OrbitAdvertisingRepository.momentsPlacement,
         previous:previous);
-      if(!mounted||serial!=_sponsorEpoch)return;
+      final current=await OrbitIdentityClient.instance.currentLocalSocialOwner();
+      if(!mounted||serial!=_sponsorEpoch||_showingOfflinePreviews||
+         widget.circleId!=null||widget.profileId!=null||
+         (next!=null&&next.owner!=current)||
+         WidgetsBinding.instance.lifecycleState!=AppLifecycleState.resumed||
+         ModalRoute.of(context)?.isCurrent!=true){
+        if(next!=null&&!identical(next.imageBytes,previous?.imageBytes))
+          unawaited(MemoryImage(next.imageBytes).evict());
+        return;
+      }
       setState((){
-        if(previous?.id!=next?.id)_sponsorImpressionAccepted=false;
+        if(next==null||!next.sameAuthorization(previous)){
+          _sponsorImpressionAccepted=false;_sponsorMeasuring=false;
+        }
         _sponsored=next;
       });
+      _expireSponsored(next);
     }catch(_){
       if(mounted&&serial==_sponsorEpoch){
         setState((){
+          _sponsorExpiry?.cancel();_sponsorExpiry=null;
           _sponsored=null;
+          _sponsorMeasuring=false;
           _sponsorImpressionAccepted=false;
         });
       }
@@ -140,34 +172,41 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
     }
   }
 
+  bool _sponsorCurrent(OrbitSponsoredDecision value)=>mounted &&
+    value.sameAuthorization(_sponsored) && !value.expired &&
+    WidgetsBinding.instance.lifecycleState==AppLifecycleState.resumed &&
+    ModalRoute.of(context)?.isCurrent==true && !_showingOfflinePreviews && widget.circleId==null && widget.profileId==null;
+
   Future<void> _sponsorVisible(int milliseconds) async {
-    final item=_sponsored;
-    if(item==null||_sponsorImpressionAccepted)return;
+    final value=_sponsored;
+    if(value==null||_sponsorImpressionAccepted||_sponsorMeasuring||!_sponsorCurrent(value))return;
+    _sponsorMeasuring=true;
     try{
-      final accepted=await _advertising.impression(item,milliseconds);
-      if(mounted&&identical(_sponsored,item)&&accepted){
-        _sponsorImpressionAccepted=true;
-      }
+      final accepted=await _advertising.impression(value,milliseconds);
+      if(_sponsorCurrent(value)&&accepted)_sponsorImpressionAccepted=true;
     }catch(_){
-      // Never count a decision as a view; no retrying fake receipts.
+      // Never fabricate a measurement after a denial.
+    }finally{
+      if(value.sameAuthorization(_sponsored))_sponsorMeasuring=false;
     }
   }
 
   Future<void> _openSponsored() async {
-    final item=_sponsored;
-    if(item==null||item.expired||!_sponsorImpressionAccepted)return;
+    final value=_sponsored;
+    if(value==null||!_sponsorImpressionAccepted||!_sponsorCurrent(value))return;
     try{
-      final accepted=await _advertising.click(item);
-      if(!accepted||!mounted||!identical(_sponsored,item))return;
-      await launchUrl(item.destination,mode:LaunchMode.externalApplication);
+      final accepted=await _advertising.click(value);
+      final current=await OrbitIdentityClient.instance.currentLocalSocialOwner();
+      if(!accepted||current!=value.owner||!_sponsorCurrent(value))return;
+      await launchUrl(value.destination,mode:LaunchMode.externalApplication);
     }catch(_){
-      // Revoked ad or failed measurement never opens a third-party target.
+      // Revoked or unavailable advertiser destinations never open.
     }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if(state==AppLifecycleState.paused || state==AppLifecycleState.inactive) {
+    if(state==AppLifecycleState.paused || state==AppLifecycleState.inactive || state==AppLifecycleState.hidden) {
       ++_loadEpoch;
       if(mounted)setState((){
         _evictDecodedMedia();
@@ -221,6 +260,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         _names..clear()..addAll(labels);
         _likes.clear();_bookmarked.clear();_seen.clear();
         _captions.clear();_places.clear();
+        _clearSponsored();
         _showingOfflinePreviews=true;
         _hasMore=false;
         _error=null;

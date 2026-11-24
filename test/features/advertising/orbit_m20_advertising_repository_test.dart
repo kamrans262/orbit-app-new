@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_ui/features/auth/data/orbit_identity_client.dart';
@@ -11,6 +12,7 @@ class FakeAdvertisingIdentity extends OrbitIdentityClient {
   bool disabled=false;
   bool switchAfter=false;
   bool missing=false;
+  bool corrupt=false;
   int assetCalls=0,decisions=0;
   final List<String> paths=[];
   final List<Map<String,Object?>?> bodies=[];
@@ -77,11 +79,18 @@ class FakeAdvertisingIdentity extends OrbitIdentityClient {
   Future<Uint8List> advertisingAsset(String signedUrl,{
     int maxBytes=4*1024*1024,bool retry=true}) async {
     assetCalls++;
-    return Uint8List.fromList([137,80,78,71,13,10,26,10]);
+    if(corrupt)return Uint8List.fromList([137,80,78,71,13,10,26,10]);
+    return base64Decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZ1sAAAAASUVORK5CYII=');
   }
 }
 
 void main(){
+  TestWidgetsFlutterBinding.ensureInitialized();
+  test('Corrupt creative is rejected before any measurement',() async {
+    final id=FakeAdvertisingIdentity()..corrupt=true;
+    await expectLater(OrbitAdvertisingRepository(identity:id).load(OrbitAdvertisingRepository.homePlacement),throwsFormatException);
+    expect(id.paths.where((p)=>p.endsWith('/ads/measurements')),isEmpty);
+  });
   test('M20 disabled and missing backend never fabricate a sponsor',() async {
     final identity=FakeAdvertisingIdentity()..disabled=true;
     final repo=OrbitAdvertisingRepository(identity:identity);

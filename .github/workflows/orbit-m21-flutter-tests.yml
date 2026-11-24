@@ -54,3 +54,56 @@ jobs:
           flutter test test/features/auth/orbit_m3_offline_profile_test.dart test/features/profile/orbit_profile_settings_repository_test.dart test/features/friends/orbit_m4_social_repository_test.dart
           flutter test test/features/circles/orbit_m5_api_contract_test.dart test/features/media/orbit_media_repository_test.dart test/features/home/data/orbit_dashboard_repository_test.dart test/features/presence/orbit_m9_presence_contract_test.dart
           flutter test test/features/location/orbit_m10_location_contract_test.dart test/features/ping/data/orbit_ping_record_test.dart test/features/messaging/orbit_m13_messaging_safety_test.dart test/features/app_update/orbit_update_runtime_test.dart
+
+  android-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: CI-only Firebase compile registration, never committed
+        run: |
+          test ! -e android/app/google-services.json
+          cat > android/app/google-services.json <<'EOF'
+          {
+            "project_info": {
+              "project_number": "123456789012",
+              "project_id": "orbit-ci-compile-only",
+              "storage_bucket": "orbit-ci-compile-only.invalid"
+            },
+            "client": [{
+              "client_info": {
+                "mobilesdk_app_id": "1:123456789012:android:abcdef0123456789",
+                "android_client_info": {"package_name": "com.orbit.orbit_app"}
+              },
+              "api_key": [{"current_key": "CI_ONLY_NOT_A_REAL_GOOGLE_API_KEY"}]
+            }],
+            "configuration_version": "1"
+          }
+          EOF
+          test -z "$(git ls-files android/app/google-services.json)"
+      - run: flutter build apk --debug
+      - run: test -s build/app/outputs/flutter-apk/app-debug.apk
+
+  ios-no-sign-build:
+    runs-on: macos-15
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter build ios --debug --no-codesign
+      - run: test -d build/ios/iphoneos/Runner.app

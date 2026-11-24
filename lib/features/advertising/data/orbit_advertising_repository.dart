@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:uuid/uuid.dart';
 import '../../auth/data/orbit_identity_client.dart';
 
@@ -17,6 +18,10 @@ class OrbitSponsoredDecision {
   final int minimumVisibleMs;
   final Uint8List imageBytes;
   bool get expired=>!DateTime.now().toUtc().isBefore(expiresAt);
+  bool sameAuthorization(OrbitSponsoredDecision? other)=>other!=null &&
+    id==other.id && owner==other.owner && placement==other.placement &&
+    measurementToken==other.measurementToken && destination==other.destination &&
+    minimumVisibleMs==other.minimumVisibleMs && expiresAt==other.expiresAt;
 }
 
 /// Foreground-only trusted-device advertising: no disk cache or member profile.
@@ -95,6 +100,30 @@ class OrbitAdvertisingRepository {
       throw OrbitIdentityException('Account changed during ad image load.',409);
     if(bytes.isEmpty||bytes.length>4*1024*1024)
       throw const FormatException('Invalid sponsored image.');
+    // Decode the actual creative before making it eligible for measurement.
+    // Header-only or corrupt bytes must never render a measurable fallback.
+    if(priorBytes==null){
+      ui.ImmutableBuffer? buffer;
+      ui.ImageDescriptor? descriptor;
+      ui.Codec? codec;
+      ui.Image? image;
+      try{
+        buffer=await ui.ImmutableBuffer.fromUint8List(bytes);
+        descriptor=await ui.ImageDescriptor.encoded(buffer);
+        if(descriptor.width<1||descriptor.height<1||
+           descriptor.width>4096||descriptor.height>4096)
+          throw const FormatException('Invalid creative dimensions.');
+        codec=await descriptor.instantiateCodec();
+        if(codec.frameCount!=1)throw const FormatException('Animated creative unsupported.');
+        image=(await codec.getNextFrame()).image;
+      }catch(_){
+        throw const FormatException('Invalid sponsored image.');
+      }finally{
+        image?.dispose();codec?.dispose();descriptor?.dispose();buffer?.dispose();
+      }
+    }
+    if(await _identity.currentLocalSocialOwner()!=owner || !expires.isAfter(DateTime.now().toUtc()))
+      throw OrbitIdentityException('Sponsorship authorization expired or changed.',409);
     return OrbitSponsoredDecision(id:id as String,placement:placement,
       owner:owner,requestId:requestId,title:creative['title'] as String,
       subtitle:creative['subtitle'] as String,destination:url,
@@ -111,7 +140,7 @@ class OrbitAdvertisingRepository {
       'measurement_token':ad.measurementToken,
       'evidence':{'visible_duration_ms':visibleMs.clamp(0,300000)},
     });
-    return result?['accepted']==true;
+    return !ad.expired && result?['accepted']==true;
   }
 
   Future<bool> click(OrbitSponsoredDecision ad) async {
@@ -121,6 +150,6 @@ class OrbitAdvertisingRepository {
       'client_event_id':const Uuid().v4(),
       'measurement_token':ad.measurementToken,
     });
-    return result?['accepted']==true;
+    return !ad.expired && result?['accepted']==true;
   }
 }
