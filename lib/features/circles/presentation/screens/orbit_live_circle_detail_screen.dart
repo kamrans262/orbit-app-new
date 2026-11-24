@@ -1,3 +1,4 @@
+import '../../../realtime/presentation/orbit_realtime_refresh.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -47,9 +48,12 @@ class _OrbitLiveCircleDetailScreenState extends State<OrbitLiveCircleDetailScree
   StreamSubscription<OrbitCircleInvalidation>? _invalidationSubscription;
   bool _revalidating = false;
 
+  OrbitRealtimeRefresh? _m25Refresh;
   @override
   void initState() {
     super.initState();
+    _m25Refresh=OrbitRealtimeRefresh(modules:const {'circles','social'},visible:()=>OrbitRealtimeRefresh.current(this),refresh:()=>_refresh(silent:true),fallback:false)..start();
+
     WidgetsBinding.instance.addObserver(this);
     if (OrbitPresenceRollout.enabled) {
       OrbitPresenceRuntime.instance.addListener(_presenceChanged);
@@ -78,6 +82,8 @@ class _OrbitLiveCircleDetailScreenState extends State<OrbitLiveCircleDetailScree
 
   @override
   void dispose() {
+    _m25Refresh?.dispose();
+
     _epoch++;
     _authorizationRefresh?.cancel();
     _invalidationSubscription?.cancel();

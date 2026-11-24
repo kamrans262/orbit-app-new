@@ -1,3 +1,4 @@
+import '../../realtime/presentation/orbit_realtime_refresh.dart';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:async';
@@ -56,9 +57,12 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
   bool _checkingTyping=false;
   int _epoch=0;
   DateTime? _lastOutboxRetry;
+  OrbitRealtimeRefresh? _m25Refresh;
   @override
   void initState(){
     super.initState();
+    _m25Refresh=OrbitRealtimeRefresh(modules:const {'messaging','social','circles'},visible:()=>OrbitRealtimeRefresh.current(this),refresh:() async {await _load();await _pollTyping();},fallback:false)..start();
+
     WidgetsBinding.instance.addObserver(this);
     _load();
     _typingTimer=Timer.periodic(const Duration(seconds:4),(_){
@@ -78,6 +82,8 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
   }
   @override
   void dispose(){
+    _m25Refresh?.dispose();
+
     _epoch++;
     _videoManifests.clear();
     _timer?.cancel();

@@ -1,3 +1,4 @@
+import '../../../realtime/presentation/orbit_realtime_refresh.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -23,10 +24,15 @@ class _OrbitLiveSosInboxScreenState extends State<OrbitLiveSosInboxScreen>
   bool _loading=true;
   String? _error;
   int _epoch=0;
+  OrbitRealtimeRefresh? _m25Refresh;
   @override
-  void initState(){super.initState();WidgetsBinding.instance.addObserver(this);unawaited(_reload());}
+  void initState(){super.initState();
+    _m25Refresh=OrbitRealtimeRefresh(modules:const {'sos'},visible:()=>OrbitRealtimeRefresh.current(this),refresh:()=>_reload(),fallback:true)..start();
+WidgetsBinding.instance.addObserver(this);unawaited(_reload());}
   @override
-  void dispose(){++_epoch;WidgetsBinding.instance.removeObserver(this);super.dispose();}
+  void dispose(){
+    _m25Refresh?.dispose();
+++_epoch;WidgetsBinding.instance.removeObserver(this);super.dispose();}
   @override
   void didChangeAppLifecycleState(AppLifecycleState state){
     if(state==AppLifecycleState.resumed)unawaited(_reload());

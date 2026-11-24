@@ -1,3 +1,4 @@
+import '../../../realtime/presentation/orbit_realtime_refresh.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
@@ -28,9 +29,12 @@ class _OrbitLiveFriendsScreenState extends State<OrbitLiveFriendsScreen>
   String? _error;
   int _page = 0, _revision = 0, _epoch = 0;
 
+  OrbitRealtimeRefresh? _m25Refresh;
   @override
   void initState() {
     super.initState();
+    _m25Refresh=OrbitRealtimeRefresh(modules:const {'social','circles'},visible:()=>OrbitRealtimeRefresh.current(this),refresh:()=>_load(reset:true),fallback:false)..start();
+
     WidgetsBinding.instance.addObserver(this);
     _load(reset: true);
     _revisionTimer = Timer.periodic(const Duration(seconds: 25), (_) {
@@ -45,6 +49,8 @@ class _OrbitLiveFriendsScreenState extends State<OrbitLiveFriendsScreen>
   }
   @override
   void dispose() {
+    _m25Refresh?.dispose();
+
     _epoch++;
     _revisionTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);

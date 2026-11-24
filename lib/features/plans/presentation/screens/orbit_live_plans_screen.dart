@@ -1,3 +1,4 @@
+import '../../../realtime/presentation/orbit_realtime_refresh.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../../app/routing/app_routes.dart';
@@ -28,10 +29,15 @@ class _OrbitLivePlansScreenState extends State<OrbitLivePlansScreen>
   String? _cursor,_error,_owner;
   bool _loading=true,_loadingMore=false,_offline=false;
   int _epoch=0;
+  OrbitRealtimeRefresh? _m25Refresh;
   @override
-  void initState(){super.initState();WidgetsBinding.instance.addObserver(this);unawaited(_load());}
+  void initState(){super.initState();
+    _m25Refresh=OrbitRealtimeRefresh(modules:const {'plans','social','circles'},visible:()=>OrbitRealtimeRefresh.current(this),refresh:()=>_load(),fallback:true)..start();
+WidgetsBinding.instance.addObserver(this);unawaited(_load());}
   @override
-  void dispose(){++_epoch;_items.clear();WidgetsBinding.instance.removeObserver(this);super.dispose();}
+  void dispose(){
+    _m25Refresh?.dispose();
+++_epoch;_items.clear();WidgetsBinding.instance.removeObserver(this);super.dispose();}
   @override
   void didChangeAppLifecycleState(AppLifecycleState state){
     if(state==AppLifecycleState.resumed)unawaited(_load());

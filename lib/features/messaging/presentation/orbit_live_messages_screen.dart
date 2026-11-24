@@ -1,3 +1,4 @@
+import '../../realtime/presentation/orbit_realtime_refresh.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 
@@ -33,9 +34,12 @@ class _OrbitLiveMessagesScreenState extends State<OrbitLiveMessagesScreen>
   int _epoch=0;
   Timer? _reload;
 
+  OrbitRealtimeRefresh? _m25Refresh;
   @override
   void initState(){
     super.initState();
+    _m25Refresh=OrbitRealtimeRefresh(modules:const {'messaging','social','circles'},visible:()=>OrbitRealtimeRefresh.current(this),refresh:()=>_load(silent:true),fallback:false)..start();
+
     WidgetsBinding.instance.addObserver(this);
     _load();
     // HTTPS fallback only. This is polling, not realtime or push.
@@ -53,6 +57,8 @@ class _OrbitLiveMessagesScreenState extends State<OrbitLiveMessagesScreen>
   }
   @override
   void dispose(){
+    _m25Refresh?.dispose();
+
     _epoch++;
     _reload?.cancel();
     WidgetsBinding.instance.removeObserver(this);

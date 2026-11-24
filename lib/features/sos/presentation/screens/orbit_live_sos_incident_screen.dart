@@ -1,3 +1,4 @@
+import '../../../realtime/presentation/orbit_realtime_refresh.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -28,9 +29,12 @@ class _OrbitLiveSosIncidentScreenState extends State<OrbitLiveSosIncidentScreen>
   int _epoch=0;
   bool _loading=true;
 
+  OrbitRealtimeRefresh? _m25Refresh;
   @override
   void initState() {
     super.initState();
+    _m25Refresh=OrbitRealtimeRefresh(modules:const {'sos'},visible:()=>OrbitRealtimeRefresh.current(this),refresh:()=>_refresh(),fallback:false)..start();
+
     WidgetsBinding.instance.addObserver(this);
     unawaited(_refresh());
     _timer=Timer.periodic(const Duration(seconds:15),(_){
@@ -39,7 +43,9 @@ class _OrbitLiveSosIncidentScreenState extends State<OrbitLiveSosIncidentScreen>
     });
   }
   @override
-  void dispose(){_epoch++;_timer?.cancel();WidgetsBinding.instance.removeObserver(this);super.dispose();}
+  void dispose(){
+    _m25Refresh?.dispose();
+_epoch++;_timer?.cancel();WidgetsBinding.instance.removeObserver(this);super.dispose();}
   @override
   void didChangeAppLifecycleState(AppLifecycleState state){
     if(state==AppLifecycleState.paused || state==AppLifecycleState.hidden ||

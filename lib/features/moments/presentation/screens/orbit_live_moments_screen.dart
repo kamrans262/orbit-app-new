@@ -1,3 +1,4 @@
+import '../../../realtime/presentation/orbit_realtime_refresh.dart';
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -78,9 +79,12 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
   Timer? _authorizationRefresh;
   int _loadEpoch=0;
 
+  OrbitRealtimeRefresh? _m25Refresh;
   @override
   void initState(){
     super.initState();
+    _m25Refresh=OrbitRealtimeRefresh(modules:const {'moments','activity','check_in','social','circles'},visible:()=>OrbitRealtimeRefresh.current(this),refresh:()=>_load(),fallback:false)..start();
+
     WidgetsBinding.instance.addObserver(this);
     _authorizationRefresh=Timer.periodic(const Duration(seconds:25),(_){
       if(!mounted || _busy ||
@@ -227,6 +231,8 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
 
   @override
   void dispose() {
+    _m25Refresh?.dispose();
+
     ++_loadEpoch;
     _authorizationRefresh?.cancel();
     WidgetsBinding.instance.removeObserver(this);

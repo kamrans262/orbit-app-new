@@ -1,3 +1,4 @@
+import '../../../realtime/presentation/orbit_realtime_refresh.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -49,9 +50,12 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
   StreamSubscription<OrbitCircleInvalidation>? _invalidationSubscription;
   bool _revalidating = false;
 
+  OrbitRealtimeRefresh? _m25Refresh;
   @override
   void initState() {
     super.initState();
+    _m25Refresh=OrbitRealtimeRefresh(modules:const {'circles','social'},visible:()=>OrbitRealtimeRefresh.current(this),refresh:()=>_load(silent:true),fallback:false)..start();
+
     WidgetsBinding.instance.addObserver(this);
     if (widget.changeSource == null) {
       OrbitM5FirebaseChangeSource.instance.setBootstrap(_repo.realtimeBootstrap);
@@ -77,6 +81,8 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
 
   @override
   void dispose() {
+    _m25Refresh?.dispose();
+
     _serial++;
     _membershipRefresh?.cancel();
     _invalidationSubscription?.cancel();
