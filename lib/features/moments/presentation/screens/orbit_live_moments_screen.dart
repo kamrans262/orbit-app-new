@@ -1,3 +1,4 @@
+import '../../../realtime/data/orbit_realtime_contract.dart';
 import '../../../realtime/presentation/orbit_realtime_refresh.dart';
 import 'dart:async';
 import 'dart:typed_data';
@@ -90,7 +91,9 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       if(!mounted || _busy ||
           WidgetsBinding.instance.lifecycleState!=AppLifecycleState.resumed ||
           ModalRoute.of(context)?.isCurrent!=true)return;
+      if(OrbitRealtimeRollout.selected){_m25Refresh?.poll();}else{
       unawaited(_load());
+      }
     });
     unawaited(_load());
   }

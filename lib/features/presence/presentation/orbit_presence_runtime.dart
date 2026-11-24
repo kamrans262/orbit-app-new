@@ -9,6 +9,7 @@ import '../data/orbit_presence_repository.dart';
 import '../data/orbit_presence_rollout.dart';
 import '../data/orbit_presence_socket.dart';
 import '../../realtime/data/orbit_realtime_runtime.dart';
+import '../../realtime/presentation/orbit_realtime_refresh.dart';
 
 /// Single in-memory Presence coordinator. It never persists a status or
 /// tries to infer online from M8 Home, device last_seen, or friends snapshots.
@@ -30,8 +31,7 @@ class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
   final Set<String> _watches={};
   final Map<String,Set<String>> _watchOwners={};
   StreamSubscription<Map<String, dynamic>>? _events;
-  StreamSubscription<Set<String>>? _firebaseEvents;
-  Timer? _signalDebounce;
+  OrbitRealtimeRefresh? _firebaseRefresh;
   Timer? _heartbeat;
   Timer? _expiry;
   Timer? _revalidation;
@@ -57,12 +57,9 @@ class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _events=_socket.events.listen(_onEvent);
     if(OrbitRealtimeRollout.selected){
-      _firebaseEvents=OrbitRealtimeRuntime.instance.changes.listen((modules){
-        if(!modules.contains('presence')||!_started||!_active)return;
-        clear();
-        _signalDebounce?.cancel();
-        _signalDebounce=Timer(const Duration(milliseconds:750),()=>unawaited(refreshWatched()));
-      });
+      _firebaseRefresh=OrbitRealtimeRefresh(modules:const {'presence','circles','social'},
+        visible:()=>_started&&_active&&_watches.isNotEmpty,
+        refresh:refreshWatched,invalidate:clear)..start();
     }
     _heartbeat=Timer.periodic(const Duration(seconds:25), (_) {
       if (_started && _active) unawaited(_beat());
@@ -72,7 +69,7 @@ class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
     });
     // UI freshness check, not a substitute for the M9 WebSocket gateway.
     _revalidation=Timer.periodic(const Duration(seconds:20),
-      (_) => unawaited(refreshWatched()));
+      (_) {if(OrbitRealtimeRollout.selected){_firebaseRefresh?.poll();}else{unawaited(refreshWatched());}});
     await _beat();
     if (epoch==_epoch && _started && _active) {
       unawaited(_socket.connect());
@@ -269,8 +266,7 @@ class OrbitPresenceRuntime extends ChangeNotifier with WidgetsBindingObserver {
     _expiry?.cancel(); _expiry=null;
     _revalidation?.cancel(); _revalidation=null;
     WidgetsBinding.instance.removeObserver(this);
-    _signalDebounce?.cancel();_signalDebounce=null;
-    await _firebaseEvents?.cancel();_firebaseEvents=null;
+    _firebaseRefresh?.dispose();_firebaseRefresh=null;
     final events=_events; _events=null;
     await events?.cancel();
     _watches.clear();

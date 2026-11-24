@@ -1,3 +1,4 @@
+import '../../../realtime/data/orbit_realtime_contract.dart';
 import '../../../realtime/presentation/orbit_realtime_refresh.dart';
 import 'dart:async';
 
@@ -39,7 +40,7 @@ class _OrbitLiveSosIncidentScreenState extends State<OrbitLiveSosIncidentScreen>
     unawaited(_refresh());
     _timer=Timer.periodic(const Duration(seconds:15),(_){
       if(mounted && WidgetsBinding.instance.lifecycleState==AppLifecycleState.resumed &&
-          ModalRoute.of(context)?.isCurrent==true){unawaited(_refresh());}
+          ModalRoute.of(context)?.isCurrent==true){if(OrbitRealtimeRollout.selected){_m25Refresh?.poll();}else{unawaited(_refresh());}}
     });
   }
   @override

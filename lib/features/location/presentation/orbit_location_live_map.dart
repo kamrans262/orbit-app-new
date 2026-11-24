@@ -82,7 +82,9 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
       unawaited(_refresh());
       _refreshTimer=Timer.periodic(const Duration(seconds:20),(_){
         if(_foreground&&mounted&&ModalRoute.of(context)?.isCurrent==true) {
+          if(OrbitRealtimeRollout.selected){_firebaseRefresh?.poll();}else{
           unawaited(_refresh(silent:true));
+          }
         }
       });
     }

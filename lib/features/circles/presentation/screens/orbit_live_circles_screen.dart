@@ -1,3 +1,4 @@
+import '../../../realtime/data/orbit_realtime_contract.dart';
 import '../../../realtime/presentation/orbit_realtime_refresh.dart';
 import 'dart:async';
 
@@ -69,7 +70,9 @@ class _OrbitLiveCirclesScreenState extends State<OrbitLiveCirclesScreen>
       if(!mounted || _busy || _revalidating ||
           WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed ||
           ModalRoute.of(context)?.isCurrent != true) return;
+      if(OrbitRealtimeRollout.selected){_m25Refresh?.poll();}else{
       _load(silent:true);
+      }
     });
     _load().then((_) {
       if (!mounted || widget.initialInviteCode == null) return;

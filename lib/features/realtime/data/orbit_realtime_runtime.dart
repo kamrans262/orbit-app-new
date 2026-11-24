@@ -66,12 +66,13 @@ class OrbitRealtimeRuntime with WidgetsBindingObserver {
     _busy=true;
     final clock=Stopwatch()..start();
     try{
-      await _disconnecting;
+      final disconnecting=_disconnecting;
+      if(disconnecting!=null)await disconnecting;
       final owner=await _readOwner();
       if(!_current(epoch))return;
       if(owner==null||(_owner!=null&&owner!=_owner)){
         _owner=null;
-        await _drop();
+        await _drop(notify:false);
         return;
       }
       _owner=owner;
@@ -181,7 +182,7 @@ class OrbitRealtimeRuntime with WidgetsBindingObserver {
   }
 
   void _queueDisconnect(String owner){
-    final task=_disconnectRequest(owner).timeout(const Duration(seconds:8)).catchError((Object _){});
+    final task=Future<void>.sync(()=>_disconnectRequest(owner)).timeout(const Duration(seconds:8)).catchError((Object _){});
     _disconnecting=task;
     unawaited(task.whenComplete((){if(identical(_disconnecting,task))_disconnecting=null;}));
   }
@@ -196,7 +197,9 @@ class OrbitRealtimeRuntime with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _retry?.cancel();
     final cleanup=_drop(notify:false);
-    if(disconnect&&hadLease&&owner!=null){_queueDisconnect(owner);await _disconnecting;}
+    if(disconnect&&hadLease&&owner!=null){_queueDisconnect(owner);}
+    final disconnecting=_disconnecting;
+    if(disconnecting!=null)await disconnecting;
     // Local access is already fenced by epoch and lease cancellation. Never
     // block Laravel logout indefinitely on a stalled native SDK call.
     await cleanup.timeout(const Duration(seconds:5),onTimeout:(){});

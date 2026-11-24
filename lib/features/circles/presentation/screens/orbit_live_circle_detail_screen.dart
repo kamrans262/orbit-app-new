@@ -1,3 +1,4 @@
+import '../../../realtime/data/orbit_realtime_contract.dart';
 import '../../../realtime/presentation/orbit_realtime_refresh.dart';
 import 'dart:async';
 
@@ -70,7 +71,9 @@ class _OrbitLiveCircleDetailScreenState extends State<OrbitLiveCircleDetailScree
       if(!mounted || _loading || _revalidating ||
         WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed ||
         ModalRoute.of(context)?.isCurrent != true) return;
+      if(OrbitRealtimeRollout.selected){_m25Refresh?.poll();}else{
       _refresh(silent:true);
+      }
     });
     if (widget.changeSource == null) {
       unawaited(OrbitM5FirebaseChangeSource.instance.watchCircles(

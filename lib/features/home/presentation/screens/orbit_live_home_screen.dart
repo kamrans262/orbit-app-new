@@ -145,10 +145,12 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
       if(mounted && !_loading &&
           WidgetsBinding.instance.lifecycleState==AppLifecycleState.resumed &&
           ModalRoute.of(context)?.isCurrent==true) {
+        if(OrbitRealtimeRollout.selected){_realtimeRefresh?.poll();}else{
         unawaited(_reload());
         unawaited(_refreshPings());
         unawaited(_refreshSos());
         unawaited(_refreshNotificationUnread());
+        }
       }
     });
     unawaited(_reload());
