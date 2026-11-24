@@ -62,6 +62,8 @@ class HomeScreen extends StatefulWidget {
     this.onCirclePressed,
     this.onSeeAllCirclesPressed,
     this.showCircleSection = false,
+    this.showPeopleSection = true,
+    this.showMomentsSection = true,
     this.peopleSectionTitle = 'Your Circle',
     this.planUnavailable = false,
     this.dashboardNotice,
@@ -217,7 +219,7 @@ class HomeScreen extends StatefulWidget {
   final List<HomeCircleSummaryData> circleSummaries;
   final ValueChanged<HomeCircleSummaryData>? onCirclePressed;
   final VoidCallback? onSeeAllCirclesPressed;
-  final bool showCircleSection,planUnavailable;
+  final bool showCircleSection,showPeopleSection,showMomentsSection,planUnavailable;
   final String peopleSectionTitle;
   final String? dashboardNotice;
   final VoidCallback? onDashboardRetry;
@@ -489,6 +491,7 @@ class _HomeScreenState extends State<HomeScreen> {
           SliverToBoxAdapter(child:_buildCircleSummaries()),
           const SliverToBoxAdapter(child:SizedBox(height:HomeScreen._sectionGap)),
         ],
+        if(widget.showPeopleSection) ...<Widget>[
         SliverPadding(
           padding: const EdgeInsets.symmetric(
             horizontal: HomeScreen._horizontalPadding,
@@ -504,6 +507,8 @@ class _HomeScreenState extends State<HomeScreen> {
         const SliverToBoxAdapter(
           child: SizedBox(height: HomeScreen._sectionGap),
         ),
+        ],
+        if(widget.showMomentsSection) ...<Widget>[
         SliverPadding(
           padding: const EdgeInsets.symmetric(
             horizontal: HomeScreen._horizontalPadding,
@@ -519,6 +524,7 @@ class _HomeScreenState extends State<HomeScreen> {
           child: SizedBox(height: HomeScreen._sectionGap),
         ),
         SliverToBoxAdapter(child: _buildMoments()),
+        ],
         const SliverToBoxAdapter(child: SizedBox(height: 20)),
       ],
     );
