@@ -13,29 +13,39 @@ export 'orbit_realtime_contract.dart';
 /// One secondary SDK app and one session signal. Never fetch/store domain
 /// content through Firebase, and never use its token for the Laravel APIs.
 class OrbitRealtimeRuntime with WidgetsBindingObserver {
-  OrbitRealtimeRuntime({OrbitIdentityClient? identity}):_identity=identity??OrbitIdentityClient.instance;
+  OrbitRealtimeRuntime({OrbitIdentityClient? identity, bool? enabled,
+    Future<String?> Function()? owner, Future<Map<String,dynamic>> Function(String)? bootstrap,
+    Future<void> Function(String)? disconnect, OrbitRealtimeSdk? sdk})
+    :_selected=enabled??OrbitRealtimeRollout.selected,
+    _readOwner=owner??(identity??OrbitIdentityClient.instance).currentLocalSocialOwner,
+    _bootstrap=bootstrap??((owner)=>(identity??OrbitIdentityClient.instance).realtimeRequest('/realtime/bootstrap',owner)),
+    _disconnectRequest=disconnect??((owner) async {await (identity??OrbitIdentityClient.instance).realtimeRequest('/realtime/disconnect',owner);}),
+    _transport=sdk??OrbitFirebaseRealtimeSdk();
   static final instance=OrbitRealtimeRuntime();
-  final OrbitIdentityClient _identity;
+  final bool _selected;
+  final Future<String?> Function() _readOwner;
+  final Future<Map<String,dynamic>> Function(String) _bootstrap;
+  final Future<void> Function(String) _disconnectRequest;
+  final OrbitRealtimeSdk _transport;
   final _events=StreamController<Set<String>>.broadcast();
   Stream<Set<String>> get changes=>_events.stream;
   bool _started=false,_foreground=false,_busy=false;
   int _epoch=0;
   String? _owner;
   OrbitRealtimeTicket? _ticket;
-  FirebaseApp? _app;
-  FirebaseAuth? _auth;
-  StreamSubscription<DatabaseEvent>? _watch;
+  StreamSubscription<Object?>? _watch;
+  StreamSubscription<bool>? _connectionWatch;
+  bool _online=false;
+  Future<void>? _disconnecting;
   Timer? _renewal,_expiry,_retry;
   int? _revision;
   Future<void> _sdkTail=Future.value();
   Duration _poll=const Duration(seconds:25);
   Duration get pollInterval=>_poll;
-  bool get connected=>_ticket!=null&&_revision!=null&&_foreground;
+  bool get connected=>_ticket!=null&&_revision!=null&&_foreground&&_online;
   bool allows(String module)=>_ticket?.modules.contains(module)==true;
-  static const _name='orbit-m25-realtime';
-
   void start(){
-    if(!OrbitRealtimeRollout.selected||_started)return;
+    if(!_selected||_started)return;
     _started=true;
     _foreground=WidgetsBinding.instance.lifecycleState==null||
       WidgetsBinding.instance.lifecycleState==AppLifecycleState.resumed;
@@ -56,7 +66,8 @@ class OrbitRealtimeRuntime with WidgetsBindingObserver {
     _busy=true;
     final clock=Stopwatch()..start();
     try{
-      final owner=await _identity.currentLocalSocialOwner();
+      await _disconnecting;
+      final owner=await _readOwner();
       if(!_current(epoch))return;
       if(owner==null||(_owner!=null&&owner!=_owner)){
         _owner=null;
@@ -64,8 +75,8 @@ class OrbitRealtimeRuntime with WidgetsBindingObserver {
         return;
       }
       _owner=owner;
-      final response=await _identity.socialRequest('POST','/realtime/bootstrap').timeout(const Duration(seconds:8));
-      if(!_current(epoch)||await _identity.currentLocalSocialOwner()!=owner)return;
+      final response=await _bootstrap(owner).timeout(const Duration(seconds:8));
+      if(!_current(epoch)||await _readOwner()!=owner||!_current(epoch))return;
       final next=OrbitRealtimeTicket.parse(response,platform:defaultTargetPlatform,
         expectedProject:OrbitRealtimeRollout.project,now:DateTime.now(),requestElapsed:clock.elapsed);
       if(next==null){
@@ -86,36 +97,28 @@ class OrbitRealtimeRuntime with WidgetsBindingObserver {
         await _sdk(() async {
           await _closeSdk();
           if(!_current(epoch)||!identical(_ticket,next))return;
-          final app=Firebase.apps.where((a)=>a.name==_name).firstOrNull;
-          final options=FirebaseOptions(apiKey:next.apiKey,appId:next.appId,
-            messagingSenderId:next.sender,projectId:next.project,databaseURL:next.url,iosBundleId:next.bundle);
-          if(app!=null&&(app.options.projectId!=next.project||app.options.appId!=next.appId||
-            app.options.databaseURL!=next.url||app.options.apiKey!=next.apiKey)){
-            await app.delete();
-          }
-          _app=Firebase.apps.where((a)=>a.name==_name).firstOrNull??
-            await Firebase.initializeApp(name:_name,options:options);
-          final auth=FirebaseAuth.instanceFor(app:_app!);
-          _auth=auth;
-          final db=FirebaseDatabase.instanceFor(app:_app!,databaseURL:next.url);
-          db.setPersistenceEnabled(false);
-          await auth.signOut();
-          if(!_current(epoch)||!identical(_ticket,next))return;
-          final signed=await auth.signInWithCustomToken(next.token).timeout(const Duration(seconds:10));
-          if(!_current(epoch)||!identical(_ticket,next)||signed.user?.uid!=next.uid){
-            await _closeSdk();return;
-          }
-          _watch=db.ref(next.path).onValue.listen((event){
+          await _transport.open(next);
+          if(!_current(epoch)||!identical(_ticket,next)){await _transport.close();return;}
+          _connectionWatch=_transport.connectivity.listen((online){
+            if(!_current(epoch)||_ticket?.generation!=next.generation)return;
+            final recovered=online&&!_online;
+            _online=online;
+            if(!online||recovered){
+              _revision=null;
+              _events.add(Set.unmodifiable(_ticket!.modules));
+            }
+          },onError:(Object _){if(_current(epoch))unawaited(_drop());});
+          _watch=_transport.signals.listen((raw){
             if(!_current(epoch)||_ticket?.generation!=next.generation)return;
             try{
-              final revision=OrbitRealtimeTicket.revision(event.snapshot.value);
+              final revision=OrbitRealtimeTicket.revision(raw);
               if(_revision!=null&&revision<=_revision!)return;
               _revision=revision;
               _events.add(Set.unmodifiable(_ticket!.modules));
             }catch(_){unawaited(_drop());}
           },onError:(Object _){if(_current(epoch))unawaited(_drop());},cancelOnError:true);
         });
-      }else if(!setEquals(previous.modules,next.modules)){
+      }else if(previous!=null&&!setEquals(previous.modules,next.modules)){
         _events.add(Set.unmodifiable({...previous.modules,...next.modules}));
       }
       if(!_current(epoch)||!identical(_ticket,next))return;
@@ -137,15 +140,15 @@ class OrbitRealtimeRuntime with WidgetsBindingObserver {
   Future<void> _closeSdk() async{
     final watch=_watch;_watch=null;
     try{await watch?.cancel();}catch(_){}
-    final auth=_auth;_auth=null;
-    try{await auth?.signOut();}catch(_){}
-    final app=_app;_app=null;
-    if(app!=null){try{await app.delete();}catch(_){}}
+    final connectivity=_connectionWatch;_connectionWatch=null;
+    try{await connectivity?.cancel();}catch(_){}
+    _online=false;
+    try{await _transport.close();}catch(_){}
   }
 
   Future<void> _drop() async{
     final old=_ticket;
-    _ticket=null;_revision=null;
+    _ticket=null;_revision=null;_online=false;
     _renewal?.cancel();_renewal=null;
     _expiry?.cancel();_expiry=null;
     if(old!=null)_events.add(Set.unmodifiable(old.modules));
@@ -165,12 +168,14 @@ class OrbitRealtimeRuntime with WidgetsBindingObserver {
       _retry?.cancel();
       unawaited(_drop());
       // No provider request is made when the server denied the transport.
-      if(hadLease)unawaited(_disconnect());
+      if(hadLease&&_owner!=null)_queueDisconnect(_owner!);
     }
   }
 
-  Future<void> _disconnect() async{
-    try{await _identity.socialRequest('POST','/realtime/disconnect').timeout(const Duration(seconds:4));}catch(_){}
+  void _queueDisconnect(String owner){
+    final task=_disconnectRequest(owner).timeout(const Duration(seconds:4)).catchError((Object _){});
+    _disconnecting=task;
+    unawaited(task.whenComplete((){if(identical(_disconnecting,task))_disconnecting=null;}));
   }
 
   /// Called before explicit logout; never recursively HTTP-disconnect during
@@ -178,10 +183,57 @@ class OrbitRealtimeRuntime with WidgetsBindingObserver {
   Future<void> stop({bool disconnect=false}) async{
     if(!_started)return;
     final hadLease=_ticket!=null;
+    final owner=_owner;
     _started=false;_foreground=false;++_epoch;_owner=null;
     WidgetsBinding.instance.removeObserver(this);
     _retry?.cancel();
     await _drop();
-    if(disconnect&&hadLease)await _disconnect();
+    if(disconnect&&hadLease&&owner!=null){_queueDisconnect(owner);await _disconnecting;}
+  }
+}
+
+
+/// Small injectable boundary for deterministic tests without Firebase access.
+abstract class OrbitRealtimeSdk {
+  Stream<Object?> get signals;
+  Stream<bool> get connectivity;
+  Future<void> open(OrbitRealtimeTicket ticket);
+  Future<void> close();
+}
+
+class OrbitFirebaseRealtimeSdk implements OrbitRealtimeSdk {
+  static const _name='orbit-m25-realtime';
+  FirebaseApp? _app;
+  FirebaseAuth? _auth;
+  FirebaseDatabase? _database;
+  String? _path;
+  @override
+  Stream<Object?> get signals=>_database!.ref(_path!).onValue.map((e)=>e.snapshot.value);
+  @override
+  Stream<bool> get connectivity=>_database!.ref('.info/connected').onValue.map((e)=>e.snapshot.value==true);
+  @override
+  Future<void> open(OrbitRealtimeTicket ticket) async{
+    await close();
+    final old=Firebase.apps.where((a)=>a.name==_name).firstOrNull;
+    if(old!=null)await old.delete();
+    final options=FirebaseOptions(apiKey:ticket.apiKey,appId:ticket.appId,
+      messagingSenderId:ticket.sender,projectId:ticket.project,databaseURL:ticket.url,iosBundleId:ticket.bundle);
+    _app=await Firebase.initializeApp(name:_name,options:options);
+    _auth=FirebaseAuth.instanceFor(app:_app!);
+    _database=FirebaseDatabase.instanceFor(app:_app!,databaseURL:ticket.url);
+    _database!.setPersistenceEnabled(false);
+    await _auth!.signOut();
+    final result=await _auth!.signInWithCustomToken(ticket.token);
+    if(result.user?.uid!=ticket.uid)throw const FormatException('Realtime identity mismatch.');
+    _path=ticket.path;
+  }
+  @override
+  Future<void> close() async{
+    final db=_database;_database=null;_path=null;
+    try{await db?.goOffline();}catch(_){}
+    final auth=_auth;_auth=null;
+    try{await auth?.signOut();}catch(_){}
+    final app=_app;_app=null;
+    if(app!=null){try{await app.delete();}catch(_){}}
   }
 }

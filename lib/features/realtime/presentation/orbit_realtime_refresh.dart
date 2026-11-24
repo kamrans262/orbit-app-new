@@ -6,27 +6,32 @@ import '../data/orbit_realtime_runtime.dart';
 /// one coalesced follow-up, and bounded fallback for visible screens.
 class OrbitRealtimeRefresh {
   OrbitRealtimeRefresh({required this.modules,required this.visible,required this.refresh,
-    this.fallback=false,this.invalidate});
+    this.fallback=false,this.invalidate,Stream<Set<String>>? changes,bool? enabled,
+    Duration Function()? interval}):_changes=changes??OrbitRealtimeRuntime.instance.changes,
+    _enabled=enabled??OrbitRealtimeRollout.selected,
+    _interval=interval??(()=>OrbitRealtimeRuntime.instance.pollInterval);
   final Set<String> modules;
   final bool Function() visible;
   final Future<void> Function() refresh;
   final void Function()? invalidate;
   final bool fallback;
+  final Stream<Set<String>> _changes;
+  final bool _enabled;
+  final Duration Function() _interval;
   StreamSubscription<Set<String>>? _sub;
   Timer? _debounce,_poll;
   bool _running=false,_pending=false,_disposed=false;
   void start(){
-    if(!OrbitRealtimeRollout.selected||_disposed)return;
-    _sub=OrbitRealtimeRuntime.instance.changes.listen((changed){
+    if(!_enabled||_disposed||_sub!=null)return;
+    _sub=_changes.listen((changed){
       if(changed.intersection(modules).isNotEmpty&&visible()){
-        invalidate?.call();
         request();
       }
     });
     if(fallback)_schedule();
   }
   void _schedule(){
-    _poll=Timer(OrbitRealtimeRuntime.instance.pollInterval,(){
+    _poll=Timer(_interval(),(){
       if(_disposed)return;
       if(visible())request();
       _schedule();
@@ -41,7 +46,7 @@ class OrbitRealtimeRefresh {
   Future<void> _run() async{
     if(_disposed||!visible())return;
     _running=true;_pending=false;
-    try{await refresh();}catch(_){}
+    try{invalidate?.call();await refresh();}catch(_){}
     finally{
       _running=false;
       if(_pending)request();

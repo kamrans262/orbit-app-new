@@ -20,6 +20,10 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
+      - name: M25 realtime contract, lifecycle and route refresh
+        run: |
+          dart analyze lib/features/realtime test/features/realtime
+          flutter test test/features/realtime
       - name: Analyze Billing and existing Subscription screen
         run: dart analyze lib/features/billing lib/features/profile/presentation/screens/subscription_screen.dart lib/features/profile/presentation/screens/profile_settings_screen.dart test/features/billing test/features/profile/presentation/screens/subscription_screen_test.dart
       - name: Billing and Subscription UI tests

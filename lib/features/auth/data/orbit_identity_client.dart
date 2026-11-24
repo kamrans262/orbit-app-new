@@ -933,6 +933,31 @@ class OrbitIdentityClient {
     return Map<String,dynamic>.from(jsonDecode(response.body) as Map);
   }
 
+  /// Session-bound transport bootstrap/disconnect. No recursive retry under
+  /// another account and no Firebase credential accepted as API authorization.
+  Future<Map<String,dynamic>> realtimeRequest(String path,String owner) async{
+    if(path!='/realtime/bootstrap'&&path!='/realtime/disconnect')throw ArgumentError('Invalid realtime route.');
+    if(await currentLocalSocialOwner()!=owner)throw OrbitIdentityException('Realtime account changed.',403);
+    if(_access==null)await refresh();
+    final token=_access;
+    if(token==null||_billingAccessOwner!=owner||await currentLocalSocialOwner()!=owner||_access!=token)
+      throw OrbitIdentityException('Realtime account changed.',403);
+    final request=http.Request('POST',Uri.parse(_origin+path))..followRedirects=false
+      ..headers['Accept']='application/json'..headers['Content-Type']='application/json'
+      ..headers['Authorization']='Bearer $token';
+    final response=await http.Response.fromStream(await _http.send(request).timeout(const Duration(seconds:6)))
+      .timeout(const Duration(seconds:6));
+    if(await currentLocalSocialOwner()!=owner||_access!=token)throw OrbitIdentityException('Realtime account changed.',403);
+    if(response.statusCode==401&&_access==token){
+      _access=null;_billingAccessOwner=null; // next foreground retry refreshes Laravel, not Firebase.
+    }
+    if(response.statusCode<200||response.statusCode>=300||response.bodyBytes.length>32768)
+      throw OrbitIdentityException('Realtime verification unavailable.',response.statusCode);
+    final raw=jsonDecode(response.body);
+    if(raw is! Map)throw const FormatException('Invalid realtime response.');
+    return Map<String,dynamic>.from(raw);
+  }
+
   Future<Map<String, dynamic>> socialRequest(String method, String path,
       {Map<String, Object?>? body, String? idempotencyKey}) {
     if (!path.startsWith('/') || path.startsWith('//') ||
