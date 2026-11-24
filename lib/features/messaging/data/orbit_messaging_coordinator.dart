@@ -57,6 +57,21 @@ class OrbitMessagingCoordinator {
     if(relay==null)return false;
     try{return relay.canUse(thread.id,await api.owner);}catch(_){return false;}
   }
+  Future<void> retryRelayOffline(OrbitConversation thread) async {
+    final owner=await api.owner;
+    await _serialMailbox(owner,'__crypto__',() async {
+      final relay=_relay;
+      if(relay==null||!relay.canUse(thread.id,owner))return;
+      for(final queued in await vault.pending(limit:8)){
+        if(!relay.canUse(thread.id,owner)||await api.owner!=owner)break;
+        if(await vault.requiresReview(queued.clientId))break;
+        // Do not skip older same-conversation ratchet messages.
+        if(queued.conversationId!=thread.id)continue;
+        if(!orbitRelayKinds.contains(queued.kind))break;
+        try{if(!await relay.transfer(queued))break;}catch(_){break;}
+      }
+    });
+  }
   Future<List<OrbitLocalDecryptedMessage>> relayHistory(OrbitConversation thread) async {
     final owner=await api.owner;
     return _serialMailbox(owner,'__crypto__',() async{
@@ -306,6 +321,7 @@ class OrbitMessagingCoordinator {
         throw const FormatException('Invalid stable media send identifier.');
       }
     }
+    if(!cipher.independentlyVerified){await requireSecure(forSend:true);}
     final account=await api.owner;
     var offline=false;
     try{await requireSecure(forSend:true);}
@@ -445,10 +461,23 @@ class OrbitMessagingCoordinator {
           final device=await OrbitIdentityClient.instance.trustedMediaDevice();
           final checkpoint=await reconcile.checkpoint(owner,device.id,pending.clientId);
           if(checkpoint!=null){
-            final page=await api.conversations();
-            final matches=page.items.where((t)=>t.id==pending.conversationId&&t.kind=='direct').toList();
-            if(matches.length!=1)throw OrbitMessagingSecurityException('Relay conversation needs review.',409);
-            final roster=OrbitRelaySession.rosterHash(await _recipients(matches.single));
+            final peer=checkpoint['peer_user'];
+            OrbitConversation? thread;
+            if(peer is String&&relayUuid(peer)){
+              thread=await api.direct(peer);
+            }else{
+              // Upgrade recovery for checkpoints from Stage 3 Part 1.
+              for(var p=1;p<=100;p++){
+                final page=await api.conversations(page:p);
+                for(final candidate in page.items){
+                  if(candidate.id==pending.conversationId&&candidate.kind=='direct'){thread=candidate;break;}
+                }
+                if(thread!=null||!page.hasMore)break;
+              }
+            }
+            if(thread==null||thread.id!=pending.conversationId||thread.kind!='direct'||
+                thread.groupEpoch!=pending.groupEpoch)throw OrbitMessagingSecurityException('Relay conversation needs review.',409);
+            final roster=OrbitRelaySession.rosterHash(await _recipients(thread));
             String? source;
             try{source=await reconcile.publish(pending,owner,device.id,currentRoster:roster);}
             on OrbitIdentityException catch(error){if(!_transient(error))rethrow;}
@@ -465,6 +494,10 @@ class OrbitMessagingCoordinator {
           envelopes:pending.envelopes);
         if(result.accepted){
           await vault.acknowledge(pending.clientId);
+          if(cipher is OrbitMessagingVodozemacCipher){
+            try{final device=await OrbitIdentityClient.instance.trustedMediaDevice();
+              await OrbitRelayReconcile(messaging:api).clear(owner,device.id,pending.clientId);}catch(_){}
+          }
           sent++;
         }else{
           // Unacknowledged ciphertext remains in the encrypted outbox.

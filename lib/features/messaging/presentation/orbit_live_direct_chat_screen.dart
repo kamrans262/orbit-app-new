@@ -203,6 +203,7 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
         if(!mounted||epoch!=_epoch)return;
         // Existing chat rendering; offline previews remain local only.
         _relayWasOffline=true;
+        await _messenger.retryRelayOffline(thread);
         final owner=await _api.owner;
         final history=await _messenger.relayHistory(thread);
         final next=await _renderHistory(history,thread,owner,offline:true);

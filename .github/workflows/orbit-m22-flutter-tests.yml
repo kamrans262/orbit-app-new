@@ -64,7 +64,7 @@ jobs:
 
   android-build:
     runs-on: ubuntu-latest
-    timeout-minutes: 55
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -98,12 +98,23 @@ jobs:
           }
           EOF
           test -z "$(git ls-files android/app/google-services.json)"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build real native Olm and Relay library for Android
+        run: |
+          cargo install cargo-ndk --locked
+          bash native/orbit_vodozemac/build_android.sh
       - run: flutter build apk --debug
-      - run: test -s build/app/outputs/flutter-apk/app-debug.apk
+      - name: Verify all three native library ABIs in the APK
+        run: |
+          apk=build/app/outputs/flutter-apk/app-debug.apk
+          test -s "$apk"
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            unzip -Z1 "$apk" | grep -Fx "lib/$abi/liborbit_vodozemac.so"
+          done
 
   ios-no-sign-build:
     runs-on: macos-15
-    timeout-minutes: 65
+    timeout-minutes: 100
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -112,8 +123,17 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build real native device and simulator Rust archives
+        run: bash native/orbit_vodozemac/build_ios.sh
       - run: flutter build ios --debug --no-codesign
-      - run: test -d build/ios/iphoneos/Runner.app
+      - name: Verify linked native ABI symbols
+        run: |
+          binary=build/ios/iphoneos/Runner.app/Runner
+          test -s "$binary"
+          nm -g "$binary" > /tmp/orbit-m22-symbols.txt
+          grep -q '_orbit_vodozemac_call' /tmp/orbit-m22-symbols.txt
+          grep -q '_orbit_vodozemac_free' /tmp/orbit-m22-symbols.txt
 
   native-relay-linux:
     runs-on: ubuntu-latest

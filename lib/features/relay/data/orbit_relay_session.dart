@@ -185,11 +185,18 @@ class OrbitRelaySession {
        !orbitRelayKinds.contains(queued.kind)||queued.protocol!=orbitRelayMessageProtocol)return false;
     await _current(generation);
     final recordId='out:'+queued.clientId;
-    if(await _vault.get(owner,device,recordId,now:cap.clock.seconds)!=null)return true;
+    final existing=await _vault.get(owner,device,recordId,now:cap.clock.seconds);
+    if(existing!=null&&existing['receipt'] is Map)return true;
     final source=Map<String,dynamic>.from(queued.toJson())..remove('conversation_id');
     final digest=relaySourceDigest(queued.conversationId,source,cap.frameBytes);
+    if(existing!=null){
+      relayCheck(existing['digest']==digest&&existing['roster_hash']==_rosterHash,'Relay queue identity changed.');
+    }
     for(final lease in _leases){
       if(!lease.live(cap)||queued.groupEpoch!=lease.epoch)continue;
+      // Reuse the original lease for a lost receipt. Never rebind an
+      // uncertain transfer to another peer/lease under the same ID.
+      if(existing!=null&&existing['lease_id']!=lease.id)continue;
       final matches=queued.envelopes.where((e)=>e.deviceId==lease.peer).toList();
       if(matches.length!=1)continue;
       final envelope=Map<String,dynamic>.from(matches.single.toJson());
@@ -197,17 +204,22 @@ class OrbitRelaySession {
       final packet=<String,Object?>{'lease':lease.token,'envelope_id':queued.clientId,
         'source_client_id':queued.clientId,'digest':digest,'peer_digest':pd,
         'source':Map<String,dynamic>.from(source)..remove('envelopes'),'peer_envelope':envelope};
+      final checkpoint=<String,Object?>{'lease_id':lease.id,'envelope_id':queued.clientId,
+        'source_client_id':queued.clientId,'digest':digest,'source_envelope':source,
+        'roster_hash':_rosterHash,'lease_expires':lease.expires,'peer_user':_thread!.peerId};
+      // Durable before any bytes leave. A crash/lost receipt can be
+      // recovered by same-ID HTTPS or reconciliation without a receipt.
+      await _vault.put(owner,device,recordId,checkpoint,expiry:lease.expires+7*86400);
+      await _current(generation);
       final proof=await _transport.transfer(lease,packet,(message)=>_sign(generation,message));
-      if(proof==null)continue;
+      if(proof==null)return false;
       final received=proof['received_at'];
       if(proof.length!=4||!proof.keys.every(const {'nonce','received_at','peer_digest','signature_b64'}.contains)||proof['nonce']!=queued.clientId||proof['peer_digest']!=pd||received is! int||
           received<lease.issued||received>=lease.expires||
           !await relayVerify(relayReceiptInput(lease,queued.clientId,queued.clientId,digest,pd,received),
-            proof['signature_b64'] as String,lease.peerKey))continue;
+            proof['signature_b64'] as String,lease.peerKey))return false;
       await _current(generation);
-      await _vault.put(owner,device,recordId,{'lease_id':lease.id,'envelope_id':queued.clientId,
-        'source_client_id':queued.clientId,'digest':digest,'source_envelope':source,'receipt':proof,
-        'roster_hash':_rosterHash,'lease_expires':lease.expires},expiry:lease.expires+7*86400);
+      await _vault.put(owner,device,recordId,{...checkpoint,'receipt':proof},expiry:lease.expires+7*86400);
       return true;
     }
     return false;
@@ -236,7 +248,19 @@ class OrbitRelayReconcile {
     final record=await _vault.get(owner,device,id,now:DateTime.now().toUtc().millisecondsSinceEpoch~/1000);
     if(record==null)return null;
     relayCheck(record['roster_hash']==currentRoster,'Relay roster changed; review required.');
-    final body=Map<String,Object?>.from(record)..remove('roster_hash')..remove('lease_expires');
+    final source=Map<String,dynamic>.from(queued.toJson())..remove('conversation_id');
+    relayCheck(record['source_client_id']==queued.clientId&&record['envelope_id']==queued.clientId&&
+      record['digest']==relaySourceDigest(queued.conversationId,source,32768)&&
+      record['digest']==relaySourceDigest(queued.conversationId,relayMap(record['source_envelope']),32768),
+      'Relay checkpoint does not match the durable M13 outbox.');
+    // Historical sync never authorizes a send. Only a fresh source
+    // publication receipt can confirm an already accepted message.
+    final outcome=await findOutcome(owner,queued.clientId);
+    if(outcome!=null&&outcome['status']=='accepted'&&
+        await messaging.wasPublished(queued.conversationId,queued.clientId)){
+      return queued.clientId;
+    }
+    final body=Map<String,Object?>.from(record)..remove('roster_hash')..remove('lease_expires')..remove('peer_user');
     final response=await api.reconcile(const Uuid().v4(),[body]);
     final rows=response['results'];
     relayCheck(rows is List&&rows.length==1,'Invalid Relay acknowledgement.');
@@ -257,4 +281,27 @@ class OrbitRelayReconcile {
   /// Explicitly read own backend outcome page; never treat it as new
   /// authorization, a read acknowledgement or proof of peer plaintext.
   Future<Map<String,dynamic>> sync({String? cursor})=>api.sync(cursor:cursor);
+  Future<Map<String,dynamic>?> findOutcome(String owner,String clientId) async {
+    String? cursor;
+    final seen=<String>{};
+    try{
+      for(var page=0;page<5;page++){
+        relayCheck(await messaging.owner==owner,'Relay account changed.');
+        final data=await api.sync(cursor:cursor,limit:100);
+        relayCheck(await messaging.owner==owner,'Relay account changed.');
+        final items=data['items'];
+        relayCheck(items is List&&items.length<=100,'Invalid Relay sync page.');
+        for(final raw in items as List){
+          final row=relayMap(raw);
+          if(row['source_client_id']==clientId&&row['envelope_id']==clientId&&row['status']=='accepted')return row;
+        }
+        cursor=data['next_cursor'] as String?;
+        if(cursor==null||!seen.add(cursor))break;
+      }
+    }on OrbitIdentityException catch(error){
+      if(error.statusCode==401||error.statusCode==403)rethrow;
+      // Sync history is an optimization, never a prerequisite to HTTPS.
+    }
+    return null;
+  }
 }
