@@ -36,28 +36,28 @@ class OrbitLiveTypingRuntime {
     }
     _poll=Timer.periodic(const Duration(seconds:4),(_){
       if(!visible()){clear();return;}
-      if(!_selected||!_connected())request();
+      if(!_selected||!_connected()){request();}
     });
     request();
   }
   void request(){
-    if(_closed||!visible()||scope()==null)return;
+    if(_closed||!visible()||scope()==null){return;}
     _pending=true;
-    if(_busy||_debounce!=null)return;
+    if(_busy||_debounce!=null){return;}
     _debounce=Timer(const Duration(milliseconds:250),(){
       _debounce=null;unawaited(_refresh());
     });
   }
   Future<void> _refresh() async{
-    if(_closed||!visible())return;
+    if(_closed||!visible()){return;}
     final id=scope();
-    if(id==null)return;
+    if(id==null){return;}
     final epoch=_epoch;
     _busy=true;_pending=false;
     final clock=Stopwatch()..start();
     try{
       final result=await read(id).timeout(const Duration(seconds:5));
-      if(_closed||epoch!=_epoch||!visible()||scope()!=id)return;
+      if(_closed||epoch!=_epoch||!visible()||scope()!=id){return;}
       final ids=result['typing_user_ids'];
       final ttl=result['ttl_seconds'];
       if(ids is! List||ids.length>200||ids.any((v)=>v is! String||v.isEmpty)||
@@ -70,15 +70,15 @@ class OrbitLiveTypingRuntime {
       onChanged(Set.unmodifiable(ids.cast<String>()));
       _expiry=Timer(remaining,clear);
     }catch(_){
-      if(!_closed&&epoch==_epoch)clear();
+      if(!_closed&&epoch==_epoch){clear();}
     }finally{
       _busy=false;
-      if(_pending)request();
+      if(_pending){request();}
     }
   }
   void clear(){
     ++_epoch;_expiry?.cancel();_expiry=null;
-    if(!_closed)onChanged(const <String>{});
+    if(!_closed){onChanged(const <String>{});}
   }
   void dispose(){
     _closed=true;++_epoch;

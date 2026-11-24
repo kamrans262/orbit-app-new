@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_ui/features/realtime/data/orbit_realtime_runtime.dart';
 import 'package:orbit_ui/features/realtime/presentation/orbit_realtime_refresh.dart';
+import 'package:orbit_ui/features/messaging/presentation/orbit_live_typing_runtime.dart';
 
 const uid='00000000-0000-4000-8000-000000000001';
 const generation='00000000-0000-4000-8000-000000000002';
@@ -70,21 +71,26 @@ void main(){
     await tester.pump();expect(seen.length,count+1);
     await tester.pump(const Duration(seconds:31));
     await tester.pump();expect(calls,2);expect(sdk.opened,1);
-    final stopped=runtime.stop(disconnect:true);
-    await tester.pump();await stopped;await tester.pump();
+    var stopped=false;
+    unawaited(runtime.stop(disconnect:true).then((_)=>stopped=true));
+    await tester.pump();await tester.pump(const Duration(milliseconds:1));
+    expect(stopped,true,reason:'Logout cleanup must settle after cancellation.');
     expect(runtime.connected,false);expect(disconnects,1);
     final after=seen.length;
     sdk.revisions.add({'schema_version':1,'revision':3});
     await tester.pump();expect(seen.length,after);
-    await sub.cancel();
-    final closing=sdk.dispose();await tester.pump();await closing;
+    unawaited(sub.cancel());
+    unawaited(sdk.dispose());await tester.pump();
   });
   testWidgets('late bootstrap cannot attach SDK after logout',(tester) async{
     final sdk=FakeSdk();final gate=Completer<Map<String,dynamic>>();
     final runtime=OrbitRealtimeRuntime(enabled:true,sdk:sdk,owner:() async=>'a',bootstrap:(_)=>gate.future);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     runtime.start();await tester.pump();
-    final stopped=runtime.stop();await tester.pump();await stopped;gate.complete(response());await tester.pump();
+    var stopped=false;
+    unawaited(runtime.stop().then((_)=>stopped=true));
+    await tester.pump();expect(stopped,true);
+    gate.complete(response());await tester.pump();
     expect(sdk.opened,0);await sdk.dispose();
   });
   testWidgets('route refresh coalesces bursts, ignores hidden routes and stops',(tester) async{
@@ -100,5 +106,61 @@ void main(){
     visible=false;changes.add({'location'});await tester.pump(const Duration(seconds:1));expect(calls,2);
     binding.dispose();visible=true;changes.add({'location'});await tester.pump(const Duration(seconds:1));
     expect(calls,2);await changes.close();
+  });
+
+  testWidgets('periodic poll shares the event lane and respects cooldown',(tester) async{
+    final changes=StreamController<Set<String>>.broadcast();
+    var calls=0;
+    final binding=OrbitRealtimeRefresh(modules:const {'location'},visible:()=>true,
+      refresh:() async{calls++;},enabled:true,changes:changes.stream,
+      minimumInterval:const Duration(seconds:3))..start();
+    changes.add({'location'});binding.poll();
+    await tester.pump();await tester.pump(const Duration(seconds:1));
+    expect(calls,1);
+    for(var i=0;i<20;i++){binding.poll();changes.add({'location'});}
+    await tester.pump();await tester.pump(const Duration(seconds:1));
+    expect(calls,1);
+    await tester.pump(const Duration(seconds:3));await tester.pump(const Duration(seconds:1));
+    expect(calls,2);
+    binding.dispose();await changes.close();
+  });
+
+  testWidgets('typing signals reauthorize, expire and fall back only when needed',(tester) async{
+    final changes=StreamController<Set<String>>.broadcast();
+    var connected=true,visible=true,calls=0;
+    String? scope='circle-thread';
+    Set<String> ids={};
+    final typing=OrbitLiveTypingRuntime(read:(id) async{
+        expect(id,'circle-thread');calls++;
+        return {'typing_user_ids':['member'],'ttl_seconds':5};
+      },scope:()=>scope,visible:()=>visible,onChanged:(value)=>ids=value,
+      changes:changes.stream,selected:true,connected:()=>connected)..start();
+    await tester.pump(const Duration(milliseconds:300));expect(ids,{'member'});
+    await tester.pump(const Duration(seconds:4));expect(calls,1);
+    await tester.pump(const Duration(seconds:2));expect(ids,isEmpty);
+    changes.add({'messaging'});await tester.pump();
+    await tester.pump(const Duration(milliseconds:300));
+    expect(ids,{'member'});expect(calls,2);
+    connected=false;
+    await tester.pump(const Duration(seconds:4));await tester.pump(const Duration(milliseconds:300));
+    expect(calls,3);
+    visible=false;scope=null;
+    await tester.pump(const Duration(seconds:4));expect(ids,isEmpty);
+    expect(calls,3);
+    typing.dispose();await changes.close();
+  });
+
+  testWidgets('late typing result cannot restore a revoked Circle scope',(tester) async{
+    final changes=StreamController<Set<String>>.broadcast();
+    final gate=Completer<Map<String,dynamic>>();
+    String? scope='circle-thread';Set<String> ids={};
+    final typing=OrbitLiveTypingRuntime(read:(_)=>gate.future,
+      scope:()=>scope,visible:()=>true,onChanged:(value)=>ids=value,
+      changes:changes.stream,selected:true,connected:()=>true)..start();
+    await tester.pump(const Duration(milliseconds:300));
+    scope=null;typing.clear();
+    gate.complete({'typing_user_ids':['member'],'ttl_seconds':5});
+    await tester.pump();expect(ids,isEmpty);
+    typing.dispose();await changes.close();
   });
 }
