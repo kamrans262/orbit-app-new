@@ -40,7 +40,7 @@ class _OrbitAdVisibilityState extends State<OrbitAdVisibility>
     // A card inside a clipped scroll viewport is not visible merely because
     // its layout bounds overlap the physical screen.
     RenderObject child=object;
-    RenderObject? ancestor=child.parent as RenderObject?;
+    RenderObject? ancestor=child.parent;
     while(ancestor!=null){
       if(ancestor is RenderOffstage && ancestor.offstage)return false;
       final clip=ancestor.describeApproximatePaintClip(child);
@@ -49,7 +49,7 @@ class _OrbitAdVisibilityState extends State<OrbitAdVisibility>
           ancestor.getTransformTo(null),clip));
       }
       child=ancestor;
-      ancestor=child.parent as RenderObject?;
+      ancestor=child.parent;
     }
     if(!box.isFinite||!intersection.isFinite)return false;
     if(intersection.width<=0||intersection.height<=0)return false;
@@ -65,7 +65,7 @@ class _OrbitAdVisibilityState extends State<OrbitAdVisibility>
         RenderObject? node=target;
         while(node!=null){
           if(node==object)return true;
-          node=node.parent as RenderObject?;
+          node=node.parent;
         }
       }
     }
