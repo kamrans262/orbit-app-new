@@ -49,4 +49,29 @@ void main(){
     expect(tapped,1);
     expect(measured,0);
   });
+  testWidgets('Visible creative is sampled, but clipped and covered creative is not',
+      (tester) async {
+    var measured=0;
+    Widget creative(String key)=>OrbitAdVisibility(
+      key:ValueKey(key),minimumVisibleMs:0,onVisible:(_)=>measured++,
+      child:const SizedBox(width:200,height:100,
+        child:ColoredBox(color:Colors.blue)));
+    await tester.pumpWidget(MaterialApp(home:Scaffold(body:Center(
+      child:creative('visible')))));
+    await tester.pump(const Duration(milliseconds:300));
+    expect(measured,1);
+    await tester.pumpWidget(MaterialApp(home:Scaffold(body:Center(
+      child:SizedBox(width:200,height:20,child:ClipRect(
+        child:OverflowBox(minHeight:100,maxHeight:100,
+          child:creative('clipped'))))))));
+    await tester.pump(const Duration(milliseconds:600));
+    expect(measured,1);
+    await tester.pumpWidget(MaterialApp(home:Scaffold(body:Center(
+      child:Stack(children:[creative('covered'),const Positioned.fill(
+        child:ColoredBox(color:Colors.black))])))));
+    await tester.pump(const Duration(milliseconds:600));
+    expect(measured,1);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
 }

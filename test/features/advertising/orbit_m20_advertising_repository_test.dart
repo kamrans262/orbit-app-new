@@ -80,7 +80,7 @@ class FakeAdvertisingIdentity extends OrbitIdentityClient {
     int maxBytes=4*1024*1024,bool retry=true}) async {
     assetCalls++;
     if(corrupt)return Uint8List.fromList([137,80,78,71,13,10,26,10]);
-    return base64Decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZ1sAAAAASUVORK5CYII=');
+    return base64Decode('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGNMMRJhYGBgYmBgYGBgAAAIcgCu4vJ88AAAAABJRU5ErkJggg==');
   }
 }
 
