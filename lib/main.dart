@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'app/app.dart';
 import 'features/splash/domain/orbit_startup_resolver.dart';
 import 'features/auth/data/orbit_identity_client.dart';
+import 'features/config/data/orbit_public_config_runtime.dart';
 import 'core/navigation/orbit_bottom_add_coordinator.dart';
 import 'features/app_update/presentation/orbit_update_runtime.dart';
 import 'features/connectivity/presentation/orbit_connectivity_runtime.dart';
@@ -45,10 +46,13 @@ void main() {
   // No Welcome/Get Started route is built before this future completes.
   final preparedApp = OrbitStartupResolver(
     OrbitIdentityClient.instance,
-  ).resolve().then((startup) => OrbitApp(
-    initialRoute: startup.route,
-    startupAuthenticated: startup.authenticated,
-  ));
+  ).resolve().then((startup) {
+    // Resolve first-run state before reading public configuration; optional
+    // presentation hints never delay or alter authenticated route selection.
+    OrbitPublicConfigRuntime.instance.start();
+    return OrbitApp(initialRoute:startup.route,
+      startupAuthenticated:startup.authenticated);
+  });
 
   runApp(
     OrbitSplashGate(

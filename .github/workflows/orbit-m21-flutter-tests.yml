@@ -46,7 +46,7 @@ jobs:
 
       - name: Analyze refreshed Plans and Notifications integrations
         run: |
-          dart analyze lib/features/plans/data/orbit_plan_repository.dart lib/features/plans/presentation/screens/orbit_live_plans_screen.dart lib/features/plans/presentation/screens/orbit_live_plan_detail_screen.dart lib/features/notifications/presentation/orbit_live_notifications_screen.dart test/features/integration
+          dart analyze lib/features/config/data/orbit_public_config_runtime.dart lib/main.dart lib/features/plans/data/orbit_plan_repository.dart lib/features/plans/presentation/screens/orbit_live_plans_screen.dart lib/features/plans/presentation/screens/orbit_live_plan_detail_screen.dart lib/features/notifications/presentation/orbit_live_notifications_screen.dart test/features/integration
       - name: Admin-state refresh and earlier consumer contract tests
         run: |
           flutter test test/features/integration

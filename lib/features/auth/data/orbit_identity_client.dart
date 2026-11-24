@@ -209,6 +209,22 @@ class OrbitIdentityClient {
     return json;
   }
 
+  /// Public, presentation-only M1 hints. No bearer token, private user ID,
+  /// country or cohort is invented. Existing installation UUID may be used
+  /// for deterministic rollout; missing subject leaves partial rollout off.
+  Future<Map<String,dynamic>> publicConfigBootstrap({
+    required String platform,required String appVersion,
+  }) async {
+    final subject=await _storage.read(key:_idKey);
+    final query=Uri(queryParameters:{
+      'platform':platform,'app_version':appVersion,
+      if(subject!=null && RegExp(
+        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+      ).hasMatch(subject))'subject':subject,
+    }).query;
+    return _send('GET','/config/bootstrap?'+query);
+  }
+
   Future<void> requestCode(String channel, String recipient,
       {String purpose = 'signup'}) async {
     await _send('POST', '/auth/otp/request', body: <String, Object?>{
