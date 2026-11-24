@@ -118,7 +118,7 @@ class OrbitRealtimeRuntime with WidgetsBindingObserver {
             }catch(_){unawaited(_drop());}
           },onError:(Object _){if(_current(epoch))unawaited(_drop());},cancelOnError:true);
         });
-      }else if(previous!=null&&!setEquals(previous.modules,next.modules)){
+      }else if(!setEquals(previous.modules,next.modules)){
         _events.add(Set.unmodifiable({...previous.modules,...next.modules}));
       }
       if(!_current(epoch)||!identical(_ticket,next))return;

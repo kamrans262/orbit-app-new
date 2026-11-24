@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_ui/features/realtime/data/orbit_realtime_runtime.dart';
@@ -91,9 +90,9 @@ void main(){
     var visible=true,calls=0;final gate=Completer<void>();
     final binding=OrbitRealtimeRefresh(modules:const {'location'},visible:()=>visible,
       refresh:() async{calls++;if(calls==1)await gate.future;},enabled:true,changes:changes.stream)..start();
-    for(var i=0;i<10;i++)changes.add({'location'});
+    for(var i=0;i<10;i++){changes.add({'location'});}
     await tester.pump();await tester.pump(const Duration(seconds:1));expect(calls,1);
-    for(var i=0;i<10;i++)changes.add({'location'});
+    for(var i=0;i<10;i++){changes.add({'location'});}
     await tester.pump();gate.complete();await tester.pump();await tester.pump(const Duration(seconds:1));
     expect(calls,2);
     visible=false;changes.add({'location'});await tester.pump(const Duration(seconds:1));expect(calls,2);

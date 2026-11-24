@@ -43,7 +43,37 @@ class OrbitRealtimeTicket {
       throw const FormatException('Firebase identity mismatch.');
     }
     final origin=Uri.tryParse(url);
-    final host=RegExp('^'+RegExp.escape(project)+r'(?:-default-rtdb)?(?:\.firebaseio\.com|\.[a-z0-9-]+\.firebasedatabase\.app)$');
+    final host=RegExp('^${RegExp.escape(project)}' r'(?:-default-rtdb)?(?:\.firebaseio\.com|\.[a-z0-9-]+\.firebasedatabase\.app);
+    if(origin==null||origin.scheme!='https'||!host.hasMatch(origin.host)||origin.hasPort||
+      origin.userInfo.isNotEmpty||origin.hasQuery||origin.hasFragment||origin.path.isNotEmpty){
+      throw const FormatException('Firebase origin mismatch.');
+    }
+    final token=field(raw,'custom_token');
+    final expiry=raw['lease_until_ms'],renew=raw['renew_after_seconds'],poll=raw['fallback_min_poll_seconds'];
+    final modules=raw['modules'];
+    if(expiry is! int||renew is! int||renew<10||renew>30||poll is! int||poll<25||poll>60||
+        modules is! List||modules.any((m)=>m is! String||!orbitRealtimeModules.contains(m))){
+      throw const FormatException('Invalid realtime policy.');
+    }
+    // Clamp to the server's maximum lease, measured from request start, and
+    // fail closed if the absolute deadline is already past. Never extend by skew.
+    final remaining=expiry-now.millisecondsSinceEpoch;
+    final maxRemaining=60000-requestElapsed.inMilliseconds;
+    final ms=remaining<maxRemaining?remaining:maxRemaining;
+    if(ms<=0)throw const FormatException('Expired lease.');
+    return OrbitRealtimeTicket(uid:uid,generation:generation,token:token,path:path,project:project,url:url,
+      apiKey:field(f,'api_key'),appId:appId,sender:sender,modules:Set.unmodifiable(modules.cast<String>()),
+      lease:Duration(milliseconds:ms),renew:Duration(seconds:renew),poll:Duration(seconds:poll),
+      bundle:kind=='ios'?field(f,'ios_bundle_id'):null);
+  }
+
+  static int revision(Object? raw){
+    if(raw is! Map||raw.length!=2||raw['schema_version']!=1||raw['revision'] is! int||
+       (raw['revision'] as int)<1){throw const FormatException('Invalid realtime signal.');}
+    return raw['revision'] as int;
+  }
+}
+);
     if(origin==null||origin.scheme!='https'||!host.hasMatch(origin.host)||origin.hasPort||
       origin.userInfo.isNotEmpty||origin.hasQuery||origin.hasFragment||origin.path.isNotEmpty){
       throw const FormatException('Firebase origin mismatch.');
