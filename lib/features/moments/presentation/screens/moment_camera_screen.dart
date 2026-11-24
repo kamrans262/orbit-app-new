@@ -20,6 +20,7 @@ import '../../domain/models/moment_publish_models.dart';
 import '../../data/orbit_moment_capture_vault.dart';
 import '../../data/moment_photo_processor.dart';
 import '../../data/orbit_camera_policy.dart';
+import '../../data/orbit_capture_inspection.dart';
 import '../../../media/data/orbit_bounded_image.dart';
 import 'package:flutter/foundation.dart' show compute;
 import '../widgets/moment_publish_sheet.dart';
@@ -861,7 +862,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   }
 
   Future<void> _selectCaptureMode(_OrbitCaptureMode next) async {
-    if(_isCapturing || _recording || _publishSheetOpen ||
+    if(_isCapturing || _recording || _recordStarting || _recordStopping || _publishSheetOpen ||
        _capturedBytes!=null || _capturedClip!=null || _mode==next)return;
     if(_cameraInitializationInProgress) {
       _showToolHint('Camera is starting. Please try again.');
@@ -967,8 +968,9 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       if(clip==null || !await clip.exists() || await clip.length()<1){
         throw const FormatException('Recorded clip is empty.');
       }
-      final info=await CompressVideo().getMediaInfo(clip.path);
-      final actual=info.durationMs;
+      final actual=_mode==_OrbitCaptureMode.voice
+        ?await OrbitCaptureInspection.validate(clip,kind:'audio',policy:OrbitCameraPolicy.current)
+        :(await CompressVideo().getMediaInfo(clip.path)).durationMs;
       OrbitCameraPolicy.current.requireDuration(_mode==_OrbitCaptureMode.video?'video':'audio',actual);
       await _saveClipDraft(clip,
         _mode==_OrbitCaptureMode.video?'video':'audio',actual);
@@ -981,6 +983,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       // A failed stop/empty-file validation can leave a plaintext native
       // recording behind before it was assigned to the preview state.
       if(clip!=null)await _deleteClip(clip);
+      if(_mode==_OrbitCaptureMode.voice){final original=_capturedClip;if(original!=null)await _deleteClip(original);_capturedClip=null;}
       if(mounted)ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content:Text('Recording could not be completed.')));
     }finally{
@@ -990,7 +993,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   }
 
   Future<void> _pickPhotoFromGallery() async {
-    if(_isCapturing || _recording || _publishSheetOpen ||
+    if(_isCapturing || _recording || _recordStarting || _recordStopping || _publishSheetOpen ||
        _capturedBytes!=null || _capturedClip!=null) return;
     if(_mode==_OrbitCaptureMode.voice)return;
     setState(()=>_isCapturing=true);
@@ -1126,6 +1129,8 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         return;
       }
       setState(() => _cameraError = _friendlyCameraError(error));
+    } catch (_) {
+      if(mounted)_showToolHint('Photo could not be safely processed.');
     } finally {
       if (mounted) {
         setState(() {
@@ -1137,7 +1142,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   }
 
   Future<void> _retake() async {
-    if (!mounted || _isRetaking || _isCapturing || _recording) return;
+    if (!mounted || _isRetaking || _isCapturing || _recording || _recordStarting || _recordStopping || _publishSheetOpen) return;
     _isRetaking=true;
     try {
       _stopWhenStarted=false;
@@ -1377,6 +1382,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   }
 
   Future<void> _handleSendPressed({String initialOverlayText=''}) async {
+    if(_recordStarting||_recordStopping)return;
     final captured = _capturedBytes;
     if(_recording){await _finishRecording();return;}
     if (captured == null && _capturedClip==null) {

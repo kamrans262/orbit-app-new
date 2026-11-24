@@ -305,7 +305,11 @@ class OrbitMomentCaptureVault {
     }
     // Purge orphan ciphertext under the account-specific application folder.
     final root=await _root(owner);
-    if(await root.exists())await root.delete(recursive:true);
+    if(await root.exists()){
+      await for(final entry in root.list(followLinks:false)){
+        if(entry is File&&entry.path.endsWith('.cipher'))await entry.delete();
+      }
+    }
     final id=metadata?['id'];
     if(id is String&&RegExp(r'^[a-fA-F0-9-]{36}$').hasMatch(id)){
       final tmp=await _temporary();

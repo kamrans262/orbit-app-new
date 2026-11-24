@@ -2,6 +2,8 @@ import Flutter
 import GoogleMaps
 import UIKit
 import Darwin
+import AVFoundation
+import AudioToolbox
 import workmanager_apple
 
 @main
@@ -29,6 +31,22 @@ import workmanager_apple
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "OrbitRelayDiscovery") {
       relayDiscovery = OrbitRelayDiscovery(messenger: registrar.messenger())
+    }
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "OrbitCaptureInspection") {
+      let channel = FlutterMethodChannel(name: "orbit/capture_inspection", binaryMessenger: registrar.messenger())
+      channel.setMethodCallHandler { call, result in
+        guard call.method == "inspect" else { result(FlutterMethodNotImplemented); return }
+        guard let args = call.arguments as? [String:Any], let path = args["path"] as? String else {
+          result(FlutterError(code: "invalid", message: "Capture unavailable", details: nil)); return
+        }
+        DispatchQueue.global(qos: .userInitiated).async {
+          let metadata = inspectOrbitCapture(path)
+          DispatchQueue.main.async {
+            if let metadata = metadata { result(metadata) }
+            else { result(FlutterError(code: "invalid", message: "Capture metadata unavailable", details: nil)) }
+          }
+        }
+      }
     }
   }
 }
@@ -109,4 +127,41 @@ private final class OrbitRelayDiscovery: NSObject, NetServiceDelegate, NetServic
     resolving.removeValue(forKey: sender.name)
   }
   func netService(_ sender: NetService, didNotResolve errorDict: [String: NSNumber]) { resolving.removeValue(forKey: sender.name) }
+}
+
+private func inspectOrbitCapture(_ path: String) -> [String:Any]? {
+  let url = URL(fileURLWithPath:path).resolvingSymlinksInPath()
+  let roots = [NSTemporaryDirectory(),NSHomeDirectory()+"/Library/Caches",NSHomeDirectory()+"/Library/Application Support",NSHomeDirectory()+"/Documents"]
+    .map { URL(fileURLWithPath:$0).resolvingSymlinksInPath().path }
+  guard roots.contains(where:{ url.path.hasPrefix($0.hasSuffix("/") ? $0 : $0+"/") }),
+        let size = try? url.resourceValues(forKeys:[.fileSizeKey]).fileSize,
+        size > 0, size <= 524288000 else { return nil }
+  let asset = AVURLAsset(url:url)
+  let seconds = CMTimeGetSeconds(asset.duration)
+  guard seconds.isFinite, seconds > 0, seconds <= 60 else { return nil }
+  let audio = asset.tracks(withMediaType:.audio)
+  let video = asset.tracks(withMediaType:.video)
+  let metadata = asset.commonMetadata + asset.metadata
+  let hasLocation = metadata.contains { item in
+    let key = ((item.identifier?.rawValue ?? "")+" "+(item.commonKey?.rawValue ?? "")+" "+String(describing:item.key)).lowercased()
+    return key.contains("location") || key.contains("iso6709") || key.contains("gps")
+  }
+  var out:[String:Any] = ["duration_ms":Int((seconds*1000).rounded(.up)),
+    "location_metadata":hasLocation,"audio_tracks":audio.count,"video_tracks":video.count]
+  if let track=audio.first, let raw=track.formatDescriptions.first {
+    let desc = raw as! CMAudioFormatDescription
+    if let asbd=CMAudioFormatDescriptionGetStreamBasicDescription(desc) {
+      out["audio_aac_lc"] = asbd.pointee.mFormatID == kAudioFormatMPEG4AAC
+      out["audio_channels"] = Int(asbd.pointee.mChannelsPerFrame)
+      out["audio_bps"] = Double(track.estimatedDataRate)
+    }
+  }
+  if let track=video.first, let raw=track.formatDescriptions.first {
+    let desc=raw as! CMVideoFormatDescription
+    let dimensions=CMVideoFormatDescriptionGetDimensions(desc)
+    out["video_h264"] = CMFormatDescriptionGetMediaSubType(desc) == kCMVideoCodecType_H264
+    out["width"]=Int(dimensions.width);out["height"]=Int(dimensions.height)
+    out["fps"]=Double(track.nominalFrameRate);out["video_bps"]=Double(track.estimatedDataRate)
+  }
+  return out
 }

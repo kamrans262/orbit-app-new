@@ -11,6 +11,7 @@ import 'package:uuid/uuid.dart';
 import '../../auth/data/orbit_identity_client.dart';
 import 'orbit_media_crypto.dart';
 import '../../moments/data/orbit_camera_policy.dart';
+import '../../moments/data/orbit_capture_inspection.dart';
 import 'orbit_media_outbox.dart';
 import 'orbit_media_repository.dart';
 import 'orbit_media_transfer_gate.dart';
@@ -110,12 +111,13 @@ class OrbitNativeVideoProcessor implements OrbitVideoProcessor {
         (policy.enhanced && (info.videoCodec!='h264'||info.frameRateFps==null||info.videoBitrateBps==null))) {
       throw const FormatException('Compressed video does not meet Orbit policy.');
     }
+    final duration=await OrbitCaptureInspection.validate(output,kind:'video',policy:policy,muted:stripAudio,saver:lowBandwidth);
     final bytes=await _compressor.getThumbnail(output.path,
       positionMs:min(info.durationMs ~/ 2,1500), quality:78,
       maxDimensionPx:320);
     final poster=OrbitMediaCrypto.preparePhoto(bytes).thumbnail;
     return OrbitPreparedVideo(file:output,posterJpeg:poster,
-      durationMs:info.durationMs,width:info.widthPx,height:info.heightPx);
+      durationMs:duration,width:info.widthPx,height:info.heightPx);
     } catch (_) {
       // Plugin output is still plaintext until the caller encrypts it. Any
       // metadata/codec/thumbnail validation error must not leave an unsealed
@@ -280,7 +282,9 @@ class OrbitEncryptedClipStager {
       if(!['message','moment'].contains(purpose)){
         throw ArgumentError('Invalid audio purpose.');
       }
-      if(purpose=='moment')OrbitCameraPolicy.current.requireDuration('audio',durationMs);
+      if(purpose=='moment'){
+        durationMs=await OrbitCaptureInspection.validate(encoded,kind:'audio',policy:OrbitCameraPolicy.current);
+      }
       final owner=await _identity.currentLocalSocialOwner();
       if(owner==null)throw OrbitIdentityException('Please sign in.',401);
       final device=await _identity.trustedMediaDevice();
