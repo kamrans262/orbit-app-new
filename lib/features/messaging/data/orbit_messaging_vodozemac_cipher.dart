@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart' as hashes;
 import 'package:cryptography/cryptography.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../auth/data/orbit_identity_client.dart';
 import 'orbit_messaging_api.dart';
 import 'orbit_messaging_cipher.dart';
 import 'orbit_messaging_models.dart';
@@ -63,7 +64,14 @@ class OrbitMessagingVodozemacCipher implements OrbitMessagingCipher {
       String message) async {
     if(!independentlyVerified)throw OrbitMessagingSecurityException(
       'Secure Relay identity has not been reviewed.',503);
-    final s=await _open();
+    // Offline signing is bounded by the caller's freshly authenticated,
+    // monotonic in-memory lease context; no new account/key is generated.
+    if(await OrbitIdentityClient.instance.currentLocalSocialOwner()!=expectedOwner){
+      throw OrbitMessagingSecurityException('Relay account changed.',401);
+    }
+    final state=await _store.read(expectedOwner,expectedDevice);
+    final s=_NativeState(expectedOwner,expectedDevice,
+      await _store.pickleKey(expectedOwner,expectedDevice),state);
     if(s.owner!=expectedOwner||s.device!=expectedDevice||
         s.data['published']!=true||s.data['account']==null){
       throw OrbitMessagingSecurityException('Relay identity unavailable.',403);

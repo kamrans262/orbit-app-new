@@ -61,6 +61,10 @@
     </array>
     <key>OrbitGoogleMapsApiKey</key>
     <string>$(ORBIT_GOOGLE_MAPS_IOS_API_KEY)</string>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Orbit Relay uses your local network only when you choose to exchange encrypted messages with a trusted nearby contact.</string>
+    <key>NSBonjourServices</key>
+    <array><string>_orbitrelay._tcp</string></array>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>Orbit uses your location only after you explicitly share it with trusted people. You can stop sharing at any time.</string>
     <key>NSCameraUsageDescription</key>
