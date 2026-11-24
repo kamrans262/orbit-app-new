@@ -2,8 +2,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:orbit_app/features/realtime/data/orbit_realtime_runtime.dart';
-import 'package:orbit_app/features/realtime/presentation/orbit_realtime_refresh.dart';
+import 'package:orbit_ui/features/realtime/data/orbit_realtime_runtime.dart';
+import 'package:orbit_ui/features/realtime/presentation/orbit_realtime_refresh.dart';
 
 const uid='00000000-0000-4000-8000-000000000001';
 const generation='00000000-0000-4000-8000-000000000002';
