@@ -5,6 +5,8 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import '../../data/moment_photo_processor.dart';
 import '../../data/orbit_camera_policy.dart';
+import '../../data/orbit_camera_tool_catalog.dart';
+import '../../../config/data/orbit_public_config_runtime.dart';
 import '../../data/orbit_moment_audience_memory.dart';
 import '../../../auth/data/orbit_identity_client.dart';
 import 'orbit_moment_draft_player.dart';
@@ -53,6 +55,7 @@ Future<void> showMomentPublishingSheet(
   bool enableNativePreview=true,
   String initialOverlayText='',
   MomentFilter initialFilter=MomentFilter.natural,
+  bool Function()? captureToolsAllowed,
   required List<MomentAudienceCircle> circles,
   List<MomentAudienceCircle> friends = const [],
   String privacyAudience = 'Nobody',
@@ -86,6 +89,7 @@ Future<void> showMomentPublishingSheet(
         enableNativePreview:enableNativePreview,
         initialOverlayText:initialOverlayText,
         initialFilter: initialFilter,
+        captureToolsAllowed:captureToolsAllowed,
         circles: circles,
         friends: friends,
         privacyAudience: privacyAudience,
@@ -109,6 +113,7 @@ class MomentPublishSheet extends StatefulWidget {
     this.enableNativePreview=true,
     this.initialOverlayText='',
     this.initialFilter=MomentFilter.natural,
+    this.captureToolsAllowed,
     this.friends = const [],
     this.privacyAudience = 'Nobody',
     this.publisher,
@@ -127,6 +132,7 @@ class MomentPublishSheet extends StatefulWidget {
   final bool enableNativePreview;
   final String initialOverlayText;
   final MomentFilter initialFilter;
+  final bool Function()? captureToolsAllowed;
   final List<MomentAudienceCircle> circles;
   final List<MomentAudienceCircle> friends;
   final String privacyAudience;
@@ -259,6 +265,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
   @override
   void initState() {
     super.initState();
+    OrbitPublicConfigRuntime.instance.addListener(_onToolPolicyChanged);
     final recovered=widget.recoveredEdits;
     _filter=MomentFilter.values.where((f)=>f.name==recovered['sheet_filter']).firstOrNull??widget.initialFilter;
     _muteVideo=recovered['mute']==true;_dataSaver=recovered['saver']==true;
@@ -376,6 +383,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
 
   @override
   void dispose() {
+    OrbitPublicConfigRuntime.instance.removeListener(_onToolPolicyChanged);
     _previewDebounce?.cancel();
     ++_previewGeneration;
     _caption.removeListener(_checkpoint);_placeLabel.removeListener(_checkpoint);
@@ -456,6 +464,8 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
       'keep your photo, or retry after checking the M6 Media service.';
   }
 
+  void _onToolPolicyChanged(){if(mounted)setState((){});}
+  bool get _toolsAllowed=>widget.mediaKind!='image'||(OrbitCameraToolCatalog.current.allowsFilter(_filter.name)&&(widget.captureToolsAllowed?.call()??true));
   Future<void> _submit({bool previewOnly = false, bool privateOnly = false}) async {
     if (_busy || !mounted) return;
     if (privateOnly && !_canSavePrivate) return;
@@ -463,6 +473,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
     if (!previewOnly && !privateOnly && !_canPublish) return;
     if(_locationConsent && _placeLabel.text.trim().isEmpty)return;
     if(_taggedPeople.length>20)return;
+    if(!_toolsAllowed){setState((){_error='Camera tools changed. Return to review; your draft is retained.';_step=_PublishStep.failed;});return;}
     FocusScope.of(context).unfocus();
     setState(() {
       _busy = true;
@@ -478,12 +489,14 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
       await _previewWork;
       if(!mounted)return;
       _checkpoint();await _checkpointInFlight;
+      if(!_toolsAllowed)throw const FormatException('Camera tools changed.');
       if (privateOnly) {
         // Explicit user action. M6 encrypts and saves to the creator's own
         // trusted device, but does not publish or notify a Circle.
         final edited=widget.mediaKind=='image'?
           await _encodeImage():widget.photoBytes;
         if(!mounted)return;
+        if(!_toolsAllowed)throw const FormatException('Camera tools changed.');
         await widget.privateSaver!(edited, (fraction) {
           if (!mounted) return;
           setState(() => _progress = fraction.clamp(0.0, 1.0).toDouble());
@@ -499,6 +512,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
         final edited=widget.mediaKind=='image'?
           await _encodeImage():widget.photoBytes;
         if(!mounted)return;
+        if(!_toolsAllowed)throw const FormatException('Camera tools changed.');
         final request = MomentPublishRequest(
           photoBytes: edited,
           mediaFile:widget.mediaFile,
@@ -542,7 +556,9 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = privateOnly
+        _error = !_toolsAllowed
+            ? 'Camera tools changed. Return to review; your draft is retained.'
+            : privateOnly
             ? _explainPrivateSaveFailure(error)
             : 'Your Moment could not be published. Nothing was confirmed as sent.';
         _step = _PublishStep.failed;
@@ -708,14 +724,15 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
           SizedBox(height:43,child:ListView(
             key:MomentPublishKeys.photoFilter,
             scrollDirection:Axis.horizontal,
-            children:MomentFilter.values.map((filter)=>Padding(
+            children:MomentFilter.values.where((f)=>OrbitCameraToolCatalog.current.allowsFilter(f.name)).map((filter)=>Padding(
               padding:const EdgeInsets.only(right:8),
               child:ChoiceChip(
                 label:Text(filter.label,style:AppTypography.body),
                 selected:_filter==filter,
                 selectedColor:AppColors.background,
                 onSelected:(_){
-                  setState(()=>_filter=filter);
+                  if(!OrbitCameraToolCatalog.current.allowsFilter(filter.name))return;
+                   setState(()=>_filter=filter);
                   _queuePreview();
                 }),
             )).toList(),
