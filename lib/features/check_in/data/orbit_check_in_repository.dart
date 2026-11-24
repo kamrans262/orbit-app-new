@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:uuid/uuid.dart';
 import '../../auth/data/orbit_identity_client.dart';
+import '../../config/data/orbit_operational_hints.dart';
 
 class OrbitCheckInScope {
   const OrbitCheckInScope(this.type,[this.id]);
@@ -95,7 +96,8 @@ class OrbitCheckInRepository {
   Future<Map<String,dynamic>> privacy()=>_identity.privacyPreferences();
   Future<OrbitCheckInPage> page(String kind,{String? cursor,int limit=20}) async {
     if(kind!='mine'&&kind!='feed')throw ArgumentError('Invalid Check-In list');
-    final query=Uri(queryParameters:{'limit':'$limit',if(cursor!=null)'cursor':cursor}).query;
+    final cap=OrbitOperationalHints.current.checkInPage;
+    final query=Uri(queryParameters:{'limit':'${limit>cap?cap:limit}',if(cursor!=null)'cursor':cursor}).query;
     final data=await _request('GET','/check-ins/'+kind+'?'+query);
     final raw=data['items'];
     if(raw is! List)throw const FormatException('Invalid Check-In page.');
@@ -166,6 +168,7 @@ class OrbitCheckInRepository {
     if(!const {'home','work','driving','gym','travel','coffee','eating',
       'chill','sleep','custom'}.contains(type))throw ArgumentError('Invalid activity');
     if(audience.isEmpty||audience.length>25)throw ArgumentError('Choose an audience.');
+    if(audience.length>OrbitOperationalHints.current.checkInScopes)throw OrbitIdentityException('Choose fewer recipients under the current Check-In policy.',422);
     if(type=='custom'&&(text==null||text.trim().isEmpty||text.trim().runes.length>160)){
       throw ArgumentError('Custom Check-In must be 1–160 characters.');
     }

@@ -4,6 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../auth/data/orbit_identity_client.dart';
+import '../../config/data/orbit_operational_hints.dart';
 
 enum OrbitPingSendState { accepted, queued }
 
@@ -237,7 +238,9 @@ class OrbitPingRepository {
 
   Future<OrbitPingPage> page(String direction,{String? cursor}) async {
     if(direction!='inbox'&&direction!='outbox')throw ArgumentError.value(direction);
-    final q=cursor==null?'':'?cursor='+Uri.encodeQueryComponent(cursor);
+    final cap=OrbitOperationalHints.current.pingPage;
+    final params=<String,String>{if(cursor!=null)'cursor':cursor,if(cap<20)'limit':'$cap'};
+    final q=params.isEmpty?'':'?'+Uri(queryParameters:params).query;
     final data=await _request('GET','/pings/$direction$q');
     final values=data['items'];
     if(values is! List)throw const FormatException('Invalid Ping inbox.');

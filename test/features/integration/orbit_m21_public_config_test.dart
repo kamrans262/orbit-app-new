@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_ui/features/auth/data/orbit_identity_client.dart';
 import 'package:orbit_ui/features/config/data/orbit_public_config_runtime.dart';
+import 'package:orbit_ui/features/config/data/orbit_operational_hints.dart';
 
 Map<String,dynamic> _response(bool enabled)=>{'data':{
   'version':'v1','flags':{'test.ui':enabled},'config':{'test.limit':15},
@@ -22,6 +23,14 @@ class _Identity extends OrbitIdentityClient {
 }
 
 void main(){
+  test('M24 public hints are bounded and cannot enable malformed dashboard settings',(){
+    final missing=OrbitOperationalHints(null);
+    expect(missing.pingPage,30);expect(missing.dashboardVisible('show_people'),true);
+    final hints=OrbitOperationalHints({'schema_version':1,'modules':{'ping':{'revision':1,'values':{'page_size':5}},'check-in':{'revision':2,'values':{'audience_scopes':2,'expiry_days':1,'page_size':500}},'dashboard':{'revision':3,'values':{'show_people':0,'show_circles':1,'show_moments':'yes'}}}});
+    expect(hints.pingPage,5);expect(hints.checkInScopes,2);expect(hints.checkInExpiryDays,1);expect(hints.checkInPage,30);
+    expect(hints.dashboardVisible('show_people'),false);expect(hints.dashboardVisible('show_circles'),true);expect(hints.dashboardVisible('show_moments'),false);
+    expect(OrbitOperationalHints({'schema_version':9}).dashboardVisible('show_people'),false);
+  });
   test('M1 current public flags and typed values; unknown flags remain off',() async {
     final id=_Identity();
     final runtime=OrbitPublicConfigRuntime(identity:id);

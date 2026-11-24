@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../../config/data/orbit_operational_hints.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../../../core/widgets/app_primary_button.dart';
@@ -148,10 +149,10 @@ abstract final class OrbitCheckInNavigation {
       choice.$2.first.type=='selected_friend').toList();
     final circleChoices=choices.where((choice)=>choice.$2.length==1 &&
       choice.$2.first.type=='circle').toList();
-    if(friendChoices.length>1){
+    if(friendChoices.length>1&&OrbitOperationalHints.current.checkInScopes>1){
       choices.insert(2,('Choose multiple friends',const []));
     }
-    if(circleChoices.length>1){
+    if(circleChoices.length>1&&OrbitOperationalHints.current.checkInScopes>1){
       choices.add(('Choose multiple Circles',const []));
     }
     if(!context.mounted)return null;
@@ -180,6 +181,7 @@ abstract final class OrbitCheckInNavigation {
       scope=(isCircle?'Selected Circles ('+multi.length.toString()+')'
         :'Selected friends ('+multi.length.toString()+')',multi);
     }
+    if(scope.$2.length>OrbitOperationalHints.current.checkInScopes){message(context,'Choose fewer recipients under the current Check-In policy.');return null;}
     for(final entry in scope.$2.where((value)=>value.type=='circle')){
 
       try{
@@ -212,13 +214,14 @@ abstract final class OrbitCheckInNavigation {
       BuildContext context,
       List<(String,List<OrbitCheckInScope>)> available) async {
     final selected=<int>{};
+    final cap=OrbitOperationalHints.current.checkInScopes;
     return showOrbitCircleSheet<List<OrbitCheckInScope>>(
       context:context,title:'Select recipients',
       builder:(sheet)=>StatefulBuilder(builder:(sheet,update)=>Column(
         mainAxisSize:MainAxisSize.min,
         crossAxisAlignment:CrossAxisAlignment.stretch,
         children:[
-          const Text('Select up to 25. Only eligible people or Circles '
+          Text('Select up to $cap. Only eligible people or Circles '
             'can view your Check-In after the server verifies consent.'),
           const SizedBox(height:12),
           for(var i=0;i<available.length;i++)
@@ -228,7 +231,7 @@ abstract final class OrbitCheckInNavigation {
                 Icons.person_outline,
               onTap:()=>update((){
                 if(selected.contains(i)){selected.remove(i);}
-                else if(selected.length<25){selected.add(i);}
+                else if(selected.length<cap){selected.add(i);}
               })),
           const SizedBox(height:12),
           AppPrimaryButton(label:'Use selected ('+selected.length.toString()+')',
@@ -356,7 +359,8 @@ abstract final class OrbitCheckInNavigation {
       OrbitCheckInRepository repo,String id) async {
     final now=DateTime.now();
     final today=DateTime(now.year,now.month,now.day);
-    DateTime day=today.add(const Duration(days:1));
+    final expiryDays=OrbitOperationalHints.current.checkInExpiryDays;
+    DateTime day=today.add(Duration(days:expiryDays>1?1:0));
     var hour=12;
     var minute=0;
     final selected=await showOrbitCircleSheet<DateTime>(
@@ -367,7 +371,7 @@ abstract final class OrbitCheckInNavigation {
             'No expiration is set unless you save one.'),
           CalendarDatePicker(
             initialDate:day,firstDate:today,
-            lastDate:today.add(const Duration(days:29)),
+            lastDate:today.add(Duration(days:expiryDays-1)),
             onDateChanged:(value)=>refresh(()=>day=value)),
           Row(children:[
             const Text('Time  '),
@@ -388,7 +392,7 @@ abstract final class OrbitCheckInNavigation {
           const SizedBox(height:18),
           AppPrimaryButton(label:'Save expiration',onPressed:(){
             final chosen=DateTime(day.year,day.month,day.day,hour,minute);
-            if(!chosen.isAfter(DateTime.now()))return;
+            if(!chosen.isAfter(DateTime.now())||chosen.isAfter(DateTime.now().add(Duration(days:OrbitOperationalHints.current.checkInExpiryDays))))return;
             Navigator.of(sheet).pop(chosen);
           }),
           TextButton(onPressed:()=>Navigator.of(sheet).pop(

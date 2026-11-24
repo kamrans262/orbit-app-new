@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../../config/data/orbit_operational_hints.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../auth/data/orbit_identity_client.dart';
@@ -389,10 +390,11 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
       }catch(e){if(_denied(e))rethrow;}
       if(!mounted||serial!=_epoch||_owner!=owner)return;
 
+      final hints=OrbitOperationalHints.current;
       bool visibleSection(DashboardState state)=>state==DashboardState.ready||state==DashboardState.empty;
       if(mounted&&serial==_epoch&&_owner==owner)setState((){
-        _showPeople=snapshot==null||visibleSection(snapshot.people.state);
-        _showMoments=snapshot==null||visibleSection(snapshot.moments.state);
+        _showPeople=snapshot==null?hints.dashboardVisible('show_people'):visibleSection(snapshot.people.state);
+        _showMoments=snapshot==null?hints.dashboardVisible('show_moments'):visibleSection(snapshot.moments.state);
       });
       // An M8 summary is already viewer-filtered. On legacy rollout,
       // each M4/M5 API must still validate authorization directly.
@@ -407,10 +409,10 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
               id:c.id,name:c.name,role:c.role,memberCount:c.memberCount,
               colorValue:c.colorValue)).toList(growable:false);
           }
-        }else{
+        }else if(hints.dashboardVisible('show_circles')){
           final page=await _circles.list();
           show=true;
-          list=page.items.take(8).map((c)=>HomeCircleSummaryData(
+          list=page.items.take(hints.dashboardCircles).map((c)=>HomeCircleSummaryData(
             id:c.id,name:c.name,role:c.role,memberCount:c.memberCount,
             colorValue:c.colorValue)).toList(growable:false);
         }
@@ -432,7 +434,7 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
         final allowed=snapshot==null ? null :
           snapshot.people.items.map((p)=>p.id).toSet();
         final items=(page?.items??<OrbitPerson>[]).where((p)=>allowed==null||allowed.contains(p.id))
-          .take(12).toList(growable:false);
+          .take(snapshot==null?hints.dashboardPeople:12).toList(growable:false);
         if(mounted&&serial==_epoch&&_owner==owner)setState((){
           _people=items.map((p)=>FavoritePersonData(id:p.id,name:p.name,
             status:'Friend',imagePath:'',isOnline:null)).toList(growable:false);
@@ -460,7 +462,7 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
             {for(final m in snapshot.moments.items)m.id:m.revision};
           final rail=await _moments.feed(rail:true);
           for(final moment in rail) {
-            if(visible.length>=3)break;
+            if(visible.length>=(snapshot==null?hints.dashboardMoments:3))break;
             if(allowed!=null && allowed[moment.id]!=moment.audienceRevision)continue;
             try {
               if(!await _moments.remainsAuthorized(moment))continue;
