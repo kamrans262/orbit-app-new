@@ -265,7 +265,14 @@ abstract final class OrbitCheckInNavigation {
     }
     if(!context.mounted)return;
     await showOrbitCircleSheet<void>(context:context,title:'My Check-Ins',
-      builder:(sheet)=>Column(mainAxisSize:MainAxisSize.min,children:[
+      builder:(sheet)=>_CheckInLiveSheet<(OrbitCheckInPage?,List<OrbitPendingCheckIn>)>(
+        initial:(page,pending),load:() async {
+          final queued=await repo.pending();
+          try{return (await repo.page('mine',cursor:cursor),queued);}
+          on OrbitIdentityException catch(e){if(e.statusCode!=null)rethrow;return (null,queued);}
+        },content:(sheet,history){
+        final (page,pending)=history;
+        return Column(mainAxisSize:MainAxisSize.min,children:[
         if(pending.isNotEmpty)OrbitCircleSheetAction(
           title:'Retry pending Check-Ins ('+pending.length.toString()+')',
           icon:Icons.refresh_rounded,onTap:(){
@@ -297,18 +304,19 @@ abstract final class OrbitCheckInNavigation {
               unawaited(showMine(context,repository:repo,
                 cursor:page!.nextCursor));
             }),
-      ]),
+      ]);}),
     );
   }
 
   static Future<void> _showMineActions(BuildContext context,
       OrbitCheckInRepository repo,String id) async {
     try {
-      final fresh=await repo.detail(id);
+      var fresh=await repo.detail(id);
       if(!context.mounted)return;
       final selection=await showOrbitCircleSheet<String>(
         context:context,title:'My Check-In',
-        builder:(sheet)=>Column(mainAxisSize:MainAxisSize.min,children:[
+        builder:(sheet)=>_CheckInLiveSheet(initial:fresh,load:()=>repo.detail(id),
+          content:(sheet,fresh)=>Column(mainAxisSize:MainAxisSize.min,children:[
           Text(fresh.label),
           const SizedBox(height:8),
           Text('Status: '+fresh.status),
@@ -323,8 +331,10 @@ abstract final class OrbitCheckInNavigation {
           OrbitCircleSheetAction(title:'Withdraw Check-In',
             icon:Icons.delete_outline,destructive:true,
             onTap:()=>Navigator.of(sheet).pop('withdraw')),
-        ]),
+        ])),
       );
+      if(!context.mounted||selection==null)return;
+      fresh=await repo.detail(id);
       if(!context.mounted)return;
       if(selection=='audience'){
         final choice=await chooseAudience(context,repo);
@@ -500,6 +510,7 @@ class _CheckInLiveSheetState<T extends Object> extends State<_CheckInLiveSheet<T
     WidgetsBinding.instance.addObserver(this);
     _refresh=OrbitRealtimeRefresh(modules:const {'check_in','activity','social','circles'},
       visible:()=>OrbitRealtimeRefresh.current(this),refresh:_reload,fallback:true)..start();
+    WidgetsBinding.instance.addPostFrameCallback((_){if(mounted)_refresh?.request();});
   }
   Future<void> _reload() async{
     final epoch=++_epoch;
@@ -507,7 +518,10 @@ class _CheckInLiveSheetState<T extends Object> extends State<_CheckInLiveSheet<T
       final owner=await OrbitIdentityClient.instance.currentLocalSocialOwner();
       if(owner==null)throw const FormatException('Sign in required.');
       final next=await widget.load();
-      if(!mounted||epoch!=_epoch||await OrbitIdentityClient.instance.currentLocalSocialOwner()!=owner||!mounted||epoch!=_epoch)return;
+      if(!mounted||epoch!=_epoch)return;
+      final currentOwner=await OrbitIdentityClient.instance.currentLocalSocialOwner();
+      if(!mounted||epoch!=_epoch)return;
+      if(currentOwner!=owner){setState(()=>_value=null);return;}
       setState(()=>_value=next);
     }catch(_){if(mounted&&epoch==_epoch)setState(()=>_value=null);}
   }

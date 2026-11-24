@@ -19,6 +19,8 @@ import '../data/orbit_messaging_stickers.dart';
 import '../data/orbit_messaging_replies.dart';
 import '../../../core/navigation/app_fade_slide_page_route.dart';
 import 'orbit_chat_voice_recorder.dart';
+import 'orbit_live_typing_runtime.dart';
+import '../../realtime/data/orbit_realtime_contract.dart';
 import 'orbit_private_chat_video_viewer.dart';
 import 'orbit_messaging_conversation_actions.dart';
 
@@ -52,33 +54,34 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
   bool _loading=true,_cryptoReady=false;
   String? _error;
   Timer? _timer;
-  Timer? _typingTimer;
+  OrbitLiveTypingRuntime? _typingRuntime;
   int _typingCount=0;
-  bool _checkingTyping=false;
   int _epoch=0;
   DateTime? _lastOutboxRetry;
   OrbitRealtimeRefresh? _m25Refresh;
   @override
   void initState(){
     super.initState();
-    _m25Refresh=OrbitRealtimeRefresh(modules:const {'messaging','social','circles'},visible:()=>OrbitRealtimeRefresh.current(this),refresh:() async {await _load();await _pollTyping();},fallback:false)..start();
+    _m25Refresh=OrbitRealtimeRefresh(modules:const {'messaging','social','circles'},visible:()=>OrbitRealtimeRefresh.current(this),refresh:_load,fallback:false,minimumInterval:const Duration(seconds:5))..start();
 
     WidgetsBinding.instance.addObserver(this);
     _load();
-    _typingTimer=Timer.periodic(const Duration(seconds:4),(_){
-      if(!mounted || ModalRoute.of(context)?.isCurrent!=true ||
-          WidgetsBinding.instance.lifecycleState!=AppLifecycleState.resumed)return;
-      unawaited(_pollTyping());
-    });
+    _typingRuntime=OrbitLiveTypingRuntime(read:_api.typingNow,
+      scope:()=>_cryptoReady?_thread?.id:null,
+      visible:()=>OrbitRealtimeRefresh.current(this),onChanged:(ids){
+        final next=ids.length;
+        if(mounted&&_typingCount!=next)setState(()=>_typingCount=next);
+      })..start();
     _timer=Timer.periodic(const Duration(seconds:25),(_){
       if(!mounted || ModalRoute.of(context)?.isCurrent!=true ||
           WidgetsBinding.instance.lifecycleState!=AppLifecycleState.resumed)return;
-      unawaited(_load());
+      if(OrbitRealtimeRollout.selected){_m25Refresh?.poll();}else{unawaited(_load());}
     });
   }
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if(state==AppLifecycleState.resumed)unawaited(_load());
+    if(state==AppLifecycleState.resumed){unawaited(_load());_typingRuntime?.request();}
+    else {_typingRuntime?.clear();}
   }
   @override
   void dispose(){
@@ -87,7 +90,7 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
     _epoch++;
     _videoManifests.clear();
     _timer?.cancel();
-    _typingTimer?.cancel();
+    _typingRuntime?.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -198,8 +201,10 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
         _error=ready?null:'This Circle requires verified end-to-end encryption '
           'and a reviewed messaging key before encrypted messages can be exchanged.';
       });
+      _typingRuntime?.request();
     }on OrbitMessagingSecurityException{
       if(!mounted||epoch!=_epoch)return;
+      _typingRuntime?.clear();
       setState((){
         _thread=null;_participants=const [];_messages=const [];
         _videoManifests.clear();
@@ -414,23 +419,6 @@ class _OrbitLiveGroupChatScreenState extends State<OrbitLiveGroupChatScreen>
       onError:(_){/* Respect Circle Ghost Mode/consent. */}));
   }
 
-  Future<void> _pollTyping() async {
-    final thread=_thread;
-    if(thread==null||!_cryptoReady||_checkingTyping)return;
-    _checkingTyping=true;
-    try{
-      final r=await _api.typingNow(thread.id);
-      final ids=r['typing_user_ids'];
-      final count=ids is List?ids.length:0;
-      if(mounted && _typingCount!=count){
-        setState(()=>_typingCount=count);
-      }
-    }catch(_){
-      if(mounted && _typingCount!=0)setState(()=>_typingCount=0);
-    }finally{
-      _checkingTyping=false;
-    }
-  }
 
   Future<void> _send(String text) async {
     final thread=_thread;

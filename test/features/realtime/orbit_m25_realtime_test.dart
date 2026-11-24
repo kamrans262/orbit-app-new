@@ -70,26 +70,28 @@ void main(){
     await tester.pump();expect(seen.length,count+1);
     await tester.pump(const Duration(seconds:31));
     await tester.pump();expect(calls,2);expect(sdk.opened,1);
-    await runtime.stop(disconnect:true);await tester.pump();
+    final stopped=runtime.stop(disconnect:true);
+    await tester.pump();await stopped;await tester.pump();
     expect(runtime.connected,false);expect(disconnects,1);
     final after=seen.length;
     sdk.revisions.add({'schema_version':1,'revision':3});
     await tester.pump();expect(seen.length,after);
-    await sub.cancel();await sdk.dispose();
+    await sub.cancel();
+    final closing=sdk.dispose();await tester.pump();await closing;
   });
   testWidgets('late bootstrap cannot attach SDK after logout',(tester) async{
     final sdk=FakeSdk();final gate=Completer<Map<String,dynamic>>();
     final runtime=OrbitRealtimeRuntime(enabled:true,sdk:sdk,owner:() async=>'a',bootstrap:(_)=>gate.future);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     runtime.start();await tester.pump();
-    await runtime.stop();gate.complete(response());await tester.pump();
+    final stopped=runtime.stop();await tester.pump();await stopped;gate.complete(response());await tester.pump();
     expect(sdk.opened,0);await sdk.dispose();
   });
   testWidgets('route refresh coalesces bursts, ignores hidden routes and stops',(tester) async{
     final changes=StreamController<Set<String>>.broadcast();
     var visible=true,calls=0;final gate=Completer<void>();
     final binding=OrbitRealtimeRefresh(modules:const {'location'},visible:()=>visible,
-      refresh:() async{calls++;if(calls==1)await gate.future;},enabled:true,changes:changes.stream)..start();
+      refresh:() async{calls++;if(calls==1)await gate.future;},enabled:true,changes:changes.stream,minimumInterval:Duration.zero)..start();
     for(var i=0;i<10;i++){changes.add({'location'});}
     await tester.pump();await tester.pump(const Duration(seconds:1));expect(calls,1);
     for(var i=0;i<10;i++){changes.add({'location'});}

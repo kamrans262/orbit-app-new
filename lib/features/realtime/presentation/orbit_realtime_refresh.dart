@@ -7,7 +7,8 @@ import '../data/orbit_realtime_runtime.dart';
 class OrbitRealtimeRefresh {
   OrbitRealtimeRefresh({required this.modules,required this.visible,required this.refresh,
     this.fallback=false,this.invalidate,Stream<Set<String>>? changes,bool? enabled,
-    Duration Function()? interval}):_changes=changes??OrbitRealtimeRuntime.instance.changes,
+    Duration Function()? interval,this.minimumInterval=const Duration(seconds:3),
+    this.debounce=const Duration(milliseconds:750)}):_changes=changes??OrbitRealtimeRuntime.instance.changes,
     _enabled=enabled??OrbitRealtimeRollout.selected,
     _interval=interval??(()=>OrbitRealtimeRuntime.instance.pollInterval);
   final Set<String> modules;
@@ -15,11 +16,12 @@ class OrbitRealtimeRefresh {
   final Future<void> Function() refresh;
   final void Function()? invalidate;
   final bool fallback;
+  final Duration minimumInterval,debounce;
   final Stream<Set<String>> _changes;
   final bool _enabled;
   final Duration Function() _interval;
   StreamSubscription<Set<String>>? _sub;
-  Timer? _debounce,_poll;
+  Timer? _debounce,_poll,_cooldown;
   bool _running=false,_pending=false,_disposed=false;
   void start(){
     if(!_enabled||_disposed||_sub!=null)return;
@@ -33,19 +35,28 @@ class OrbitRealtimeRefresh {
   void _schedule(){
     _poll=Timer(_interval(),(){
       if(_disposed)return;
-      if(visible())request();
+      if(visible())poll();
       _schedule();
     });
+  }
+  /// Existing mandatory freshness timers share the same lane as RTDB events.
+  /// A recent event refresh already satisfied the poll; do not duplicate it.
+  void poll(){
+    if(_running||_cooldown!=null||_debounce!=null)return;
+    request();
   }
   void request(){
     if(_disposed||!visible())return;
     _pending=true;
-    if(_running||_debounce!=null)return;
-    _debounce=Timer(const Duration(milliseconds:750),(){_debounce=null;unawaited(_run());});
+    if(_running||_debounce!=null||_cooldown!=null)return;
+    _debounce=Timer(debounce,(){_debounce=null;unawaited(_run());});
   }
   Future<void> _run() async{
     if(_disposed||!visible())return;
     _running=true;_pending=false;
+    if(minimumInterval>Duration.zero){
+      _cooldown=Timer(minimumInterval,(){_cooldown=null;if(_pending)request();});
+    }
     try{invalidate?.call();await refresh();}catch(_){}
     finally{
       _running=false;
@@ -54,7 +65,7 @@ class OrbitRealtimeRefresh {
   }
   void dispose(){
     _disposed=true;_pending=false;
-    _debounce?.cancel();_poll?.cancel();unawaited(_sub?.cancel());
+    _debounce?.cancel();_poll?.cancel();_cooldown?.cancel();unawaited(_sub?.cancel());
   }
 
   static bool current(State state)=>state.mounted&&

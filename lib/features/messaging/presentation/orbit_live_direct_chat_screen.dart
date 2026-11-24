@@ -18,6 +18,8 @@ import '../data/orbit_messaging_stickers.dart';
 import '../data/orbit_messaging_replies.dart';
 import '../../../core/navigation/app_fade_slide_page_route.dart';
 import 'orbit_chat_voice_recorder.dart';
+import 'orbit_live_typing_runtime.dart';
+import '../../realtime/data/orbit_realtime_contract.dart';
 import 'orbit_private_chat_video_viewer.dart';
 import 'orbit_messaging_conversation_actions.dart';
 
@@ -47,10 +49,9 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
   bool _loading=true,_cryptoReady=false;
   String? _error;
   Timer? _timer;
-  Timer? _typingTimer;
+  OrbitLiveTypingRuntime? _typingRuntime;
   bool _otherTyping=false;
   bool _relayWasOffline=false;
-  bool _checkingTyping=false;
   int _epoch=0;
   DateTime? _lastOutboxRetry;
 
@@ -58,19 +59,20 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
   @override
   void initState(){
     super.initState();
-    _m25Refresh=OrbitRealtimeRefresh(modules:const {'messaging','social','circles'},visible:()=>OrbitRealtimeRefresh.current(this),refresh:() async {await _load();await _pollTyping();},fallback:false)..start();
+    _m25Refresh=OrbitRealtimeRefresh(modules:const {'messaging','social','circles'},visible:()=>OrbitRealtimeRefresh.current(this),refresh:_load,fallback:false,minimumInterval:const Duration(seconds:5))..start();
 
     WidgetsBinding.instance.addObserver(this);
     _load();
-    _typingTimer=Timer.periodic(const Duration(seconds:4),(_){
-      if(!mounted || ModalRoute.of(context)?.isCurrent!=true ||
-          WidgetsBinding.instance.lifecycleState!=AppLifecycleState.resumed)return;
-      unawaited(_pollTyping());
-    });
+    _typingRuntime=OrbitLiveTypingRuntime(read:_api.typingNow,
+      scope:()=>_cryptoReady?_thread?.id:null,
+      visible:()=>OrbitRealtimeRefresh.current(this),onChanged:(ids){
+        final next=ids.contains(widget.peerId);
+        if(mounted&&_otherTyping!=next)setState(()=>_otherTyping=next);
+      })..start();
     _timer=Timer.periodic(const Duration(seconds:25),(_){
       if(!mounted || ModalRoute.of(context)?.isCurrent!=true ||
           WidgetsBinding.instance.lifecycleState!=AppLifecycleState.resumed)return;
-      unawaited(_load());
+      if(OrbitRealtimeRollout.selected){_m25Refresh?.poll();}else{unawaited(_load());}
     });
   }
   @override
@@ -81,14 +83,14 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
     unawaited(_messenger.stopRelay());
     _videoManifests.clear();
     _timer?.cancel();
-    _typingTimer?.cancel();
+    _typingRuntime?.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if(state==AppLifecycleState.resumed)unawaited(_load());
-    else unawaited(_messenger.stopRelay());
+    if(state==AppLifecycleState.resumed){unawaited(_load());_typingRuntime?.request();}
+    else {_typingRuntime?.clear();unawaited(_messenger.stopRelay());}
   }
   String _time(DateTime date) {
     final local=date.toLocal();
@@ -190,9 +192,11 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
         _error=ready?null:'The secure messaging protocol has not yet been '
           'verified on this device. No messages can be sent or decrypted.';
       });
+      _typingRuntime?.request();
     }on OrbitMessagingSecurityException{
       await _messenger.stopRelay();
       if(!mounted||epoch!=_epoch)return;
+      _typingRuntime?.clear();
       setState((){
         _loading=false;_cryptoReady=false;_thread=null;
         _messages=const [];
@@ -441,23 +445,6 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
       onError:(_){/* Respect Ghost Mode and server typing opt-out. */}));
   }
 
-  Future<void> _pollTyping() async {
-    final thread=_thread;
-    if(thread==null||!_cryptoReady||_checkingTyping)return;
-    _checkingTyping=true;
-    try{
-      final r=await _api.typingNow(thread.id);
-      final ids=r['typing_user_ids'];
-      final isTyping=ids is List && ids.contains(widget.peerId);
-      if(mounted && _otherTyping!=isTyping){
-        setState(()=>_otherTyping=isTyping);
-      }
-    }catch(_){
-      if(mounted && _otherTyping)setState(()=>_otherTyping=false);
-    }finally{
-      _checkingTyping=false;
-    }
-  }
 
   Future<void> _send(DirectChatMessage message) async {
     final thread=_thread;
