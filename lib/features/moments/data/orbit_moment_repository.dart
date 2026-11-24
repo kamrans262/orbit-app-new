@@ -323,6 +323,22 @@ class OrbitMomentRepository {
       progress(1);
       return MomentPublishReceipt(momentId:confirmed);
     }
+    // Resume the immutable encrypted intent instead of staging a duplicate.
+    final pending=(await _intents.pending(owner)).where((e)=>e.clientId==request.clientId).toList();
+    if(pending.isNotEmpty){
+      if(pending.length!=1)throw StateError('Conflicting encrypted drafts require review.');
+      final intent=pending.single;
+      if(intent.audienceKind!=audience||intent.caption!=request.caption||
+         intent.placeLabel!=request.placeLabel||intent.locationConsent!=request.locationConsent||
+         !intent.targetIds.toSet().containsAll(targets)||intent.targetIds.length!=targets.length||
+         !intent.taggedUserIds.toSet().containsAll(request.taggedUserIds)||intent.taggedUserIds.length!=request.taggedUserIds.length){
+        throw StateError('An encrypted publication is pending. Retry the original draft.');
+      }
+      await resumePendingPublishes(force:true,onProgress:progress,onlyClientId:request.clientId);
+      final receipt=await _existingReceipt(request.clientId);
+      if(receipt==null)throw StateError('Encrypted Moment is still pending.');
+      return MomentPublishReceipt(momentId:receipt);
+    }
     String? stagedTransfer;
     Future<void> queued(String transfer) async {
       stagedTransfer=transfer;
@@ -372,6 +388,7 @@ class OrbitMomentRepository {
     }
     if(request.mediaKind=='image'){
       await _stager.stagePhoto(request.photoBytes,
+        lowBandwidth:request.dataSaver,
         onProgress:(v)=>progress(v*0.82),
         onReadyForAudience:commit,onQueued:queued);
     }else{
@@ -500,6 +517,7 @@ class OrbitMomentRepository {
   Future<int> resumePendingPublishes({
     void Function(double progress)? onProgress,
     bool force=false,
+    String? onlyClientId,
   }) async {
     final owner=await _identity.currentLocalSocialOwner();
     if(owner==null)return 0;
@@ -512,6 +530,7 @@ class OrbitMomentRepository {
     final eligible=<String,OrbitStoredMomentIntent>{};
     final now=DateTime.now().toUtc();
     for(final intent in intents){
+      if(onlyClientId!=null&&intent.clientId!=onlyClientId)continue;
       // A queued intent never extends the server's seven-day visibility TTL.
       // Old drafts require explicit review; never silently delete ciphertext.
       if(now.difference(intent.createdAt)>const Duration(days:7)){

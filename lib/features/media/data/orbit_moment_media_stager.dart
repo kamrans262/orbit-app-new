@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../auth/data/orbit_identity_client.dart';
 import 'orbit_media_crypto.dart';
+import '../../moments/data/orbit_camera_policy.dart';
 import 'orbit_media_outbox.dart';
 import 'orbit_media_repository.dart';
 import 'orbit_media_transfer_gate.dart';
@@ -50,12 +51,14 @@ class OrbitMomentMediaStager {
       {void Function(double fraction)? onProgress,
        Future<void> Function(OrbitSealedMedia original, OrbitSealedMedia thumbnail,
          String mediaId)? onReadyForAudience,
-       Future<void> Function(String originalTransfer)? onQueued}) async {
+       Future<void> Function(String originalTransfer)? onQueued,
+       bool lowBandwidth=false}) async {
     return OrbitMediaTransferGate.run(() async {
     final owner=await _identity.currentLocalSocialOwner();
     if(owner==null)throw OrbitIdentityException('Please sign in first.',401);
     final device=await _identity.trustedMediaDevice();
-    final prepared=await compute(OrbitMediaCrypto.preparePhoto,captured);
+    final policy=OrbitCameraPolicy.current;
+    final prepared=await compute(_prepareMomentPhoto,(captured,policy.photoLimit(lowBandwidth),policy.jpegQuality));
     final tmp=await _directory();
     final root=Directory(tmp.path+'/orbit-media-preparing');
     await root.create(recursive:true);
@@ -71,8 +74,7 @@ class OrbitMomentMediaStager {
     final originalDraft=await _outbox.enqueue(original,kind:'image',
       mime:'image/jpeg',width:prepared.width,height:prepared.height);
     var thumbDraft=await _outbox.enqueue(thumb,kind:'image',
-      mime:'image/jpeg',parentTransferId:originalId,width:320,
-      height:(prepared.height*320/prepared.width).round());
+      mime:'image/jpeg',parentTransferId:originalId);
     if(onQueued!=null)await onQueued(originalId);
     try {
       if(await original.file.exists())await original.file.delete();
@@ -214,3 +216,6 @@ class OrbitMomentMediaStager {
   }
 
 }
+
+OrbitPreparedPhoto _prepareMomentPhoto((Uint8List,int,int) input)=>
+  OrbitMediaCrypto.preparePhoto(input.$1,maxLongSide:input.$2,jpegQuality:input.$3);

@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'dart:ui' show Offset;
 
 import 'package:image/image.dart' as img;
+import '../../media/data/orbit_bounded_image.dart';
 
 /// M7 image editing happens locally, before M6 ciphertext staging. Decoding
 /// and JPEG re-encoding discard source EXIF/GPS and other metadata.
@@ -24,13 +25,14 @@ class MomentPhotoEdit {
     this.filter=MomentFilter.natural,
     this.beautyStrength=0,
     this.maxLongSide=1440,
+    this.jpegQuality=80,
     this.text='',
     this.strokes=const [],
   });
   final MomentFilter filter;
   /// Optional bounded, subtle local smoothing. Strictly off by default.
   final double beautyStrength;
-  final int maxLongSide;
+  final int maxLongSide,jpegQuality;
   final String text;
   final List<MomentDrawStroke> strokes;
 }
@@ -40,21 +42,20 @@ abstract final class MomentPhotoProcessor {
     if(source.isEmpty || source.length>26*1024*1024){
       throw const FormatException('Photo exceeds the secure editor size limit.');
     }
-    if(edit.maxLongSide!=1080 && edit.maxLongSide!=1440){
+    if(edit.maxLongSide<480 || edit.maxLongSide>1440 || edit.jpegQuality<60 || edit.jpegQuality>80){
       throw const FormatException('Unsupported photo bandwidth profile.');
     }
     if(!edit.beautyStrength.isFinite || edit.beautyStrength<0 ||
         edit.beautyStrength>0.25){
       throw const FormatException('Beauty adjustment outside safe range.');
     }
-    final decoded=img.decodeImage(source);
-    if(decoded==null)throw const FormatException('Unsupported photo format.');
+    final decoded=OrbitBoundedImage.decode(source);
     var image=img.bakeOrientation(decoded);
     final edge=image.width>image.height?image.width:image.height;
     if(edge>edit.maxLongSide){
       image=img.copyResize(image,
-        width:image.width*edit.maxLongSide~/edge,
-        height:image.height*edit.maxLongSide~/edge,
+        width:(image.width*edit.maxLongSide~/edge).clamp(1,1440).toInt(),
+        height:(image.height*edit.maxLongSide~/edge).clamp(1,1440).toInt(),
         interpolation:img.Interpolation.linear);
     }
     final w=image.width, h=image.height;
@@ -125,6 +126,6 @@ abstract final class MomentPhotoProcessor {
         color:img.ColorRgb8(255,255,255));
     }
     // Encoded output has only rendered pixels: no GPS/EXIF or metadata.
-    return Uint8List.fromList(img.encodeJpg(image,quality:80));
+    return Uint8List.fromList(img.encodeJpg(image,quality:edit.jpegQuality));
   }
 }

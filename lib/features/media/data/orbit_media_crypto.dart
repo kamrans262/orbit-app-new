@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart' as hashes;
 import 'package:cryptography/cryptography.dart';
 import 'package:image/image.dart' as img;
+import 'orbit_bounded_image.dart';
 
 /// Ciphertext framing shared by R2 multipart and future Hostinger local chunks.
 abstract final class OrbitMediaFormat {
@@ -45,30 +46,32 @@ class OrbitMediaCrypto {
   Uint8List randomBytes(int length) => Uint8List.fromList(
       List<int>.generate(length, (_) => _random.nextInt(256)));
 
-  static OrbitPreparedPhoto preparePhoto(Uint8List original) {
+  static OrbitPreparedPhoto preparePhoto(Uint8List original,{int maxLongSide=1440,int jpegQuality=80}) {
+    if(maxLongSide<480||maxLongSide>1440||jpegQuality<60||jpegQuality>80)throw const FormatException('Invalid export profile.');
     if (original.isEmpty || original.length > OrbitMediaFormat.imageLimit) {
       throw const FormatException('Image exceeds the maximum size.');
     }
     img.Image? decoded;
-    try { decoded = img.decodeImage(original); }
+    try { decoded = OrbitBoundedImage.decode(original); }
     catch (error) { throw const FormatException('Unsupported image.'); }
     if (decoded == null) throw const FormatException('Unsupported image.');
     final oriented = img.bakeOrientation(decoded);
-    final ratio = min(1.0, 1440 / max(oriented.width, oriented.height));
+    final ratio = min(1.0, maxLongSide / max(oriented.width, oriented.height));
     final width = max(1, (oriented.width * ratio).round());
     final height = max(1, (oriented.height * ratio).round());
     final resized = img.copyResize(oriented, width: width, height: height);
     // Brand-new image, not a copy of the source EXIF/GPS metadata.
     final clean = img.Image(width: width, height: height, numChannels: 3);
     img.compositeImage(clean, resized);
-    final thumbWidth = min(320, width);
-    final thumbHeight = max(1, (height * thumbWidth / width).round());
+    final thumbRatio=min(1.0,320/max(width,height));
+    final thumbWidth=max(1,(width*thumbRatio).round());
+    final thumbHeight=max(1,(height*thumbRatio).round());
     final small = img.copyResize(clean, width: thumbWidth, height: thumbHeight);
     final thumbClean = img.Image(width: thumbWidth, height: thumbHeight,
         numChannels: 3);
     img.compositeImage(thumbClean, small);
     return OrbitPreparedPhoto(
-      Uint8List.fromList(img.encodeJpg(clean, quality: 80)),
+      Uint8List.fromList(img.encodeJpg(clean, quality: jpegQuality)),
       Uint8List.fromList(img.encodeJpg(thumbClean, quality: 72)), width, height);
   }
 

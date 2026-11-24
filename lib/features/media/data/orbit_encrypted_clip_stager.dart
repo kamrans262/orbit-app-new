@@ -10,6 +10,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../auth/data/orbit_identity_client.dart';
 import 'orbit_media_crypto.dart';
+import '../../moments/data/orbit_camera_policy.dart';
 import 'orbit_media_outbox.dart';
 import 'orbit_media_repository.dart';
 import 'orbit_media_transfer_gate.dart';
@@ -61,16 +62,17 @@ class OrbitNativeVideoProcessor implements OrbitVideoProcessor {
         || await input.length()==0) {
       throw const FormatException('Video file exceeds the capture limits.');
     }
+    final policy=OrbitCameraPolicy.current;
     final initial=await _compressor.getMediaInfo(input.path);
-    if(initial.durationMs<=0 || initial.durationMs>maxDurationMs) {
+    if(initial.durationMs<=0 || initial.durationMs>policy.videoDuration) {
       throw const FormatException('Orbit supports video clips up to 60 seconds.');
     }
     // Native Media3/AVFoundation encoding; strips original EXIF/GPS metadata
     // and makes a bounded MP4 before per-part authenticated encryption.
     final job=_compressor.compress(input.path,
       options:CompressOptions(preset:CompressPreset.p720,
-        maxLongSidePx:1280,maxFps:30,
-        videoBitrateBps:lowBandwidth?2000000:4000000,
+        maxLongSidePx:policy.videoEdge,maxFps:policy.videoFps,
+        videoBitrateBps:policy.videoBitrate(lowBandwidth),
         audio:stripAudio?const AudioStrip():const AudioPassthrough()));
     final progress=job.progress.listen((value) {
       onProgress?.call((value/100).clamp(0.0,1.0));
@@ -99,13 +101,13 @@ class OrbitNativeVideoProcessor implements OrbitVideoProcessor {
     if(stripAudio && info.hasAudio){
       throw const FormatException('Muted Moment export still contains audio.');
     }
-    if(info.durationMs<=0 || info.durationMs>maxDurationMs ||
+    if(info.durationMs<=0 || info.durationMs>policy.videoDuration ||
         info.widthPx<=0 || info.heightPx<=0 ||
-        max(info.widthPx,info.heightPx)>1280 ||
-        (info.frameRateFps != null && info.frameRateFps! > 30.5) ||
-        (info.videoBitrateBps != null && info.videoBitrateBps! > 4500000) ||
-        (info.videoCodec != null && info.videoCodec != 'unknown'
-          && info.videoCodec != 'h264')) {
+        max(info.widthPx,info.heightPx)>policy.videoEdge ||
+        (info.frameRateFps != null && info.frameRateFps! > policy.videoFps+0.5) ||
+        (info.videoBitrateBps != null && info.videoBitrateBps! > policy.videoBitrate(lowBandwidth)*1.125) ||
+        (info.videoCodec != null && info.videoCodec != 'unknown' && info.videoCodec != 'h264') ||
+        (policy.enhanced && (info.videoCodec!='h264'||info.frameRateFps==null||info.videoBitrateBps==null))) {
       throw const FormatException('Compressed video does not meet Orbit policy.');
     }
     final bytes=await _compressor.getThumbnail(output.path,
@@ -278,6 +280,7 @@ class OrbitEncryptedClipStager {
       if(!['message','moment'].contains(purpose)){
         throw ArgumentError('Invalid audio purpose.');
       }
+      if(purpose=='moment')OrbitCameraPolicy.current.requireDuration('audio',durationMs);
       final owner=await _identity.currentLocalSocialOwner();
       if(owner==null)throw OrbitIdentityException('Please sign in.',401);
       final device=await _identity.trustedMediaDevice();
