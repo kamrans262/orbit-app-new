@@ -23,6 +23,8 @@ import '../data/orbit_location_permission_service.dart';
 import '../data/orbit_location_repository.dart';
 import '../data/orbit_m10_rollout.dart';
 import 'orbit_location_share_sheet.dart';
+import '../../realtime/presentation/orbit_realtime_refresh.dart';
+import '../../realtime/data/orbit_realtime_contract.dart';
 
 /// Placed inside the EXISTING Orbits screen, behind its existing draggable panel.
 /// Markers are ONLY the M10 server's viewer-authorized projection, never demos.
@@ -56,6 +58,7 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
   Timer? _ticketExpiry;
   int _wsSerial=0;
   Timer? _refreshTimer;
+  OrbitRealtimeRefresh? _firebaseRefresh;
   bool _styleReady=false,_loading=false,_sending=false,_foreground=true,_didZoom=false;
   bool _centeringOnDevice=false;
   DateTime? _lastSent;
@@ -68,6 +71,14 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     if(OrbitM10Rollout.enabled) {
+      _firebaseRefresh=OrbitRealtimeRefresh(modules:const {'location','circles','social'},
+        visible:()=>OrbitRealtimeRefresh.current(this)&&_foreground,
+        refresh:()=>_refresh(silent:true),invalidate:(){
+          ++_epoch;
+          if(mounted)setState(()=>_snapshot=null);
+          widget.onMarkersChanged?.call(const []);
+          _purgeAvatars();unawaited(_clearAnnotations());
+        })..start();
       unawaited(_refresh());
       _refreshTimer=Timer.periodic(const Duration(seconds:20),(_){
         if(_foreground&&mounted&&ModalRoute.of(context)?.isCurrent==true) {
@@ -80,6 +91,7 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
   @override
   void dispose(){
     ++_epoch;
+    _firebaseRefresh?.dispose();
     _refreshTimer?.cancel();
     _dropRealtime();
     unawaited(_locations?.cancel());
@@ -260,7 +272,7 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
     _realtime?.sink.close();_realtime=null;
   }
   Future<void> _syncRealtime() async {
-    if(!mounted||!_foreground||_cap?.realtimeAvailable!=true||
+    if(OrbitRealtimeRollout.selected||!mounted||!_foreground||_cap?.realtimeAvailable!=true||
        !OrbitM10Rollout.realtimeConfigured){
       _dropRealtime();return;
     }

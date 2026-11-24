@@ -5,6 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
 
 import 'orbit_circle_change_source.dart';
+import '../../realtime/data/orbit_realtime_contract.dart';
 
 /// Firebase RTDB is present in code but stays COMPLETELY INERT unless the
 /// build opts in AND the trusted Laravel backend returns an approved ticket.
@@ -19,7 +20,7 @@ class OrbitM5FirebaseChangeSource extends OrbitCircleChangeSource {
       OrbitM5FirebaseChangeSource._();
 
   static const bool compiledEnabled =
-      bool.fromEnvironment('ORBIT_M5_FIREBASE_ENABLED', defaultValue: false);
+      !OrbitRealtimeRollout.selected && bool.fromEnvironment('ORBIT_M5_FIREBASE_ENABLED', defaultValue: false);
 
   final StreamController<OrbitCircleInvalidation> _changes =
       StreamController<OrbitCircleInvalidation>.broadcast();

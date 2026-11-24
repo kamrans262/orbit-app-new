@@ -7,6 +7,7 @@ import '../../../auth/data/orbit_identity_client.dart';
 import '../../data/orbit_ping_repository.dart';
 import '../../data/orbit_ping_notification_preferences.dart';
 import 'orbit_ping_navigation.dart';
+import '../../../realtime/data/orbit_realtime_runtime.dart';
 import '../widgets/orbit_ping_feedback.dart';
 
 /// In-app foreground-only notice on authenticated, non-Home pages.
@@ -16,16 +17,21 @@ class OrbitPingForegroundObserver extends NavigatorObserver with WidgetsBindingO
   final OrbitPingRepository _repository=OrbitPingRepository();
   final Set<String> _announced=<String>{};
   Timer? _clock;
+  StreamSubscription<Set<String>>? _realtime;
   Route<dynamic>? _top;
   String? _owner;
   bool _busy=false;
 
   void start() {
     WidgetsBinding.instance.addObserver(this);
+    if(OrbitRealtimeRollout.selected)_realtime=OrbitRealtimeRuntime.instance.changes.listen((modules){
+      if(modules.contains('ping'))unawaited(_refresh());
+    });
     _clock=Timer.periodic(const Duration(seconds:25), (_) => unawaited(_refresh()));
   }
   void close() {
     _clock?.cancel();
+    unawaited(_realtime?.cancel());
     WidgetsBinding.instance.removeObserver(this);
     _announced.clear();
   }

@@ -160,11 +160,12 @@ class OrbitRealtimeRuntime with WidgetsBindingObserver {
       _foreground=true;
       unawaited(_refresh());
     }else if(_foreground){
+      final hadLease=_ticket!=null;
       _foreground=false;++_epoch;
       _retry?.cancel();
       unawaited(_drop());
       // No provider request is made when the server denied the transport.
-      unawaited(_disconnect());
+      if(hadLease)unawaited(_disconnect());
     }
   }
 

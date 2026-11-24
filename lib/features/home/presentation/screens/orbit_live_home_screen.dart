@@ -33,6 +33,8 @@ import '../../../presence/data/orbit_presence_rollout.dart';
 import '../../../presence/presentation/orbit_presence_runtime.dart';
 import '../../domain/models/home_models.dart';
 import 'home_screen.dart';
+import '../../../realtime/data/orbit_realtime_runtime.dart';
+import '../../../realtime/presentation/orbit_realtime_refresh.dart';
 
 /// M8 uses the approved Home presentation. No duplicate app shell, demo
 /// people, fabricated location/presence, or unauthorized stored thumbnails.
@@ -99,10 +101,18 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
   int? _notificationUnread;
   bool _refreshingUnread=false;
   int _epoch=0;
+  OrbitRealtimeRefresh? _realtimeRefresh;
 
   @override
   void initState(){
     super.initState();
+    if(OrbitRealtimeRollout.selected){
+      OrbitRealtimeRuntime.instance.start();
+      _realtimeRefresh=OrbitRealtimeRefresh(modules:const {'circles','social','moments','plans','notifications','sos','ping','check_in','activity'},
+        visible:()=>OrbitRealtimeRefresh.current(this),refresh:() async {
+          await Future.wait([_reload(),_refreshPings(),_refreshSos(),_refreshNotificationUnread()]);
+        })..start();
+    }
     WidgetsBinding.instance.addObserver(this);
     if (OrbitPresenceRollout.enabled) {
       OrbitPresenceRuntime.instance.addListener(_presenceChanged);
@@ -310,6 +320,7 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
 
   @override
   void dispose(){
+    _realtimeRefresh?.dispose();
     ++_epoch;
     _revalidation?.cancel();
     if (OrbitPresenceRollout.enabled) {

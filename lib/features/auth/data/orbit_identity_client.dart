@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 
 import 'orbit_offline_profile_snapshot.dart';
 import '../../circles/data/orbit_m5_firebase_change_source.dart';
+import '../../realtime/data/orbit_realtime_runtime.dart';
 import '../../presence/presentation/orbit_presence_runtime.dart';
 import '../../media/data/orbit_media_outbox.dart';
 import '../../moments/data/orbit_moment_offline_cache.dart';
@@ -290,6 +291,7 @@ class OrbitIdentityClient {
           // active cipher registry is therefore unconfigured.
           try { await OrbitVodozemacStateStore().purgeOwner(lastUser); }catch(_){}
         }
+        await OrbitRealtimeRuntime.instance.stop();
         await OrbitPresenceRuntime.instance.stop();
         await OrbitM5FirebaseChangeSource.instance.stop();
         _startupProfile = null;
@@ -383,6 +385,7 @@ class OrbitIdentityClient {
   }
 
   Future<void> signOutAll() async {
+    await OrbitRealtimeRuntime.instance.stop(disconnect:true);
     try {
       await _send('POST', '/auth/logout-all', body: <String, Object?>{},
           protected: true);
@@ -410,6 +413,7 @@ class OrbitIdentityClient {
   }
 
   Future<void> clearSession() async {
+    await OrbitRealtimeRuntime.instance.stop();
     // Stop notification listeners before deleting this account's credentials.
     // No recursive HTTP unregister during a 401/session teardown.
     await OrbitNotificationPushRuntime.instance.stop(unregister:false);
@@ -462,6 +466,7 @@ class OrbitIdentityClient {
   }
 
   Future<void> signOut() async {
+    await OrbitRealtimeRuntime.instance.stop(disconnect:true);
     try {
       await _send('POST', '/auth/logout', body: <String, Object?>{}, protected: true);
     } finally {
