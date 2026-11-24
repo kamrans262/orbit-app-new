@@ -1,9 +1,10 @@
 import 'dart:async';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_ui/features/realtime/data/orbit_realtime_runtime.dart';
 import 'package:orbit_ui/features/realtime/presentation/orbit_realtime_refresh.dart';
 import 'package:orbit_ui/features/messaging/presentation/orbit_live_typing_runtime.dart';
+import 'package:orbit_ui/features/check_in/presentation/navigation/orbit_check_in_navigation.dart';
 
 const uid='00000000-0000-4000-8000-000000000001';
 const generation='00000000-0000-4000-8000-000000000002';
@@ -65,6 +66,8 @@ void main(){
     sdk.online.add(true);await tester.pump();
     sdk.revisions.add({'schema_version':1,'revision':1});await tester.pump();
     expect(runtime.connected,true);
+    sdk.online.add(false);await tester.pump();expect(runtime.connected,false);
+    sdk.online.add(true);await tester.pump();expect(runtime.connected,true);
     final count=seen.length;
     sdk.revisions.add({'schema_version':1,'revision':1});
     sdk.revisions.add({'schema_version':1,'revision':2});
@@ -162,5 +165,25 @@ void main(){
     gate.complete({'typing_user_ids':['member'],'ttl_seconds':5});
     await tester.pump();expect(ids,isEmpty);
     typing.dispose();await changes.close();
+  });
+
+  testWidgets('existing Check-In sheet refreshes history and hides a changed account',(tester) async{
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    final changes=StreamController<Set<String>>.broadcast();
+    var owner='a',history='Accepted';
+    await tester.pumpWidget(MaterialApp(home:Scaffold(body:OrbitCheckInLiveSheet<String>(
+      initial:history,selected:true,owner:() async=>owner,changes:changes.stream,
+      load:() async=>history,content:(_,value)=>Text(value)))));
+    await tester.pump(const Duration(seconds:1));await tester.pump();
+    expect(find.text('Accepted'),findsOneWidget);
+    history='Withdrawn';changes.add({'check_in'});
+    await tester.pump();await tester.pump(const Duration(seconds:4));await tester.pump();
+    expect(find.text('Withdrawn'),findsOneWidget);
+    owner='b';changes.add({'check_in'});
+    await tester.pump();await tester.pump(const Duration(seconds:4));await tester.pump();
+    expect(find.text('Withdrawn'),findsNothing);
+    expect(find.text('Check-In access could not be verified. Reconnect to refresh.'),findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await changes.close();
   });
 }

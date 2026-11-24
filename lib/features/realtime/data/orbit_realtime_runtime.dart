@@ -113,7 +113,9 @@ class OrbitRealtimeRuntime with WidgetsBindingObserver {
             final recovered=online&&!_online;
             _online=online;
             if(!online||recovered){
-              _revision=null;
+              // Keep the last accepted monotonic revision across connection loss.
+              // The reconnect refresh is always an authorized HTTPS read, even
+              // if Firebase does not replay an unchanged revision.
               _events.add(Set.unmodifiable(_ticket!.modules));
             }
           },onError:(Object _){if(_current(epoch))unawaited(_drop());});

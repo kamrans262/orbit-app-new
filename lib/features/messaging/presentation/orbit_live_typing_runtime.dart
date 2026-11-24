@@ -41,7 +41,7 @@ class OrbitLiveTypingRuntime {
     request();
   }
   void request(){
-    if(_closed||!visible()||scope()==null){return;}
+    if(_closed||scope()==null||!visible()){return;}
     _pending=true;
     if(_busy||_debounce!=null){return;}
     _debounce=Timer(const Duration(milliseconds:250),(){

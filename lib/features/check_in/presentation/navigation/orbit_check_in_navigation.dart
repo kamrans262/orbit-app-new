@@ -1,4 +1,4 @@
-import '../../../realtime/data/orbit_realtime_contract.dart';
+import '../../../realtime/data/orbit_realtime_runtime.dart';
 import '../../../realtime/presentation/orbit_realtime_refresh.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -265,7 +265,7 @@ abstract final class OrbitCheckInNavigation {
     }
     if(!context.mounted)return;
     await showOrbitCircleSheet<void>(context:context,title:'My Check-Ins',
-      builder:(sheet)=>_CheckInLiveSheet<(OrbitCheckInPage?,List<OrbitPendingCheckIn>)>(
+      builder:(sheet)=>OrbitCheckInLiveSheet<(OrbitCheckInPage?,List<OrbitPendingCheckIn>)>(
         initial:(page,pending),load:() async {
           final queued=await repo.pending();
           try{return (await repo.page('mine',cursor:cursor),queued);}
@@ -315,7 +315,7 @@ abstract final class OrbitCheckInNavigation {
       if(!context.mounted)return;
       final selection=await showOrbitCircleSheet<String>(
         context:context,title:'My Check-In',
-        builder:(sheet)=>_CheckInLiveSheet(initial:fresh,load:()=>repo.detail(id),
+        builder:(sheet)=>OrbitCheckInLiveSheet(initial:fresh,load:()=>repo.detail(id),
           content:(sheet,fresh)=>Column(mainAxisSize:MainAxisSize.min,children:[
           Text(fresh.label),
           const SizedBox(height:8),
@@ -437,7 +437,7 @@ abstract final class OrbitCheckInNavigation {
       if(!context.mounted)return;
       await showOrbitCircleSheet<void>(context:context,
         title:'Friends’ Check-Ins',
-        builder:(sheet)=>_CheckInLiveSheet<OrbitCheckInPage>(initial:page,
+        builder:(sheet)=>OrbitCheckInLiveSheet<OrbitCheckInPage>(initial:page,
           load:()=>repo.page('feed',cursor:cursor),
           content:(sheet,page)=>Column(mainAxisSize:MainAxisSize.min,children:[
           if(page.items.isEmpty)const Text('No Check-Ins available right now.'),
@@ -469,7 +469,7 @@ abstract final class OrbitCheckInNavigation {
       final current=await repo.detail(id);
       if(!context.mounted)return;
       await showOrbitCircleSheet<void>(context:context,title:'Check-In',
-        builder:(sheet)=>_CheckInLiveSheet(initial:current,load:()=>repo.detail(id),
+        builder:(sheet)=>OrbitCheckInLiveSheet(initial:current,load:()=>repo.detail(id),
           content:(sheet,current)=>Column(mainAxisSize:MainAxisSize.min,
           crossAxisAlignment:CrossAxisAlignment.start,children:[
           Text(current.creatorName,style:const TextStyle(fontWeight:FontWeight.w600)),
@@ -491,35 +491,44 @@ abstract final class OrbitCheckInNavigation {
 
 /// Retains the existing approved sheet body. Revocation/expiry clears the
 /// protected projection and re-fetches via Laravel, never from RTDB.
-class _CheckInLiveSheet<T extends Object> extends StatefulWidget{
-  const _CheckInLiveSheet({required this.initial,required this.load,required this.content});
+class OrbitCheckInLiveSheet<T extends Object> extends StatefulWidget{
+  const OrbitCheckInLiveSheet({required this.initial,required this.load,required this.content,
+    this.selected,this.owner,this.changes,super.key});
+  final bool? selected;
+  final Future<String?> Function()? owner;
+  final Stream<Set<String>>? changes;
   final T initial;
   final Future<T> Function() load;
   final Widget Function(BuildContext,T) content;
   @override
-  State<_CheckInLiveSheet<T>> createState()=>_CheckInLiveSheetState<T>();
+  State<OrbitCheckInLiveSheet<T>> createState()=>_CheckInLiveSheetState<T>();
 }
-class _CheckInLiveSheetState<T extends Object> extends State<_CheckInLiveSheet<T>> with WidgetsBindingObserver{
+class _CheckInLiveSheetState<T extends Object> extends State<OrbitCheckInLiveSheet<T>> with WidgetsBindingObserver{
   T? _value;
   OrbitRealtimeRefresh? _refresh;
   int _epoch=0;
+  String? _boundOwner;
+  bool get _selected=>widget.selected??OrbitRealtimeRollout.selected;
+  Future<String?> _owner()=>(widget.owner??OrbitIdentityClient.instance.currentLocalSocialOwner)();
   @override
   void initState(){
     super.initState();_value=widget.initial;
-    if(!OrbitRealtimeRollout.selected)return;
+    if(!_selected)return;
     WidgetsBinding.instance.addObserver(this);
     _refresh=OrbitRealtimeRefresh(modules:const {'check_in','activity','social','circles'},
-      visible:()=>OrbitRealtimeRefresh.current(this),refresh:_reload,fallback:true)..start();
+      visible:()=>OrbitRealtimeRefresh.current(this),refresh:_reload,fallback:true,
+      enabled:_selected,changes:widget.changes)..start();
     WidgetsBinding.instance.addPostFrameCallback((_){if(mounted)_refresh?.request();});
   }
   Future<void> _reload() async{
     final epoch=++_epoch;
     try{
-      final owner=await OrbitIdentityClient.instance.currentLocalSocialOwner();
-      if(owner==null)throw const FormatException('Sign in required.');
+      final owner=await _owner();
+      if(owner==null||(_boundOwner!=null&&owner!=_boundOwner))throw const FormatException('Sign in required.');
+      _boundOwner=owner;
       final next=await widget.load();
       if(!mounted||epoch!=_epoch)return;
-      final currentOwner=await OrbitIdentityClient.instance.currentLocalSocialOwner();
+      final currentOwner=await _owner();
       if(!mounted||epoch!=_epoch)return;
       if(currentOwner!=owner){setState(()=>_value=null);return;}
       setState(()=>_value=next);
@@ -527,13 +536,13 @@ class _CheckInLiveSheetState<T extends Object> extends State<_CheckInLiveSheet<T
   }
   @override
   void didChangeAppLifecycleState(AppLifecycleState state){
-    if(state==AppLifecycleState.resumed){unawaited(_reload());}
+    if(state==AppLifecycleState.resumed){_refresh?.request();}
     else {++_epoch;if(mounted)setState(()=>_value=null);}
   }
   @override
   void dispose(){
     ++_epoch;_refresh?.dispose();
-    if(OrbitRealtimeRollout.selected)WidgetsBinding.instance.removeObserver(this);
+    if(_selected)WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
   @override
