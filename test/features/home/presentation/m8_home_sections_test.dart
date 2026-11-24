@@ -11,6 +11,8 @@ import 'package:orbit_ui/features/home/presentation/widgets/home_circle_summary_
 Widget buildHome({
   required VoidCallback onCircle,
   bool showCircles=true,
+  bool showPeople=true,
+  bool showMoments=true,
   double textScale=1.0,
   List<HomeCircleSummaryData>? circles,
 }) => MaterialApp(
@@ -26,6 +28,7 @@ Widget buildHome({
       HomeCircleSummaryData(id:'c1',name:'Family',role:'member',memberCount:3),
     ],
     showCircleSection:showCircles,
+    showPeopleSection:showPeople,showMomentsSection:showMoments,
     onCirclePressed:(_)=>onCircle(),
     peopleSectionTitle:'Friends',planUnavailable:true,
     dashboardNotice:'Some Home sections could not be verified. Retry.',
@@ -51,6 +54,17 @@ Widget buildHome({
 );
 
 void main(){
+  testWidgets('M24 hidden sections do not render headings or cards', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390,1600));
+    addTearDown(()=>tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(buildHome(onCircle:(){},showPeople:false,showMoments:false));
+    await tester.pumpAndSettle();
+    expect(find.text('My Circles'),findsOneWidget);
+    expect(find.text('Friends'),findsNothing);
+    expect(find.text('Actual Friend'),findsNothing);
+    expect(find.text('Recent Moments'),findsNothing);
+    expect(tester.takeException(),isNull);
+  });
   testWidgets('Home header precedes retry notice and uses gradient icons',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(390,844));
