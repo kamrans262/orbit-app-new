@@ -28,6 +28,8 @@ void main() {
         find.text('Purchases will be available after billing is connected.'),
         findsOneWidget,
       );
+      await tester.scrollUntilVisible(find.byKey(SubscriptionKeys.currentPlan),-170,scrollable:find.descendant(of:find.byKey(SubscriptionKeys.scrollView),matching:find.byType(Scrollable)).first);
+      await tester.ensureVisible(find.byKey(SubscriptionKeys.currentPlan));await tester.pumpAndSettle();
       expect(find.text('Not connected to your account yet'), findsOneWidget);
     },
   );
@@ -60,6 +62,7 @@ void main() {
       ).first,
     );
     final plus = find.byKey(SubscriptionKeys.plan('plus'));
+    await tester.ensureVisible(plus);await tester.pumpAndSettle();
     expect(plus.hitTestable(), findsOneWidget);
     await tester.tap(plus.hitTestable());
     await tester.pump();
@@ -67,6 +70,8 @@ void main() {
     await tester.pump();
 
     expect(requested, OrbitSubscriptionTier.plus);
+    await tester.scrollUntilVisible(find.byKey(SubscriptionKeys.currentPlan),-170,scrollable:find.descendant(of:find.byKey(SubscriptionKeys.scrollView),matching:find.byType(Scrollable)).first);
+    await tester.ensureVisible(find.byKey(SubscriptionKeys.currentPlan));await tester.pumpAndSettle();
     expect(find.text('Not connected to your account yet'), findsOneWidget);
   });
 
