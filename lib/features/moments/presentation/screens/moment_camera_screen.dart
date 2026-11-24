@@ -20,6 +20,8 @@ import '../../data/orbit_moment_capture_vault.dart';
 import '../../../auth/data/orbit_identity_client.dart';
 import '../../data/moment_photo_processor.dart';
 import '../../data/orbit_camera_policy.dart';
+import '../../data/orbit_camera_tool_catalog.dart';
+import '../../../config/data/orbit_public_config_runtime.dart';
 import '../../data/orbit_capture_temp_files.dart';
 import '../../data/orbit_capture_inspection.dart';
 import '../../../media/data/orbit_bounded_image.dart';
@@ -208,6 +210,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    OrbitPublicConfigRuntime.instance.addListener(_onToolPolicyChanged);
 
     _routeOwner=widget.enableCamera?(widget.captureOwner!=null?Future.value(widget.captureOwner):OrbitIdentityClient.instance.currentLocalSocialOwner()):Future.value(null);
     if (widget.enableCamera) {
@@ -332,6 +335,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
 
   @override
   void dispose() {
+    OrbitPublicConfigRuntime.instance.removeListener(_onToolPolicyChanged);
     WidgetsBinding.instance.removeObserver(this);
     _recordLimit?.cancel();
     _recordTicker?.cancel();
@@ -622,7 +626,13 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     });
   }
 
+  void _onToolPolicyChanged(){if(mounted)setState((){});}
+  bool get _cameraToolsAllowed{
+    final catalog=OrbitCameraToolCatalog.current;
+    return catalog.allowsFilter(_selectedFilter.name)&&_photoStickers.every((s)=>catalog.allowsSticker(s.emoji));
+  }
   void _selectFilter(MomentFilter filter) {
+    if(!OrbitCameraToolCatalog.current.allowsFilter(filter.name))return;
     if(_mode!=_OrbitCaptureMode.photo || _recording || _isCapturing)return;
     setState(() => _selectedFilter = filter);
     _recoveredEdits['sheet_filter']=filter.name;
@@ -686,7 +696,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         SizedBox(height:48,child:ListView(
           scrollDirection:Axis.horizontal,
           children:[
-            for(final filter in MomentFilter.values)
+            for(final filter in MomentFilter.values.where((f)=>OrbitCameraToolCatalog.current.allowsFilter(f.name)))
               Padding(
                 padding:const EdgeInsets.only(right:8),
                 child:Material(
@@ -1216,6 +1226,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       return;
     }
     if(tool=='sticker'){
+      if(OrbitCameraToolCatalog.current.stickers.isEmpty){_showToolHint('Stickers are currently unavailable.');return;}
       setState((){
         _drawMode=false;
         _filterTrayOpen=false;
@@ -1228,6 +1239,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   }
 
   void _addSticker(String emoji) {
+    if(!OrbitCameraToolCatalog.current.allowsSticker(emoji))return;
     if(_capturedBytes==null || _photoStickers.length>=20){
       _showToolHint('You can add up to 20 stickers.');
       return;
@@ -1302,7 +1314,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       SizedBox(height:66,child:ListView(
         scrollDirection:Axis.horizontal,
         children:[
-          for(final emoji in _stickerChoices)
+          for(final emoji in _stickerChoices.where(OrbitCameraToolCatalog.current.allowsSticker))
             Padding(padding:const EdgeInsets.only(right:8),
               child:InkWell(
                 key:Key('moment_camera_sticker_choice_${emoji.runes.first}'),
@@ -1437,6 +1449,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       return;
     }
     if (_publishSheetOpen || _exportingPhoto || !mounted) return;
+    if(captured!=null&&!_cameraToolsAllowed){_showToolHint('Choose an available filter or remove unavailable stickers before continuing.');return;}
     _publishSheetOpen=true;
     if(widget.enableCamera&&await _checkedOwner()==null){_publishSheetOpen=false;if(mounted)_showToolHint('Sign in again before using this capture.');return;}
     if(!mounted)return;
@@ -1454,6 +1467,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       }
     }
     if(!mounted)return;
+    if(captured!=null&&!_cameraToolsAllowed){_publishSheetOpen=false;_showToolHint('Camera tools changed. Review your edits before continuing.');return;}
     // Explicit integrations receive the final photo with graphic edits.
     final legacySend=widget.onSendPressed;
     if(legacySend!=null && captured!=null){
@@ -1475,6 +1489,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         waveformLevels:List<double>.unmodifiable(_waveform),
         initialOverlayText:initialOverlayText,
         initialFilter:_selectedFilter,
+        captureToolsAllowed:()=>captured==null||_cameraToolsAllowed,
         // An authenticated account must never show fabricated Circle names.
         circles: widget.momentAudienceCircles,
         friends: widget.momentAudienceFriends,
