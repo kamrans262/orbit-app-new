@@ -89,6 +89,19 @@ fn handle(v: &Value) -> CryptoResult<Value> {
                 "one_time_prekeys": published,
             }))
         }
+        // Relay proof is signed by the SAME registered M13 identity. No
+        // private key is exported, and the operation cannot sign arbitrary
+        // non-Relay protocol material.
+        "relay_sign" => {
+            let a = account(v, &k)?;
+            let bytes = b64(v, "message_b64")?;
+            if bytes.len() > 4096 || !(bytes.starts_with(b"orbit-relay-receipt-v1|") ||
+                bytes.starts_with(b"orbit-relay-peer-v1|") ||
+                bytes.starts_with(b"orbit-relay-sender-v1|")) {
+                return Err("invalid_relay_signing_context");
+            }
+            Ok(json!({"signature_b64": BASE64.encode(a.sign(&bytes).to_bytes())}))
+        }
         "account_replenish_prekeys" => {
             let mut a = account(v, &k)?;
             let count = v.get("count").and_then(Value::as_u64)

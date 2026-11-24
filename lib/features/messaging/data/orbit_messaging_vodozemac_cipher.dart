@@ -57,6 +57,27 @@ class OrbitMessagingVodozemacCipher implements OrbitMessagingCipher {
   @override
   String get protocol=>protocolName;
 
+  /// Read-only identity proof; no ratchet state is mutated or key exported.
+  /// Caller must verify current owner, device and approved Relay context.
+  Future<String> signRelayProof(String expectedOwner,String expectedDevice,
+      String message) async {
+    if(!independentlyVerified)throw OrbitMessagingSecurityException(
+      'Secure Relay identity has not been reviewed.',503);
+    final s=await _open();
+    if(s.owner!=expectedOwner||s.device!=expectedDevice||
+        s.data['published']!=true||s.data['account']==null){
+      throw OrbitMessagingSecurityException('Relay identity unavailable.',403);
+    }
+    final signed=_native.invoke({'op':'relay_sign','pickle_key_b64':s.key,
+      'account_pickle':s.data['account'],
+      'message_b64':base64Encode(utf8.encode(message))});
+    final signature=signed['signature_b64'];
+    if(signature is! String||base64Decode(signature).length!=64){
+      throw const FormatException('Invalid Relay identity proof.');
+    }
+    return signature;
+  }
+
   Future<_NativeState> _open() async {
     final identity=await _source.current();
     final key=await _store.pickleKey(identity.owner,identity.device);

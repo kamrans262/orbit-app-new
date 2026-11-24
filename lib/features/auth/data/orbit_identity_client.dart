@@ -17,6 +17,7 @@ import '../../moments/data/orbit_moment_intent_vault.dart';
 import '../../moments/data/orbit_m7_background_retry.dart';
 import '../../moments/data/orbit_moment_audience_memory.dart';
 import '../../messaging/data/orbit_messaging_local_vault.dart';
+import '../../relay/data/orbit_relay_vault.dart';
 import '../../messaging/data/orbit_messaging_media_bridge.dart';
 import '../../messaging/data/orbit_messaging_cipher.dart';
 import '../../messaging/data/orbit_messaging_vodozemac_store.dart';
@@ -280,6 +281,7 @@ class OrbitIdentityClient {
           try { await OrbitMomentIntentVault().purge(lastUser); }catch(_){}
           try { await OrbitMomentAudienceMemory().purge(lastUser); }catch(_){}
           // A new account must never inherit the prior user's local chat keys.
+          try { await OrbitRelayVault().purge(lastUser); }catch(_){}
           try { await OrbitMessagingLocalVault().purge(lastUser); }catch(_){}
           try { await OrbitMessagingCipherRegistry.instance.purge(lastUser); }catch(_){}
           // Independently wipe the OS-protected native ratchet snapshot even
@@ -430,7 +432,8 @@ class OrbitIdentityClient {
       // clear playback previews must never survive a logout.
       try { await OrbitMessagingMediaBridge.purgePendingForOwner(oldMediaOwner); }
       catch (_) { /* Best effort private artifact cleanup. */ }
-      try { await OrbitMessagingLocalVault().purge(oldMediaOwner); }catch(_){}
+      try { await OrbitRelayVault().purge(oldMediaOwner); }catch(_){}
+          try { await OrbitMessagingLocalVault().purge(oldMediaOwner); }catch(_){}
       try { await OrbitMessagingCipherRegistry.instance.purge(oldMediaOwner); }catch(_){}
           // Independently wipe the OS-protected native ratchet snapshot even
           // when an app update has the E2EE release gate disabled and the
