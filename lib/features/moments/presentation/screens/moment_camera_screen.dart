@@ -614,6 +614,9 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   void _selectFilter(MomentFilter filter) {
     if(_mode!=_OrbitCaptureMode.photo || _recording || _isCapturing)return;
     setState(() => _selectedFilter = filter);
+    _recoveredEdits['sheet_filter']=filter.name;
+    final draftId=_captureClientId;
+    if(draftId!=null&&widget.enableCamera)unawaited(_captureVault.saveEdits(draftId,{'sheet_filter':filter.name}).catchError((Object _){}));
     _saveCameraEdits();
   }
 

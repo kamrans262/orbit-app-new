@@ -821,7 +821,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
           ),
         if(!_canPublish && !_canSavePrivate)
           Text('UI preview only. No upload or notification is sent.',
-            style:AppTypography.bodyMuted),
+            key:MomentPublishKeys.unavailable,style:AppTypography.bodyMuted),
         if(_canSavePrivate && widget.mediaKind=='image')
           Text('Private save needs trusted-device approval and the M6 encrypted media service. It does not publish a Moment.',
             style:AppTypography.bodyMuted),

@@ -107,6 +107,10 @@ void main(){
     final recovered=(await capture().restore())!;
     expect(recovered.clientId,id);expect(recovered.edits['camera_filter'],'warm');
     expect(recovered.edits['text'],'Private draft');
+    expect(storage.entries.values.join(' '),isNot(contains('Private draft')));
+    final folder=Directory(root.path+'/orbit-m7-encrypted-capture/account-a');
+    final editFile=folder.listSync().whereType<File>().singleWhere((f)=>f.path.endsWith('.edits.cipher'));
+    expect(String.fromCharCodes(await editFile.readAsBytes()),isNot(contains('Private draft')));
     account='account-b';
     await capture().saveEdits(id,{'text':'foreign'});
     expect(await capture().restore(),isNull);
