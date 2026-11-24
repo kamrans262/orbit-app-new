@@ -102,7 +102,7 @@ class OrbitNotificationPushRuntime {
         projectId:project,
         iosBundleId:Platform.isIOS?field('ios_bundle_id'):null,
       );
-      if(Firebase.apps.isEmpty){
+      if(!Firebase.apps.any((app)=>app.name=='[DEFAULT]')){
         await Firebase.initializeApp(options:firebaseOptions);
       }else{
         final existing=Firebase.app().options;

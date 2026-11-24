@@ -56,11 +56,11 @@ class OrbitMomentPushRuntime {
         iosBundleId:Platform.isIOS?value('ios_bundle_id'):null,
       );
       FirebaseApp app;
-      if(Firebase.apps.isEmpty){
+      if(!Firebase.apps.any((app)=>app.name=='[DEFAULT]')){
         app=await Firebase.initializeApp(options:appOptions);
       }else{
         app=Firebase.app();
-        if(app.options.projectId!=project){
+        if(app.options.projectId!=project||app.options.appId!=appOptions.appId){
           // Never register a token issued for a different Firebase project.
           throw StateError('Firebase project mismatch.');
         }

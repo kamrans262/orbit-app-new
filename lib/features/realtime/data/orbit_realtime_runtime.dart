@@ -84,6 +84,7 @@ class OrbitRealtimeRuntime with WidgetsBindingObserver {
         return;
       }
       _poll=next.poll;
+      _retry?.cancel();_retry=null;
       final previous=_ticket;
       final replace=previous==null||previous.uid!=next.uid||previous.generation!=next.generation||
         previous.appId!=next.appId||previous.url!=next.url||previous.apiKey!=next.apiKey||_watch==null;
@@ -173,7 +174,7 @@ class OrbitRealtimeRuntime with WidgetsBindingObserver {
   }
 
   void _queueDisconnect(String owner){
-    final task=_disconnectRequest(owner).timeout(const Duration(seconds:4)).catchError((Object _){});
+    final task=_disconnectRequest(owner).timeout(const Duration(seconds:8)).catchError((Object _){});
     _disconnecting=task;
     unawaited(task.whenComplete((){if(identical(_disconnecting,task))_disconnecting=null;}));
   }
@@ -187,8 +188,11 @@ class OrbitRealtimeRuntime with WidgetsBindingObserver {
     _started=false;_foreground=false;++_epoch;_owner=null;
     WidgetsBinding.instance.removeObserver(this);
     _retry?.cancel();
-    await _drop();
+    final cleanup=_drop();
     if(disconnect&&hadLease&&owner!=null){_queueDisconnect(owner);await _disconnecting;}
+    // Local access is already fenced by epoch and lease cancellation. Never
+    // block Laravel logout indefinitely on a stalled native SDK call.
+    await cleanup.timeout(const Duration(seconds:5),onTimeout:(){});
   }
 }
 
