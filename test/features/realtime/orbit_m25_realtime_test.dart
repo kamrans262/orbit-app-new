@@ -30,6 +30,43 @@ class FakeSdk implements OrbitRealtimeSdk{
   @override Future<void> close() async{closed++;}
   Future<void> dispose() async{await revisions.close();await online.close();}
 }
+
+// Run transport async work on the real Dart event loop, while explicitly
+// firing the scheduled renewal/expiry callbacks. No ten-minute fake-async hang.
+class ManualTimer implements Timer{
+  ManualTimer(this.duration,this.callback,{this.repeating=false});
+  final Duration duration;
+  final void Function() callback;
+  final bool repeating;
+  bool _active=true;
+  int _tick=0;
+  @override bool get isActive=>_active;
+  @override int get tick=>_tick;
+  @override void cancel(){_active=false;}
+  void fire(){
+    if(!_active){return;}
+    _tick++;
+    if(!repeating){_active=false;}
+    callback();
+  }
+}
+class ManualTimers{
+  final scheduled=<ManualTimer>[];
+  Timer once(Duration delay,void Function() callback){
+    final timer=ManualTimer(delay,callback);scheduled.add(timer);return timer;
+  }
+  Timer periodic(Duration delay,void Function(Timer) callback){
+    late final ManualTimer timer;
+    timer=ManualTimer(delay,()=>callback(timer),repeating:true);
+    scheduled.add(timer);return timer;
+  }
+  ManualTimer active(Duration delay)=>scheduled.lastWhere((t)=>t.isActive&&t.duration==delay);
+  ManualTimer expiry()=>scheduled.lastWhere((t)=>t.isActive&&t.duration>const Duration(seconds:4)&&t.duration<=const Duration(seconds:5));
+}
+Future<void> settle() async{
+  // Flush native-free async callbacks, stream events and Future chaining.
+  for(var i=0;i<4;i++){await Future<void>.delayed(Duration.zero);}
+}
 void main(){
   TestWidgetsFlutterBinding.ensureInitialized();
   test('strict project, origin, session, schema and lease validation',(){
@@ -53,37 +90,38 @@ void main(){
     expect(calls,0);expect(sdk.opened,0);
     await runtime.stop();await sdk.dispose();
   });
-  testWidgets('one subscription, deduplication, renewal, lifecycle stop',(tester) async{
-    final sdk=FakeSdk();var calls=0,disconnects=0;
+  test('one subscription, deduplication, renewal, lifecycle stop',() async{
+    final sdk=FakeSdk(),timers=ManualTimers();
+    var calls=0,disconnects=0;
     final runtime=OrbitRealtimeRuntime(enabled:true,sdk:sdk,owner:() async=>'a',
       bootstrap:(_) async{calls++;return response();},
-      disconnect:(_) async{disconnects++;});
+      disconnect:(_) async{disconnects++;},timer:timers.once);
     final seen=<Set<String>>[];final sub=runtime.changes.listen(seen.add);
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-    runtime.start();runtime.start();
-    await tester.pump();await tester.pump();
-    expect(calls,1);expect(sdk.opened,1);
-    sdk.online.add(true);await tester.pump();
-    sdk.revisions.add({'schema_version':1,'revision':1});await tester.pump();
-    expect(runtime.connected,true);
-    sdk.online.add(false);await tester.pump();expect(runtime.connected,false);
-    sdk.online.add(true);await tester.pump();expect(runtime.connected,true);
-    final count=seen.length;
-    sdk.revisions.add({'schema_version':1,'revision':1});
-    sdk.revisions.add({'schema_version':1,'revision':2});
-    await tester.pump();expect(seen.length,count+1);
-    await tester.pump(const Duration(seconds:31));
-    await tester.pump();expect(calls,2);expect(sdk.opened,1);
-    var stopped=false;
-    unawaited(runtime.stop(disconnect:true).then((_)=>stopped=true));
-    await tester.pump();await tester.pump(const Duration(milliseconds:1));
-    expect(stopped,true,reason:'Logout cleanup must settle after cancellation.');
-    expect(runtime.connected,false);expect(disconnects,1);
-    final after=seen.length;
-    sdk.revisions.add({'schema_version':1,'revision':3});
-    await tester.pump();expect(seen.length,after);
-    unawaited(sub.cancel());
-    unawaited(sdk.dispose());await tester.pump();
+    TestWidgetsFlutterBinding.instance.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    try{
+      runtime.start();runtime.start();await settle();
+      expect(calls,1);expect(sdk.opened,1);
+      sdk.online.add(true);sdk.revisions.add({'schema_version':1,'revision':1});await settle();
+      expect(runtime.connected,true);
+      sdk.online.add(false);await settle();expect(runtime.connected,false);
+      sdk.online.add(true);await settle();expect(runtime.connected,true);
+      final count=seen.length;
+      sdk.revisions.add({'schema_version':1,'revision':1});
+      sdk.revisions.add({'schema_version':1,'revision':2});
+      await settle();expect(seen.length,count+1);
+      timers.active(const Duration(seconds:30)).fire();await settle();
+      expect(calls,2);expect(sdk.opened,1);
+      await runtime.stop(disconnect:true).timeout(const Duration(seconds:15));
+      expect(runtime.connected,false);expect(disconnects,1);
+      expect(sdk.closed,greaterThanOrEqualTo(2));
+      expect(sdk.online.hasListener,false);expect(sdk.revisions.hasListener,false);
+      expect(timers.scheduled.any((timer)=>timer.isActive),false);
+      final after=seen.length;
+      sdk.revisions.add({'schema_version':1,'revision':3});await settle();
+      expect(seen.length,after);
+    }finally{
+      await runtime.stop();await sub.cancel();await sdk.dispose();
+    }
   });
   testWidgets('late bootstrap cannot attach SDK after logout',(tester) async{
     final sdk=FakeSdk();final gate=Completer<Map<String,dynamic>>();
@@ -128,8 +166,9 @@ void main(){
     binding.dispose();await changes.close();
   });
 
-  testWidgets('typing signals reauthorize, expire and fall back only when needed',(tester) async{
+  test('typing signals reauthorize, expire and fall back only when needed',() async{
     final changes=StreamController<Set<String>>.broadcast();
+    final timers=ManualTimers();
     var connected=true,visible=true,calls=0;
     String? scope='circle-thread';
     Set<String> ids={};
@@ -137,20 +176,24 @@ void main(){
         expect(id,'circle-thread');calls++;
         return {'typing_user_ids':['member'],'ttl_seconds':5};
       },scope:()=>scope,visible:()=>visible,onChanged:(value)=>ids=value,
-      changes:changes.stream,selected:true,connected:()=>connected)..start();
-    await tester.pump(const Duration(milliseconds:300));expect(ids,{'member'});
-    await tester.pump(const Duration(seconds:4));expect(calls,1);
-    await tester.pump(const Duration(seconds:2));expect(ids,isEmpty);
-    changes.add({'messaging'});await tester.pump();
-    await tester.pump(const Duration(milliseconds:300));
-    expect(ids,{'member'});expect(calls,2);
-    connected=false;
-    await tester.pump(const Duration(seconds:4));await tester.pump(const Duration(milliseconds:300));
-    expect(calls,3);
-    visible=false;scope=null;
-    await tester.pump(const Duration(seconds:4));expect(ids,isEmpty);
-    expect(calls,3);
-    typing.dispose();await changes.close();
+      changes:changes.stream,selected:true,connected:()=>connected,
+      timer:timers.once,periodic:timers.periodic)..start();
+    try{
+      timers.active(const Duration(milliseconds:250)).fire();await settle();
+      expect(calls,1);expect(ids,{'member'});
+      timers.active(const Duration(seconds:4)).fire();await settle();expect(calls,1);
+      timers.expiry().fire();expect(ids,isEmpty);
+      changes.add({'messaging'});await settle();
+      timers.active(const Duration(milliseconds:250)).fire();await settle();
+      expect(ids,{'member'});expect(calls,2);
+      connected=false;
+      timers.active(const Duration(seconds:4)).fire();
+      timers.active(const Duration(milliseconds:250)).fire();await settle();
+      expect(calls,3);
+      visible=false;scope=null;
+      timers.active(const Duration(seconds:4)).fire();expect(ids,isEmpty);expect(calls,3);
+    }finally{typing.dispose();await changes.close();}
+    expect(timers.scheduled.any((timer)=>timer.isActive),false);
   });
 
   testWidgets('late typing result cannot restore a revoked Circle scope',(tester) async{

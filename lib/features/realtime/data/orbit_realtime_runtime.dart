@@ -15,18 +15,20 @@ export 'orbit_realtime_contract.dart';
 class OrbitRealtimeRuntime with WidgetsBindingObserver {
   OrbitRealtimeRuntime({OrbitIdentityClient? identity, bool? enabled,
     Future<String?> Function()? owner, Future<Map<String,dynamic>> Function(String)? bootstrap,
-    Future<void> Function(String)? disconnect, OrbitRealtimeSdk? sdk})
+    Future<void> Function(String)? disconnect, OrbitRealtimeSdk? sdk,
+    Timer Function(Duration,void Function())? timer})
     :_selected=enabled??OrbitRealtimeRollout.selected,
     _readOwner=owner??(identity??OrbitIdentityClient.instance).currentLocalSocialOwner,
     _bootstrap=bootstrap??((owner)=>(identity??OrbitIdentityClient.instance).realtimeRequest('/realtime/bootstrap',owner)),
     _disconnectRequest=disconnect??((owner) async {await (identity??OrbitIdentityClient.instance).realtimeRequest('/realtime/disconnect',owner);}),
-    _transport=sdk??OrbitFirebaseRealtimeSdk();
+    _transport=sdk??OrbitFirebaseRealtimeSdk(),_timer=timer??Timer.new;
   static final instance=OrbitRealtimeRuntime();
   final bool _selected;
   final Future<String?> Function() _readOwner;
   final Future<Map<String,dynamic>> Function(String) _bootstrap;
   final Future<void> Function(String) _disconnectRequest;
   final OrbitRealtimeSdk _transport;
+  final Timer Function(Duration,void Function()) _timer;
   final _events=StreamController<Set<String>>.broadcast();
   Stream<Set<String>> get changes=>_events.stream;
   bool _started=false,_foreground=false,_busy=false;
@@ -100,7 +102,7 @@ class OrbitRealtimeRuntime with WidgetsBindingObserver {
       final remaining=next.lease;
       _ticket=next;
       _expiry?.cancel();
-      _expiry=Timer(remaining,(){if(_current(epoch)){unawaited(_drop());}});
+      _expiry=_timer(remaining,(){if(_current(epoch)){unawaited(_drop());}});
       if(replace){
         _revision=null;
         await _sdk(() async {
@@ -134,7 +136,7 @@ class OrbitRealtimeRuntime with WidgetsBindingObserver {
       }
       if(!_current(epoch)||!identical(_ticket,next))return;
       _renewal?.cancel();
-      _renewal=Timer(next.renew,()=>unawaited(_refresh()));
+      _renewal=_timer(next.renew,()=>unawaited(_refresh()));
     }catch(_){
       if(_current(epoch))await _drop();
     }finally{
@@ -145,7 +147,7 @@ class OrbitRealtimeRuntime with WidgetsBindingObserver {
 
   void _scheduleRetry(){
     _retry?.cancel();
-    if(_started&&_foreground)_retry=Timer(_poll,()=>unawaited(_refresh()));
+    if(_started&&_foreground)_retry=_timer(_poll,()=>unawaited(_refresh()));
   }
 
   Future<void> _closeSdk() async{

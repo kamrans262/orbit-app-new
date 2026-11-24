@@ -7,11 +7,14 @@ import '../../realtime/data/orbit_realtime_runtime.dart';
 class OrbitLiveTypingRuntime {
   OrbitLiveTypingRuntime({required this.read,required this.scope,
     required this.visible,required this.onChanged,
-    Stream<Set<String>>? changes,bool? selected,bool Function()? connected})
+    Stream<Set<String>>? changes,bool? selected,bool Function()? connected,
+    Timer Function(Duration,void Function())? timer,
+    Timer Function(Duration,void Function(Timer))? periodic})
       :_changes=changes??OrbitRealtimeRuntime.instance.changes,
        _selected=selected??OrbitRealtimeRollout.selected,
        _connected=connected??(()=>OrbitRealtimeRuntime.instance.connected&&
-           OrbitRealtimeRuntime.instance.allows('messaging'));
+           OrbitRealtimeRuntime.instance.allows('messaging')),
+       _timer=timer??Timer.new,_periodic=periodic??Timer.periodic;
   final Future<Map<String,dynamic>> Function(String) read;
   final String? Function() scope;
   final bool Function() visible;
@@ -19,6 +22,8 @@ class OrbitLiveTypingRuntime {
   final Stream<Set<String>> _changes;
   final bool _selected;
   final bool Function() _connected;
+  final Timer Function(Duration,void Function()) _timer;
+  final Timer Function(Duration,void Function(Timer)) _periodic;
   StreamSubscription<Set<String>>? _sub;
   Timer? _poll,_expiry,_debounce;
   bool _busy=false,_pending=false,_closed=false;
@@ -34,7 +39,7 @@ class OrbitLiveTypingRuntime {
         }
       });
     }
-    _poll=Timer.periodic(const Duration(seconds:4),(_){
+    _poll=_periodic(const Duration(seconds:4),(_){
       if(!visible()){clear();return;}
       if(!_selected||!_connected()){request();}
     });
@@ -44,7 +49,7 @@ class OrbitLiveTypingRuntime {
     if(_closed||scope()==null||!visible()){return;}
     _pending=true;
     if(_busy||_debounce!=null){return;}
-    _debounce=Timer(const Duration(milliseconds:250),(){
+    _debounce=_timer(const Duration(milliseconds:250),(){
       _debounce=null;unawaited(_refresh());
     });
   }
@@ -68,7 +73,7 @@ class OrbitLiveTypingRuntime {
       if(remaining<=Duration.zero){clear();return;}
       _expiry?.cancel();
       onChanged(Set.unmodifiable(ids.cast<String>()));
-      _expiry=Timer(remaining,clear);
+      _expiry=_timer(remaining,clear);
     }catch(_){
       if(!_closed&&epoch==_epoch){clear();}
     }finally{
