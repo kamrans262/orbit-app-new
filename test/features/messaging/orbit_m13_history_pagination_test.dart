@@ -8,18 +8,22 @@ import 'package:orbit_ui/features/messaging/data/orbit_messaging_coordinator.dar
 import 'package:orbit_ui/features/messaging/data/orbit_messaging_local_vault.dart';
 import 'package:orbit_ui/features/messaging/data/orbit_messaging_models.dart';
 
-OrbitMailboxEnvelope envelope(String id,int day) => OrbitMailboxEnvelope(
+OrbitMailboxEnvelope envelope(String id,int day,{DateTime? deliveredAt}) => OrbitMailboxEnvelope(
   id:'env-$id',messageId:id,senderId:'friend',senderDeviceId:'phone',
   kind:'text',protocol:'verified.test',groupEpoch:1,keyVersion:1,
   ciphertextB64:base64Encode(utf8.encode(id)),
   headerB64:base64Encode(utf8.encode('authenticated-header')),
-  createdAt:DateTime.utc(2026,10,day),
+  createdAt:DateTime.utc(2026,10,day),deliveredAt:deliveredAt,
 );
 
 class _Pages extends OrbitMessagingApi {
   int syncCount=0;
   String? olderCursor;
   final acknowledged=<String>[];
+  final deliveredIds=<String>{};
+  bool loseNextReceipt=false;
+  OrbitMailboxEnvelope _serverEnvelope(String id,int day)=>envelope(id,day,
+    deliveredAt:deliveredIds.contains('env-$id')?DateTime.utc(2026,10,31):null);
 
   @override
   Future<String> get owner async=>'owner';
@@ -34,7 +38,7 @@ class _Pages extends OrbitMessagingApi {
   Future<OrbitEnvelopePage> sync(String conversation,{
     List<String> delivered=const [],int limit=100}) async {
     syncCount++;
-    return OrbitEnvelopePage([envelope('newest',30)],'cursor-older');
+    return OrbitEnvelopePage([_serverEnvelope('newest',30)],'cursor-older');
   }
 
   @override
@@ -42,13 +46,14 @@ class _Pages extends OrbitMessagingApi {
     String? cursor,int limit=50}) async {
     olderCursor=cursor;
     return OrbitEnvelopePage([
-      envelope('already-seen',29),envelope('oldest',28),
+      _serverEnvelope('already-seen',29),_serverEnvelope('oldest',28),
     ],null);
   }
 
   @override
   Future<void> delivered(String conversation,String id) async {
-    acknowledged.add(id);
+    if(loseNextReceipt){loseNextReceipt=false;throw StateError('Lost delivery request');}
+    acknowledged.add(id);deliveredIds.add(id);
   }
 }
 
@@ -163,7 +168,7 @@ void main(){
   });
 
   test('Initial HTTPS sync keeps its cursor across refresh and backfills only new ciphertext',() async {
-    final api=_Pages();
+    final api=_Pages()..deliveredIds.add('env-already-seen');
     final vault=_MemoryVaultForTest();
     vault.saved['already-seen']=OrbitLocalDecryptedMessage(
       id:'already-seen',conversationId:'thread',senderId:'friend',
@@ -187,6 +192,21 @@ void main(){
     expect(await coordinator.loadOlder(thread),isEmpty);
     expect(api.acknowledged,containsAll(['env-newest','env-oldest']));
     expect(api.acknowledged,hasLength(2));
+  });
+  test('Lost delivery acknowledgement retries without a second ratchet decrypt',() async {
+    final api=_Pages()..loseNextReceipt=true;
+    final vault=_MemoryVaultForTest();
+    final cipher=_DecryptForTest();
+    final coordinator=OrbitMessagingCoordinator(api:api,cipher:cipher,vault:vault);
+    final thread=OrbitConversation(id:'retry-thread',kind:'direct',groupEpoch:1,peerId:'friend',createdAt:DateTime.utc(2026));
+    await expectLater(coordinator.refresh(thread),throwsStateError);
+    expect(vault.saved.containsKey('newest'),isTrue);
+    expect(cipher.decryptCount,1);
+    expect(api.acknowledged,isEmpty);
+    await coordinator.refresh(thread);
+    await coordinator.refresh(thread);
+    expect(cipher.decryptCount,1);
+    expect(api.acknowledged,['env-newest']);
   });
   test('Offline history backfills older local E2EE records beyond 200',() async {
     final api=_Pages();
