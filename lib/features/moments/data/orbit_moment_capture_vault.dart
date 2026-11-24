@@ -19,12 +19,14 @@ class OrbitRecoveredMomentCapture {
     this.photo,
     this.clip,
     this.durationMs,
+    this.edits=const {},
   });
   final String kind;
   final String clientId;
   final Uint8List? photo;
   final File? clip;
   final int? durationMs;
+  final Map<String,dynamic> edits;
 }
 
 /// Account-scoped encrypted recovery for captures that have not yet entered
@@ -51,6 +53,28 @@ class OrbitMomentCaptureVault {
   final Future<Directory> Function() _support, _temporary;
   final OrbitMediaCrypto _crypto;
   static const maxAge=Duration(days:7);
+  static Future<void> _tail=Future<void>.value();
+  static Future<T> _serialize<T>(Future<T> Function() action){
+    final task=_tail.then((_)=>action());
+    _tail=task.then<void>((_){},onError:(Object _,StackTrace __){});
+    return task;
+  }
+  /// Recipe is protected by the same OS secure storage as the capture key.
+  /// Never renew draft retention or attach an edit to a different capture.
+  Future<void> saveEdits(String clientId,Map<String,Object?> changes) async {
+    final owner=await _account();
+    final snapshot=jsonDecode(jsonEncode(changes)) as Map<String,dynamic>;
+    await _serialize(() async {
+      if(await _owner()!=owner)return;
+      final data=await _metadata(owner);
+      if(data==null||data['id']!=clientId)return;
+      final previous=data['edits'];
+      final edits=<String,Object?>{if(previous is Map)...Map<String,Object?>.from(previous),...snapshot};
+      if(utf8.encode(jsonEncode(edits)).length>1024*1024)throw const FormatException('Capture edit recipe too large.');
+      if(await _owner()!=owner)return;
+      await _vault.write(_index(owner),jsonEncode({...data,'edits':edits}));
+    });
+  }
 
   Future<String> _account() async {
     final value=await _owner();
@@ -86,7 +110,7 @@ class OrbitMomentCaptureVault {
     final target=File('${root.path}/$id.cipher');
     final sealed=await _crypto.sealBytes(bytes,destination:target,
       ownerId:owner,transferId:id,purpose:'moment',variant:'capture');
-    await _commit(owner,sealed,'image',null);
+    await _serialize(()=>_commit(owner,sealed,'image',null));
     return id;
   }
 
@@ -105,12 +129,13 @@ class OrbitMomentCaptureVault {
       ownerId:owner,transferId:id,purpose:'moment',
       variant:'capture',maxInputBytes:kind=='video'
         ? OrbitMediaFormat.videoLimit:OrbitMediaFormat.audioLimit);
-    await _commit(owner,sealed,kind,durationMs);
+    await _serialize(()=>_commit(owner,sealed,kind,durationMs));
     return id;
   }
 
   Future<void> _commit(String owner,OrbitSealedMedia media,
       String kind,int? duration) async {
+    if(await _owner()!=owner){await media.file.delete();throw StateError('Account changed.');}
     final previous=await _metadata(owner);
     final metadata=<String,Object?>{
       'id':media.transferId,
@@ -199,6 +224,7 @@ class OrbitMomentCaptureVault {
       plainBytes:bytes,bytes:(data['cipher_bytes'] as num).toInt(),
       sha256:data['sha256'] as String,ownerId:owner,transferId:id,
       purpose:'moment',variant:'capture');
+    final edits=data['edits'] is Map?Map<String,dynamic>.from(data['edits'] as Map):<String,dynamic>{};
     if(kind=='image'){
       final photo=await _crypto.openInMemory(
         await file.readAsBytes(),key:key,noncePrefix:prefix,
@@ -206,7 +232,7 @@ class OrbitMomentCaptureVault {
         variant:'capture',maxPlainBytes:OrbitMediaFormat.imageLimit);
       if(await _owner()!=owner)throw StateError('Account changed.');
       return OrbitRecoveredMomentCapture(
-        kind:'image',clientId:id,photo:photo);
+        kind:'image',clientId:id,photo:photo,edits:edits);
     }
     final temporary=await _temporary();
     final target=File('${temporary.path}/orbit-m7-recovered-$id.'+
@@ -218,7 +244,7 @@ class OrbitMomentCaptureVault {
     }
     return OrbitRecoveredMomentCapture(
       kind:kind,clientId:id,clip:target,
-      durationMs:(data['duration_ms'] as num?)?.toInt());
+      durationMs:(data['duration_ms'] as num?)?.toInt(),edits:edits);
   }
 
   Future<void> _decryptClip(OrbitSealedMedia sealed,File target) async {
@@ -266,12 +292,27 @@ class OrbitMomentCaptureVault {
   /// are removed; purge does not require a currently active session.
   Future<void> purge(String owner) async {
     if(owner.isEmpty)return;
-    final metadata=await _metadata(owner);
+    await _serialize(()=>_purge(owner));
+  }
+  Future<void> _purge(String owner) async {
+    Map<String,dynamic>? metadata;
+    try{metadata=await _metadata(owner);}catch(_){}
     await _vault.delete(_index(owner));
     final name=metadata?['name'];
     if(name is String && RegExp(r'^[a-fA-F0-9-]{36}\.cipher$').hasMatch(name)){
       final file=File('${(await _root(owner)).path}/$name');
       if(await file.exists())await file.delete();
+    }
+    // Purge orphan ciphertext under the account-specific application folder.
+    final root=await _root(owner);
+    if(await root.exists())await root.delete(recursive:true);
+    final id=metadata?['id'];
+    if(id is String&&RegExp(r'^[a-fA-F0-9-]{36}$').hasMatch(id)){
+      final tmp=await _temporary();
+      for(final ext in ['mp4','m4a']){
+        final clip=File('${tmp.path}/orbit-m7-recovered-$id.$ext');
+        if(await clip.exists())await clip.delete();
+      }
     }
   }
 }

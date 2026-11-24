@@ -19,6 +19,9 @@ import '../../../../app/theme/app_colors.dart';
 import '../../domain/models/moment_publish_models.dart';
 import '../../data/orbit_moment_capture_vault.dart';
 import '../../data/moment_photo_processor.dart';
+import '../../data/orbit_camera_policy.dart';
+import '../../../media/data/orbit_bounded_image.dart';
+import 'package:flutter/foundation.dart' show compute;
 import '../widgets/moment_publish_sheet.dart';
 import '../../../../core/widgets/app_bottom_navigation_bar.dart';
 import '../../../../core/popups/orbit_popup_variants.dart';
@@ -148,6 +151,19 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   int _elapsedSeconds=0;
   bool _stopWhenStarted=false;
   bool _recording=false;
+  bool _recordStarting=false,_recordStopping=false;
+  int _captureEpoch=0;
+  Map<String,dynamic> _recoveredEdits={};
+  int get _recordMaxMs=>_mode==_OrbitCaptureMode.voice?OrbitCameraPolicy.current.voiceDuration:OrbitCameraPolicy.current.videoDuration;
+  void _saveCameraEdits(){
+    final id=_captureClientId;if(id==null||!widget.enableCamera)return;
+    final values=<String,Object?>{'camera_filter':_selectedFilter.name,
+      'stickers':_photoStickers.map((s)=>{'emoji':s.emoji,'x':s.position.dx,'y':s.position.dy}).toList(),
+      'ink':_photoStrokes.map((s)=>{'color':s.color.toARGB32(),'points':s.points.map((p)=>[p.dx,p.dy]).toList()}).toList(),
+      'waveform':List<double>.of(_waveform)};
+    _recoveredEdits.addAll(values);
+    unawaited(_captureVault.saveEdits(id,values).catchError((Object _){}));
+  }
   double _zoomStart=1,_currentZoom=1,_minZoom=1,_maxZoom=1;
 
   FlashMode _flashMode = FlashMode.off;
@@ -240,6 +256,8 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         _capturedClip=recovered.clip;
         _capturedDurationMs=recovered.durationMs;
         _captureClientId=recovered.clientId;
+        _recoveredEdits=Map<String,dynamic>.from(recovered.edits);
+        _restoreCameraEdits();
         _hasSavedDraft=false;
         _filterTrayOpen=false;
       });
@@ -251,10 +269,31 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     }
   }
 
+  void _restoreCameraEdits(){
+    _selectedFilter=MomentFilter.values.where((f)=>f.name==_recoveredEdits['camera_filter']).firstOrNull??MomentFilter.natural;
+    _photoStickers.clear();_photoStrokes.clear();_waveform.clear();
+    final stickers=_recoveredEdits['stickers'];
+    if(stickers is List&&stickers.length<=20){for(final s in stickers){
+      if(s is Map&&_stickerChoices.contains(s['emoji'])&&s['x'] is num&&s['y'] is num){
+        final x=(s['x'] as num).toDouble(),y=(s['y'] as num).toDouble();
+        if(x.isFinite&&y.isFinite)_photoStickers.add(_CameraSticker(++_stickerCounter,s['emoji'] as String,Offset(x.clamp(0.06,0.94).toDouble(),y.clamp(0.06,0.94).toDouble())));
+      }
+    }}
+    final ink=_recoveredEdits['ink'];
+    if(ink is List&&ink.length<=48){for(final s in ink){
+      if(s is! Map||s['color'] is! int||s['points'] is! List||(s['points'] as List).length>2000)continue;
+      final color=Color(s['color'] as int);if(!_inkColors.contains(color))continue;
+      final pts=<Offset>[];for(final p in s['points'] as List){
+        if(p is List&&p.length==2&&p[0] is num&&p[1] is num){final x=(p[0] as num).toDouble(),y=(p[1] as num).toDouble();if(x.isFinite&&y.isFinite&&x>=0&&x<=1&&y>=0&&y<=1)pts.add(Offset(x,y));}}
+      if(pts.isNotEmpty)_photoStrokes.add(_CameraInkStroke(color,pts));
+    }}
+    final wave=_recoveredEdits['waveform'];if(wave is List&&wave.length<=36){for(final p in wave){if(p is num&&p.isFinite)_waveform.add(p.clamp(0,1).toDouble());}}
+  }
   Future<void> _savePhotoDraft(Uint8List bytes) async {
     if(!widget.enableCamera)return;
     try{
       _captureClientId=await _captureVault.savePhoto(bytes);
+      _recoveredEdits={};_saveCameraEdits();
       if(mounted)setState(()=>_hasSavedDraft=false);
     }
     catch(_){
@@ -269,6 +308,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     try{
       _captureClientId=await _captureVault.saveClip(
         clip,kind:kind,durationMs:duration);
+      _recoveredEdits={};_saveCameraEdits();
       if(mounted)setState(()=>_hasSavedDraft=false);
     }
     catch(_){
@@ -301,8 +341,11 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       return;
     }
 
-    if (state == AppLifecycleState.inactive) {
-      if(_recording)unawaited(_finishRecording());
+    if (state == AppLifecycleState.inactive || state==AppLifecycleState.paused) {
+      _captureEpoch++;
+      if(_recordStarting){_stopWhenStarted=true;return;}
+      if(_recording){unawaited(_finishRecording());return;}
+      if(_recordStopping)return;
       // Android's runtime permission UI temporarily moves the activity to an
       // inactive state while CameraController.initialize() is still waiting
       // for the permission result. Disposing/restarting here creates two
@@ -570,6 +613,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   void _selectFilter(MomentFilter filter) {
     if(_mode!=_OrbitCaptureMode.photo || _recording || _isCapturing)return;
     setState(() => _selectedFilter = filter);
+    _saveCameraEdits();
   }
 
   Widget _filteredPreview(Widget preview) {
@@ -835,7 +879,8 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   }
 
   Future<void> _beginRecording() async {
-    if(_isCapturing || _recording || _capturedClip!=null || !mounted)return;
+    if(_isCapturing || _recording || _recordStarting || _recordStopping || _capturedClip!=null || !mounted)return;
+    _recordStarting=true;
     try {
       if(_mode==_OrbitCaptureMode.video){
         final camera=_controller;
@@ -862,6 +907,11 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
           });
         });
       }
+      if(!mounted){
+        if(_mode==_OrbitCaptureMode.voice){final path=await _audioRecorder.stop();if(path!=null)await _deleteClip(File(path));}
+        else{try{final file=await _controller?.stopVideoRecording();if(file!=null)await _deleteClip(File(file.path));}catch(_){}}
+        return;
+      }
       _recordStart=DateTime.now();
       if(mounted)setState((){
         _recording=true;
@@ -880,7 +930,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         return;
       }
       _recordLimit?.cancel();
-      _recordLimit=Timer(const Duration(seconds:60),(){
+      _recordLimit=Timer(Duration(milliseconds:_recordMaxMs),(){
         if(mounted && _recording)unawaited(_finishRecording());
       });
     }catch(_){
@@ -892,18 +942,17 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       }
       if(mounted)ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content:Text('Unable to start recording. Check camera and microphone permissions.')));
-    }
+    }finally{_recordStarting=false;}
   }
 
   Future<void> _finishRecording() async {
-    if(!_recording)return;
+    if(!_recording||_recordStopping)return;
+    _recordStopping=true;
     _recordLimit?.cancel();
     _recordTicker?.cancel();
     await _amplitudeSubscription?.cancel();
     _amplitudeSubscription=null;
     _recording=false;
-    final duration=DateTime.now().difference(_recordStart??DateTime.now())
-      .inMilliseconds.clamp(1,60000);
     File? clip;
     try{
       if(_mode==_OrbitCaptureMode.video){
@@ -918,12 +967,15 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       if(clip==null || !await clip.exists() || await clip.length()<1){
         throw const FormatException('Recorded clip is empty.');
       }
+      final info=await CompressVideo().getMediaInfo(clip.path);
+      final actual=info.durationMs;
+      OrbitCameraPolicy.current.requireDuration(_mode==_OrbitCaptureMode.video?'video':'audio',actual);
       await _saveClipDraft(clip,
-        _mode==_OrbitCaptureMode.video?'video':'audio',duration);
+        _mode==_OrbitCaptureMode.video?'video':'audio',actual);
       if(!mounted){await _deleteClip(clip);return;}
       setState((){
         _capturedClip=clip;
-        _capturedDurationMs=duration;
+        _capturedDurationMs=actual;
       });
     }catch(_){
       // A failed stop/empty-file validation can leave a plaintext native
@@ -932,7 +984,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       if(mounted)ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content:Text('Recording could not be completed.')));
     }finally{
-      _stopWhenStarted=false;
+      _stopWhenStarted=false;_recordStopping=false;
       if(mounted)setState(()=>_recording=false);
     }
   }
@@ -946,14 +998,14 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       if(_mode==_OrbitCaptureMode.video && widget.galleryPicker==null){
         final clip=await ImagePicker().pickVideo(
           source:ImageSource.gallery,
-          maxDuration:const Duration(seconds:60));
+          maxDuration:Duration(milliseconds:OrbitCameraPolicy.current.videoDuration));
         if(clip==null)return;
         if(await clip.length()>500*1024*1024 ||
            await clip.length()==0) {
           throw const FormatException('Video exceeds capture size limits.');
         }
         final info=await CompressVideo().getMediaInfo(clip.path);
-        if(info.durationMs<1 || info.durationMs>60000){
+        if(info.durationMs<1 || info.durationMs>OrbitCameraPolicy.current.videoDuration){
           throw const FormatException('Video must be 60 seconds or shorter.');
         }
         if(!mounted)return;
@@ -982,6 +1034,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       }
       if(bytes==null || bytes.isEmpty)return;
       if(bytes.length>26*1024*1024)throw const FormatException('Photo exceeds 26 MB.');
+      await compute(_validateCapturePhoto,bytes);
       if(!mounted)return;
       final controller=_controller;
       try {await controller?.pausePreview();}catch(_){}
@@ -1020,18 +1073,19 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     if (controller.value.isTakingPicture)return;
 
     setState(() => _isCapturing = true);
+    final epoch=_captureEpoch;
 
     try {
       final delaySeconds = _captureDelay.inSeconds;
       for (var second = delaySeconds; second > 0; second--) {
-        if (!mounted) {
+        if (!mounted||epoch!=_captureEpoch) {
           return;
         }
         setState(() => _countdownValue = second);
         await Future<void>.delayed(const Duration(seconds: 1));
       }
 
-      if (!mounted) {
+      if (!mounted||epoch!=_captureEpoch) {
         return;
       }
       setState(() => _countdownValue = null);
@@ -1051,6 +1105,9 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         }
       }
 
+      if(!mounted||epoch!=_captureEpoch)return;
+      await compute(_validateCapturePhoto,bytes);
+      if(!mounted||epoch!=_captureEpoch)return;
       try {
         await controller.pausePreview();
       } on CameraException {
@@ -1100,6 +1157,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         _capturedClip=null;
         _capturedDurationMs=null;
         _captureClientId=null;
+        _recoveredEdits={};
         _hasSavedDraft=false;
         _photoStickers.clear();
         _photoStrokes.clear();
@@ -1157,6 +1215,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       ));
       _stickerTrayOpen=false;
     });
+    _saveCameraEdits();
   }
 
   void _moveSticker(_CameraSticker sticker,Offset delta,Size canvas) {
@@ -1194,6 +1253,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       }
       _activePhotoStroke=null;
     });
+    _saveCameraEdits();
   }
 
   Widget _buildStickerTray() => Container(
@@ -1328,7 +1388,9 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       }
       return;
     }
-    if (_publishSheetOpen || !mounted) return;
+    if (_publishSheetOpen || _exportingPhoto || !mounted) return;
+    _publishSheetOpen=true;
+    _endInk();_saveCameraEdits();
     Uint8List editedPhoto=captured??Uint8List(0);
     if(captured!=null){
       try {
@@ -1336,6 +1398,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       } catch (error) {
         // Debug builds identify a rendering failure without exposing photo bytes.
         assert(() { debugPrint('Orbit photo editor export: ${error.runtimeType}: $error'); return true; }());
+        _publishSheetOpen=false;
         _showToolHint('Could not save photo edits. Please try again.');
         return;
       }
@@ -1345,6 +1408,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     final legacySend=widget.onSendPressed;
     if(legacySend!=null && captured!=null){
       legacySend(editedPhoto);
+      _publishSheetOpen=false;
       return;
     }
     // Step7:photo-publishing-flow â€” the camera and its permission lifecycle
@@ -1368,6 +1432,12 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         publisher: widget.publishMoment,
         privateSaver: widget.privateSaver,
         clientId:_captureClientId,
+        recoveredEdits:_recoveredEdits,
+        onSaveEdits:widget.enableCamera&&_captureClientId!=null?(edits) async {
+          final id=_captureClientId;if(id==null)return;
+          _recoveredEdits.addAll(edits);
+          await _captureVault.saveEdits(id,edits);
+        }:null,
         onCommitted:widget.enableCamera ? () async {
           await _captureVault.clear();
           _captureClientId=null;
@@ -1649,8 +1719,9 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
                   behavior:HitTestBehavior.translucent,
                   onPanUpdate:_drawMode ? null
                     : (d)=>_moveSticker(sticker,d.delta,size),
+                  onPanEnd:_drawMode?null:(_)=>_saveCameraEdits(),
                   onLongPress:_drawMode ? null
-                    : ()=>setState(()=>_photoStickers.remove(sticker)),
+                    : (){setState(()=>_photoStickers.remove(sticker));_saveCameraEdits();},
                   child:SizedBox(width:64,height:64,
                     child:Center(child:Text(sticker.emoji,
                       style:const TextStyle(fontSize:48,
@@ -2298,3 +2369,5 @@ class _SendToButton extends StatelessWidget {
     );
   }
 }
+
+void _validateCapturePhoto(Uint8List bytes){OrbitBoundedImage.decode(bytes);}

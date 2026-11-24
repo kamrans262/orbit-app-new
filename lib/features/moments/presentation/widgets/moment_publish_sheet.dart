@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import '../../data/moment_photo_processor.dart';
+import '../../data/orbit_camera_policy.dart';
 import '../../data/orbit_moment_audience_memory.dart';
 import '../../../auth/data/orbit_identity_client.dart';
 import 'orbit_moment_draft_player.dart';
@@ -59,6 +60,8 @@ Future<void> showMomentPublishingSheet(
   OrbitPrivatePhotoSaver? privateSaver,
   Future<void> Function()? onCommitted,
   String? clientId,
+  Map<String,dynamic> recoveredEdits=const {},
+  Future<void> Function(Map<String,Object?>)? onSaveEdits,
 }) async {
   if(mediaKind=='image' && photoBytes.isEmpty)return;
   if(mediaKind!='image' && (mediaFile==null || !['video','audio'].contains(mediaKind)))return;
@@ -89,7 +92,7 @@ Future<void> showMomentPublishingSheet(
         publisher: publisher,
         privateSaver: privateSaver,
         onCommitted:onCommitted,
-        clientId:clientId,
+        clientId:clientId,recoveredEdits:recoveredEdits,onSaveEdits:onSaveEdits,
       ),
     ),
   );
@@ -112,6 +115,7 @@ class MomentPublishSheet extends StatefulWidget {
     this.privateSaver,
     this.onCommitted,
     this.clientId,
+    this.recoveredEdits=const {},this.onSaveEdits,
     super.key,
   });
 
@@ -130,6 +134,8 @@ class MomentPublishSheet extends StatefulWidget {
   final OrbitPrivatePhotoSaver? privateSaver;
   final Future<void> Function()? onCommitted;
   final String? clientId;
+  final Map<String,dynamic> recoveredEdits;
+  final Future<void> Function(Map<String,Object?>)? onSaveEdits;
 
   @override
   State<MomentPublishSheet> createState() => _MomentPublishSheetState();
@@ -155,6 +161,15 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
   Timer? _previewDebounce;
   int _previewGeneration=0;
   bool _previewBusy=false;
+  Future<void>? _checkpointInFlight;
+  Map<String,Object?> _recipe()=>{'sheet_filter':_filter.name,'beauty':_beautyStrength,
+    'text':_overlayText.text,'mute':_muteVideo,'saver':_dataSaver,
+    'caption':_caption.text,'place':_placeLabel.text,'location_consent':_locationConsent,
+    'sheet_strokes':_strokes.map((s)=>s.points.map((p)=>[p.dx,p.dy]).toList()).toList()};
+  void _checkpoint(){
+    final save=widget.onSaveEdits;
+    if(save!=null)_checkpointInFlight=save(_recipe()).catchError((Object _){});
+  }
 
   Future<Uint8List> _encodeImage() async {
     if(widget.mediaKind!='image')return widget.photoBytes;
@@ -165,14 +180,16 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
        _overlayText.text.trim().isEmpty && _strokes.isEmpty && !_dataSaver){
       return widget.photoBytes;
     }
+    final policy=OrbitCameraPolicy.current;
     final edit=MomentPhotoEdit(filter:_filter,
-      beautyStrength:_beautyStrength,maxLongSide:_dataSaver?1080:1440,
+      beautyStrength:_beautyStrength,maxLongSide:policy.photoLimit(_dataSaver),jpegQuality:policy.jpegQuality,
       text:_overlayText.text,
       strokes:List<MomentDrawStroke>.unmodifiable(_strokes));
     // CPU-heavy image transformations stay off the UI isolate.
     return compute(_renderMomentEdits,(widget.photoBytes,edit));
   }
   void _queuePreview(){
+    _checkpoint();
     if(widget.mediaKind!='image')return;
     _previewDebounce?.cancel();
     final generation=++_previewGeneration;
@@ -226,7 +243,25 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
   @override
   void initState() {
     super.initState();
-    _filter=widget.initialFilter;
+    final recovered=widget.recoveredEdits;
+    _filter=MomentFilter.values.where((f)=>f.name==recovered['sheet_filter']).firstOrNull??widget.initialFilter;
+    _muteVideo=recovered['mute']==true;_dataSaver=recovered['saver']==true;
+    final beauty=recovered['beauty'];if(beauty is num&&beauty.isFinite)_beautyStrength=beauty.clamp(0,0.25).toDouble();
+    final text=recovered['text'];if(text is String&&text.runes.length<=80)_overlayText.text=text;
+    final caption=recovered['caption'];if(caption is String&&caption.length<=200)_caption.text=caption;
+    final place=recovered['place'];if(place is String&&place.length<=200)_placeLabel.text=place;
+    _locationConsent=recovered['location_consent']==true&&_placeLabel.text.isNotEmpty;
+    final strokes=recovered['sheet_strokes'];
+    if(strokes is List&&strokes.length<=48){for(final s in strokes){
+      if(s is! List||s.length>2000)continue;
+      final points=<Offset>[];
+      for(final p in s){if(p is List&&p.length==2&&p[0] is num&&p[1] is num){
+        final x=(p[0] as num).toDouble(),y=(p[1] as num).toDouble();
+        if(x.isFinite&&y.isFinite&&x>=0&&x<=1&&y>=0&&y<=1)points.add(Offset(x,y));}}
+      if(points.length>1)_strokes.add(MomentDrawStroke(points));
+    }}
+    _caption.addListener(_checkpoint);_placeLabel.addListener(_checkpoint);
+    if(_overlayText.text.isNotEmpty||_beautyStrength>0||_strokes.isNotEmpty||_dataSaver){WidgetsBinding.instance.addPostFrameCallback((_){if(mounted)_queuePreview();});}
     if(_filter!=MomentFilter.natural){
       WidgetsBinding.instance.addPostFrameCallback((_){
         if(mounted)_queuePreview();
@@ -326,6 +361,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
   @override
   void dispose() {
     _previewDebounce?.cancel();
+    _caption.removeListener(_checkpoint);_placeLabel.removeListener(_checkpoint);
     _overlayText.dispose();
     _placeLabel.dispose();
     _caption.dispose();
@@ -420,6 +456,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
       _error = null;
     });
     try {
+      _checkpoint();await _checkpointInFlight;
       if (privateOnly) {
         // Explicit user action. M6 encrypts and saves to the creator's own
         // trusted device, but does not publish or notify a Circle.
@@ -643,7 +680,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
           title:Text('Mute video audio',style:AppTypography.body),
           subtitle:Text('Remove audio from the encrypted video export',
             style:AppTypography.bodyMuted),
-          onChanged:(value)=>setState(()=>_muteVideo=value),
+          onChanged:(value){setState(()=>_muteVideo=value);_checkpoint();},
         ),
         if(widget.mediaKind=='image') ...[
           const SizedBox(height:10),
