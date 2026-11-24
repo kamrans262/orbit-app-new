@@ -59,8 +59,39 @@ class OrbitMomentCaptureVault {
     _tail=task.then<void>((_){},onError:(Object _,StackTrace __){});
     return task;
   }
-  /// Recipe is protected by the same OS secure storage as the capture key.
-  /// Never renew draft retention or attach an edit to a different capture.
+  static const maxRecipeBytes=8*1024*1024;
+  // Large recipes are encrypted on disk. Only a short authenticated index
+  // and key are kept in OS secure storage, never raw drawing/text recipes.
+  Future<Map<String,dynamic>> _readEdits(String owner,Map<String,dynamic> data) async {
+    final descriptor=data['edit_blob'];
+    if(descriptor==null){
+      return data['edits'] is Map?Map<String,dynamic>.from(data['edits'] as Map):{};
+    }
+    if(descriptor is! Map)throw const FormatException('Invalid edit index.');
+    final name=descriptor['name'];
+    if(name is! String||!RegExp(r'^[a-fA-F0-9-]{36}\.edits\.cipher$').hasMatch(name)){
+      throw const FormatException('Invalid edit file.');
+    }
+    final file=File('${(await _root(owner)).path}/$name');
+    if(!await file.exists()||await file.length()>maxRecipeBytes)throw const FormatException('Edit checkpoint unavailable.');
+    final key=base64Decode(descriptor['key'] as String);
+    final nonce=base64Decode(descriptor['nonce'] as String);
+    final mac=base64Decode(descriptor['mac'] as String);
+    if(key.length!=32||nonce.length!=12||mac.length!=16)throw const FormatException('Invalid edit key.');
+    final plain=await AesGcm.with256bits().decrypt(SecretBox(await file.readAsBytes(),nonce:nonce,mac:Mac(mac)),
+      secretKey:SecretKey(key),aad:utf8.encode('orbit-m23-edits-v1|$owner|${data['id']}'));
+    final decoded=jsonDecode(utf8.decode(plain));
+    if(decoded is! Map)throw const FormatException('Invalid edit recipe.');
+    return Map<String,dynamic>.from(decoded);
+  }
+  Future<void> _deleteEditBlob(String owner,Object? descriptor) async {
+    if(descriptor is! Map)return;
+    final name=descriptor['name'];
+    if(name is String&&RegExp(r'^[a-fA-F0-9-]{36}\.edits\.cipher$').hasMatch(name)){
+      final file=File('${(await _root(owner)).path}/$name');
+      if(await file.exists())await file.delete();
+    }
+  }
   Future<void> saveEdits(String clientId,Map<String,Object?> changes) async {
     final owner=await _account();
     final snapshot=jsonDecode(jsonEncode(changes)) as Map<String,dynamic>;
@@ -68,11 +99,25 @@ class OrbitMomentCaptureVault {
       if(await _owner()!=owner)return;
       final data=await _metadata(owner);
       if(data==null||data['id']!=clientId)return;
-      final previous=data['edits'];
-      final edits=<String,Object?>{if(previous is Map)...Map<String,Object?>.from(previous),...snapshot};
-      if(utf8.encode(jsonEncode(edits)).length>1024*1024)throw const FormatException('Capture edit recipe too large.');
-      if(await _owner()!=owner)return;
-      await _vault.write(_index(owner),jsonEncode({...data,'edits':edits}));
+      final saved=DateTime.tryParse(data['saved_at'] as String? ?? '');
+      if(saved==null||DateTime.now().toUtc().difference(saved)>maxAge)return;
+      final previous=await _readEdits(owner,data);
+      final edits=<String,Object?>{...previous,...snapshot};
+      final bytes=utf8.encode(jsonEncode(edits));
+      if(bytes.length>maxRecipeBytes)throw const FormatException('Capture edit recipe too large.');
+      final key=_crypto.randomBytes(32),nonce=_crypto.randomBytes(12);
+      final box=await AesGcm.with256bits().encrypt(bytes,secretKey:SecretKey(key),nonce:nonce,
+        aad:utf8.encode('orbit-m23-edits-v1|$owner|$clientId'));
+      final name=const Uuid().v4()+'.edits.cipher';
+      final file=File('${(await _root(owner)).path}/$name');
+      try{
+        await file.writeAsBytes(box.cipherText,flush:true);
+        if(await _owner()!=owner){await file.delete();return;}
+        final next=Map<String,dynamic>.from(data)..remove('edits');
+        next['edit_blob']={'name':name,'key':base64Encode(key),'nonce':base64Encode(nonce),'mac':base64Encode(box.mac.bytes)};
+        await _vault.write(_index(owner),jsonEncode(next));
+      }catch(_){if(await file.exists())await file.delete();rethrow;}
+      await _deleteEditBlob(owner,data['edit_blob']);
     });
   }
 
@@ -156,6 +201,7 @@ class OrbitMomentCaptureVault {
       if(await media.file.exists())await media.file.delete();
       rethrow;
     }
+    await _deleteEditBlob(owner,previous?['edit_blob']);
     final oldName=previous?['name'];
     if(oldName is String && RegExp(r'^[a-fA-F0-9-]{36}\.cipher$').hasMatch(oldName)
         && oldName!=metadata['name']){
@@ -182,7 +228,8 @@ class OrbitMomentCaptureVault {
     final root = await _root(owner);
     return File(root.path + '/' + name).exists();
   }
-  Future<OrbitRecoveredMomentCapture?> restore() async {
+  Future<OrbitRecoveredMomentCapture?> restore()=>_serialize(_restore);
+  Future<OrbitRecoveredMomentCapture?> _restore() async {
     final owner=await _account();
     final data=await _metadata(owner);
     if(data==null)return null;
@@ -191,7 +238,7 @@ class OrbitMomentCaptureVault {
         DateTime.now().toUtc().difference(timestamp.toUtc())>maxAge ||
         timestamp.toUtc().isAfter(DateTime.now().toUtc().add(
           const Duration(minutes:5)))){
-      await clear();
+      await _purge(owner);
       return null;
     }
     final name=data['name'];
@@ -224,7 +271,7 @@ class OrbitMomentCaptureVault {
       plainBytes:bytes,bytes:(data['cipher_bytes'] as num).toInt(),
       sha256:data['sha256'] as String,ownerId:owner,transferId:id,
       purpose:'moment',variant:'capture');
-    final edits=data['edits'] is Map?Map<String,dynamic>.from(data['edits'] as Map):<String,dynamic>{};
+    final edits=await _readEdits(owner,data);
     if(kind=='image'){
       final photo=await _crypto.openInMemory(
         await file.readAsBytes(),key:key,noncePrefix:prefix,

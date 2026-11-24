@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderBox;
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 

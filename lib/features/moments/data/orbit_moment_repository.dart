@@ -3,6 +3,7 @@ import 'package:path_provider/path_provider.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
+import 'package:crypto/crypto.dart' as hashes;
 import 'package:uuid/uuid.dart';
 import '../../auth/data/orbit_identity_client.dart';
 import '../../circles/data/orbit_circle_repository.dart';
@@ -323,12 +324,18 @@ class OrbitMomentRepository {
       progress(1);
       return MomentPublishReceipt(momentId:confirmed);
     }
+    final sourceHash=request.mediaKind=='image'?hashes.sha256.convert(request.photoBytes):
+      await hashes.sha256.bind(request.mediaFile!.openRead()).first;
+    final sourceDigest=hashes.sha256.convert(utf8.encode(jsonEncode([
+      request.mediaKind,sourceHash.toString(),request.durationMs,request.muteVideo,request.dataSaver,request.waveformLevels,
+    ]))).toString();
+    if(await _identity.currentLocalSocialOwner()!=owner)throw StateError('Account changed.');
     // Resume the immutable encrypted intent instead of staging a duplicate.
     final pending=(await _intents.pending(owner)).where((e)=>e.clientId==request.clientId).toList();
     if(pending.isNotEmpty){
       if(pending.length!=1)throw StateError('Conflicting encrypted drafts require review.');
       final intent=pending.single;
-      if(intent.audienceKind!=audience||intent.caption!=request.caption||
+      if(intent.sourceDigest!=sourceDigest||intent.audienceKind!=audience||intent.caption!=request.caption||
          intent.placeLabel!=request.placeLabel||intent.locationConsent!=request.locationConsent||
          !intent.targetIds.toSet().containsAll(targets)||intent.targetIds.length!=targets.length||
          !intent.taggedUserIds.toSet().containsAll(request.taggedUserIds)||intent.taggedUserIds.length!=request.taggedUserIds.length){
@@ -343,7 +350,7 @@ class OrbitMomentRepository {
     Future<void> queued(String transfer) async {
       stagedTransfer=transfer;
       await _intents.save(OrbitStoredMomentIntent(
-        owner:owner,transfer:transfer,clientId:request.clientId,
+        owner:owner,transfer:transfer,clientId:request.clientId,sourceDigest:sourceDigest,
         audienceKind:audience,targetIds:targets,caption:request.caption,
         placeLabel:request.placeLabel,
         locationConsent:request.locationConsent,

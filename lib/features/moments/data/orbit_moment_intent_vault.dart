@@ -11,13 +11,14 @@ class OrbitStoredMomentIntent {
     required this.owner,required this.transfer,required this.clientId,
     required this.audienceKind,required this.targetIds,required this.caption,
     required this.createdAt,this.placeLabel='',this.locationConsent=false,
-    this.taggedUserIds=const [],this.attemptCount=0,this.retryAfter,
+    this.taggedUserIds=const [],this.attemptCount=0,this.retryAfter,this.sourceDigest,
   });
   final String owner,transfer,clientId,audienceKind,caption;
   final List<String> targetIds;
   final String placeLabel;
   final bool locationConsent;
   final List<String> taggedUserIds;
+  final String? sourceDigest;
   final int attemptCount;
   final DateTime? retryAfter;
   final DateTime createdAt;
@@ -27,6 +28,7 @@ class OrbitStoredMomentIntent {
     'caption':caption,'created_at':createdAt.toUtc().toIso8601String(),
     'place_label':placeLabel,'location_consent':locationConsent,
     'tagged_user_ids':taggedUserIds,
+    'source_digest':sourceDigest,
     'attempt_count':attemptCount,
     'retry_after':retryAfter?.toUtc().toIso8601String(),
   };
@@ -39,6 +41,7 @@ class OrbitStoredMomentIntent {
       placeLabel:j['place_label'] as String? ?? '',
       locationConsent:j['location_consent']==true,
       taggedUserIds:List<String>.from(j['tagged_user_ids'] as List? ?? const []),
+      sourceDigest:j['source_digest'] as String?,
       attemptCount:(j['attempt_count'] as num?)?.toInt()??0,
       retryAfter:j['retry_after'] is String
         ? DateTime.parse(j['retry_after'] as String).toUtc():null,
@@ -125,6 +128,7 @@ class OrbitMomentIntentVault {
       caption:old.caption,createdAt:old.createdAt,
       placeLabel:old.placeLabel,locationConsent:old.locationConsent,
       taggedUserIds:old.taggedUserIds,
+      sourceDigest:old.sourceDigest,
       attemptCount:attempts,retryAfter:DateTime.now().toUtc()
         .add(Duration(seconds:seconds)),
     );
