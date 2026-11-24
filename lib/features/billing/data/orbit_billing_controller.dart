@@ -19,13 +19,14 @@ class OrbitBillingController extends ChangeNotifier{
   bool purchaseEnabled=false;
   bool _readReady=false;
   DateTime? effectiveUntil;
+  bool? autoRenew;
   Timer? _expiry;
   Map<String,BillingJson> _mapping={};
   Map<String,String> prices={};
   bool get canManage=>checkoutEnabled&&_readReady&&['active','grace','hold','paused','pending'].contains(state);
   bool canBuy(String selected)=>!busy&&checkoutEnabled&&purchaseEnabled&&_readReady&&['free','expired','revoked'].contains(state)&&_mapping.containsKey(selected)&&prices.containsKey(selected);
   void _emit(){if(!_disposed)notifyListeners();}
-  void _unknown(){tier=null;state='unknown';effectiveUntil=null;_readReady=false;purchaseEnabled=false;prices={};_mapping={};_expiry?.cancel();}
+  void _unknown(){tier=null;state='unknown';effectiveUntil=null;autoRenew=null;_readReady=false;purchaseEnabled=false;prices={};_mapping={};_expiry?.cancel();}
   Future<void> _bound()async{
     if(_disposed||await currentOwner()!=owner||_disposed){_unknown();throw StateError('Billing account changed.');}
   }
@@ -44,6 +45,9 @@ class OrbitBillingController extends ChangeNotifier{
     else if(['active','grace'].contains(s)){throw const FormatException('Missing paid tier.');}
     if((s=='unknown')!=(t==null))throw const FormatException('Unknown subscription status.');
     tier=checkoutEnabled?t as String?:(t=='free'?'free':null);state=checkoutEnabled?s as String:(t=='free'?s as String:'unknown');effectiveUntil=checkoutEnabled?expiry:null;_readReady=true;
+    final renewal=e['auto_renew'];
+    if(renewal!=null&&renewal is! bool)throw const FormatException('Invalid renewal state.');
+    autoRenew=checkoutEnabled?renewal as bool?:null;
     _expiry?.cancel();
     if(checkoutEnabled&&expiry!=null){_expiry=Timer(expiry.difference(DateTime.now().toUtc()),(){_unknown();message='Subscription status needs refreshing.';_emit();});}
   }
@@ -58,7 +62,7 @@ class OrbitBillingController extends ChangeNotifier{
     finally{busy=false;_emit();}
   }
   Future<void> _load()async{
-    _unknown();
+    _unknown();_emit();
     _apply(await _checked(api.entitlement));
     final c=await _checked(()=>api.catalog(store.provider));
     if(!_sandbox(c)||c['production_enabled']!=false||c['provider']!=store.provider||c['products'] is! List)throw const FormatException('Invalid catalog.');
@@ -155,6 +159,13 @@ class OrbitBillingController extends ChangeNotifier{
     }
     if(pending)message='Purchase pending verification. Restore purchases to retry.';
     return verified&&!pending;
+  }
+  /// Check local identity without a provider or backend request. Never show
+  /// the previous account's verified plan after account changes.
+  Future<void> revalidateOwner()async{
+    if(_disposed)return;
+    try{await _bound();}
+    catch(_){if(!_disposed){_unknown();message='Billing account changed. Reopen Subscription.';_emit();}}
   }
   Future<void> manage()=>_run(()async{await _load();if(!canManage){message='Subscription management is unavailable.';return;}await _checked(store.manage);});
   @override void dispose(){_disposed=true;_expiry?.cancel();super.dispose();}

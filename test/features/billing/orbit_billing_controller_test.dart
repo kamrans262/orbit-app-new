@@ -84,6 +84,12 @@ void main(){
     expect(api.contextRequests.length,2);expect(api.contextRequests.first,api.contextRequests.last);
     expect(store.purchases,1);expect(c.tier,'lite');
   });
+  test('renewal state is server-owned and stale account status is cleared',()async{
+    final c=controller();
+    api.status={...sampleEntitlement(tier:'plus',state:'active'),'auto_renew':false};
+    await c.refresh(recover:false);expect(c.tier,'plus');expect(c.autoRenew,false);
+    owner='b';await c.revalidateOwner();expect(c.tier,isNull);expect(c.autoRenew,isNull);
+  });
   test('malformed environment never activates paid status',()async{
     final c=controller();api.status={'environment':'production','tier':'lite','state':'active','revision':1,'capabilities':{}};
     await c.refresh();expect(c.tier,isNull);expect(c.canBuy('lite'),false);

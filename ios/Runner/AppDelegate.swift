@@ -217,11 +217,16 @@ private final class OrbitStoreBilling {
         result(rows)
       case "purchase":
         guard #available(iOS 16.0, *) else {throw BillingError.invalid}
+        let appVerification=try await AppTransaction.shared
+        guard case .verified(let appTx)=appVerification,appTx.environment == .sandbox else {throw BillingError.invalid}
         guard args["environment"] as? String=="sandbox",let id=args["product_id"] as? String,
               let binding=args["account_binding"] as? String,let token=UUID(uuidString:binding) else {throw BillingError.invalid}
         // Never launch against a currently active store subscription.
         for await value in StoreKit.Transaction.currentEntitlements {
-          if case .verified(let tx)=value,tx.productType == .autoRenewable {throw BillingError.invalid}
+          switch value {
+          case .verified(let tx): if tx.productType == .autoRenewable {throw BillingError.invalid}
+          case .unverified: throw BillingError.invalid
+          }
         }
         guard let product=try await Product.products(for:[id]).first,monthly(product) else {throw BillingError.invalid}
         switch try await product.purchase(options:[.appAccountToken(token)]) {

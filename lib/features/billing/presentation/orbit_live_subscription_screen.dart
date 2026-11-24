@@ -16,7 +16,7 @@ class OrbitLiveSubscriptionScreen extends StatefulWidget{
 }
 class _OrbitLiveSubscriptionScreenState extends State<OrbitLiveSubscriptionScreen> with WidgetsBindingObserver{
   OrbitBillingController? _controller;
-  Timer? _timer;
+  Timer? _timer,_ownerTimer;
   bool _initializing=true;
   @override void initState(){
     super.initState();WidgetsBinding.instance.addObserver(this);unawaited(_init());
@@ -37,6 +37,7 @@ class _OrbitLiveSubscriptionScreenState extends State<OrbitLiveSubscriptionScree
       }
     }finally{
       if(mounted){setState(()=>_initializing=false);
+        _ownerTimer=Timer.periodic(const Duration(seconds:5),(_){final c=_controller;if(c!=null)unawaited(c.revalidateOwner());});
         _timer=Timer.periodic(const Duration(seconds:60),(_){final c=_controller;if(c!=null&&WidgetsBinding.instance.lifecycleState==AppLifecycleState.resumed)unawaited(c.refresh(recover:false));});
       }
     }
@@ -52,6 +53,7 @@ class _OrbitLiveSubscriptionScreenState extends State<OrbitLiveSubscriptionScree
     if(c!=null&&tier!=null){
       status=tier==OrbitSubscriptionTier.free?'Free · '+c.state:'Sandbox '+tier.label+' · '+c.state;
       if(c.effectiveUntil!=null)status+=' · through '+c.effectiveUntil!.toLocal().toIso8601String().substring(0,10);
+      if(c.autoRenew!=null&&tier!=OrbitSubscriptionTier.free)status+=c.autoRenew==true?' · Auto-renew on':' · Auto-renew off';
     }
     return SubscriptionScreen(liveBilling:true,currentTier:tier,statusText:status,
       externalBusy:_initializing||(c?.busy??false),storePrices:c?.prices??const {},
@@ -62,7 +64,7 @@ class _OrbitLiveSubscriptionScreenState extends State<OrbitLiveSubscriptionScree
       onRestoreRequested:()async{await c?.restore();},onManageRequested:()async{await c?.manage();});
   }
   @override void dispose(){
-    _timer?.cancel();WidgetsBinding.instance.removeObserver(this);
+    _timer?.cancel();_ownerTimer?.cancel();WidgetsBinding.instance.removeObserver(this);
     _controller?.removeListener(_changed);if(widget.controller==null){if(_controller?.checkoutEnabled==true)OrbitNativeBillingStore.channel.setMethodCallHandler(null);_controller?.dispose();}super.dispose();
   }
 }

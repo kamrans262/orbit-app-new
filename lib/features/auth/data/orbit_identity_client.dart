@@ -917,7 +917,13 @@ class OrbitIdentityClient {
       ..headers['Authorization']='Bearer '+token;
     if(body!=null)request.body=jsonEncode(body);
     final response=await http.Response.fromStream(await _http.send(request).timeout(const Duration(seconds:20))).timeout(const Duration(seconds:20));
-    if(await currentLocalSocialOwner()!=owner||response.statusCode<200||response.statusCode>=300)throw OrbitIdentityException('Billing verification unavailable.',response.statusCode);
+    if(await currentLocalSocialOwner()!=owner)throw OrbitIdentityException('Billing account changed.',403);
+    if(response.statusCode==401&&_access==token&&_billingAccessOwner==owner){
+      // Let the next explicit request refresh the same session; never replay a
+      // purchase or proof automatically with a possibly changed identity.
+      _access=null;_billingAccessOwner=null;
+    }
+    if(response.statusCode<200||response.statusCode>=300)throw OrbitIdentityException('Billing verification unavailable.',response.statusCode);
     if(response.bodyBytes.length>1048576)throw const FormatException('Billing response too large.');
     return Map<String,dynamic>.from(jsonDecode(response.body) as Map);
   }
