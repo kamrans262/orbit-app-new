@@ -25,19 +25,21 @@ abstract final class OrbitMomentCameraLauncher {
   /// If M7 is unavailable, preserve M6 private save without demo publishing.
   static void openLive(BuildContext context) {
     unawaited(() async {
+      final owner=await OrbitIdentityClient.instance.currentLocalSocialOwner();
+      if(!context.mounted||owner==null)return;
       if(!OrbitM7Rollout.enabled){
-        if(context.mounted)await _open(context,circles:const []);
+        if(context.mounted)await _open(context,circles:const [],expectedOwner:owner);
         return;
       }
-      final repo=OrbitMomentRepository();
+      final repo=OrbitMomentRepository(expectedOwner:owner);
       try {
         final options=await repo.audienceOptions();
         if(!context.mounted)return;
         await _open(context,publisher:repo.publish,
           circles:options.circles,friends:options.friends,
-          privacy:options.privacy);
+          privacy:options.privacy,expectedOwner:owner);
       }catch(_){
-        if(context.mounted)await _open(context,circles:const []);
+        if(context.mounted&&await OrbitIdentityClient.instance.currentLocalSocialOwner()==owner&&context.mounted)await _open(context,circles:const [],expectedOwner:owner);
       }
     }());
   }
@@ -54,7 +56,10 @@ abstract final class OrbitMomentCameraLauncher {
     required List<MomentAudienceCircle> circles,
     List<MomentAudienceCircle> friends=const [],
     String privacy='Nobody',
+    String? expectedOwner,
   }) async {
+    final owner=await OrbitIdentityClient.instance.currentLocalSocialOwner();
+    if(!context.mounted||(expectedOwner!=null&&expectedOwner!=owner))return;
     final alreadyConfirmed =
         await OrbitCameraPermissionMemory.hasConfirmedCameraAccess();
 
@@ -63,7 +68,7 @@ abstract final class OrbitMomentCameraLauncher {
     }
 
     if (alreadyConfirmed) {
-      _pushCamera(context, publisher: publisher, circles: circles, friends:friends, privacy:privacy);
+      _pushCamera(context, publisher: publisher, circles: circles, friends:friends, privacy:privacy,owner:owner);
       return;
     }
 
@@ -73,7 +78,7 @@ abstract final class OrbitMomentCameraLauncher {
         if (!context.mounted) {
           return;
         }
-        _pushCamera(context, publisher: publisher, circles: circles, friends:friends, privacy:privacy);
+        _pushCamera(context, publisher: publisher, circles: circles, friends:friends, privacy:privacy,owner:owner);
       },
       onNotNow: () {},
     );
@@ -84,20 +89,26 @@ abstract final class OrbitMomentCameraLauncher {
     required List<MomentAudienceCircle> circles,
     List<MomentAudienceCircle> friends=const [],
     String privacy='Nobody',
+    required String? owner,
   }) {
     // A single camera route owns one in-progress M6 private-save transfer.
     // Repeated Retry taps must resume its encrypted outbox, not enqueue and
     // upload another copy of the user's photo.
-    final stager=OrbitMomentMediaStager();
+    final stager=OrbitMomentMediaStager(expectedOwner:owner);
     final outbox=OrbitMediaOutbox();
     String? queuedPrivateTransfer;
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(builder: (_) => MomentCameraScreen(
-        publishMoment: publisher,
+        captureOwner:owner,
+        publishMoment: publisher==null?null:(request,progress)async{
+          if(owner==null||await OrbitIdentityClient.instance.currentLocalSocialOwner()!=owner)throw StateError('Camera account changed.');
+          return publisher(request,progress);
+        },
         momentAudienceCircles: circles,
         momentAudienceFriends:friends,
         momentPrivacyAudience:privacy,
         privateSaver: (bytes, progress) async {
+          if(owner==null||await OrbitIdentityClient.instance.currentLocalSocialOwner()!=owner)throw StateError('Camera account changed.');
           final pendingId=queuedPrivateTransfer;
           if(pendingId!=null){
             final owner=await OrbitIdentityClient.instance.currentLocalSocialOwner();

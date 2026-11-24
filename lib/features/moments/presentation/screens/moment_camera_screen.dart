@@ -17,6 +17,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../domain/models/moment_publish_models.dart';
 import '../../data/orbit_moment_capture_vault.dart';
+import '../../../auth/data/orbit_identity_client.dart';
 import '../../data/moment_photo_processor.dart';
 import '../../data/orbit_camera_policy.dart';
 import '../../data/orbit_capture_temp_files.dart';
@@ -91,6 +92,7 @@ class MomentCameraScreen extends StatefulWidget {
     this.publishMoment,
     this.privateSaver,
     this.enableCamera = true,
+    this.captureOwner,
     this.initialCameraDirection = CameraLensDirection.front,
     this.resolutionPreset = ResolutionPreset.high,
     super.key,
@@ -116,6 +118,7 @@ class MomentCameraScreen extends StatefulWidget {
   /// Defaults to true in the real app. Tests can turn this off so widget tests
   /// never invoke a platform camera channel.
   final bool enableCamera;
+  final String? captureOwner;
   final CameraLensDirection initialCameraDirection;
   final ResolutionPreset resolutionPreset;
 
@@ -138,7 +141,13 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   bool _publishSheetOpen = false;
   _OrbitCaptureMode _mode=_OrbitCaptureMode.photo;
   final AudioRecorder _audioRecorder=AudioRecorder();
-  final OrbitMomentCaptureVault _captureVault=OrbitMomentCaptureVault();
+  late final Future<String?> _routeOwner;
+  late final OrbitMomentCaptureVault _captureVault=OrbitMomentCaptureVault(owner:_checkedOwner);
+  Future<String?> _checkedOwner() async{
+    final bound=await _routeOwner;
+    final active=await OrbitIdentityClient.instance.currentLocalSocialOwner();
+    return bound!=null&&active==bound?bound:null;
+  }
   final OrbitCaptureTempFiles _tempFiles=OrbitCaptureTempFiles();
   bool _hasSavedDraft=false;
   bool _restoringSavedDraft=false;
@@ -200,6 +209,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
+    _routeOwner=widget.enableCamera?(widget.captureOwner!=null?Future.value(widget.captureOwner):OrbitIdentityClient.instance.currentLocalSocialOwner()):Future.value(null);
     if (widget.enableCamera) {
       unawaited(_initializeCamera());
       unawaited(_checkSavedDraft());
@@ -1428,6 +1438,8 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     }
     if (_publishSheetOpen || _exportingPhoto || !mounted) return;
     _publishSheetOpen=true;
+    if(widget.enableCamera&&await _checkedOwner()==null){_publishSheetOpen=false;if(mounted)_showToolHint('Sign in again before using this capture.');return;}
+    if(!mounted)return;
     _endInk();_saveCameraEdits();
     Uint8List editedPhoto=captured??Uint8List(0);
     if(captured!=null){
@@ -1477,7 +1489,8 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
           await _captureVault.saveEdits(id,edits);
         }:null,
         onCommitted:widget.enableCamera ? () async {
-          await _captureVault.clear();
+          final id=_captureClientId;
+          if(id!=null)await _captureVault.clearIfCurrent(id);
           _captureClientId=null;
         } : null,
       );

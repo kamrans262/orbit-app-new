@@ -352,6 +352,14 @@ class OrbitMomentCaptureVault {
   }
 
   Future<void> clear() async => purge(await _account());
+  Future<void> clearIfCurrent(String clientId) async {
+    final owner=await _account();
+    await _serialize(()async{
+      if(await _owner()!=owner)return;
+      final data=await _metadata(owner);
+      if(data?['id']==clientId)await _purge(owner);
+    });
+  }
 
   /// Called by session revocation/account switch BEFORE owner credentials
   /// are removed; purge does not require a currently active session.

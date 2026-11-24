@@ -67,10 +67,10 @@ class OrbitMomentRepository {
     OrbitMomentMediaStager? stager,OrbitMediaRecipientKeys? recipientKeys,
     OrbitCircleRepository? circles,OrbitMediaCrypto? crypto,
     OrbitMomentIntentVault? intents,OrbitMomentSeenVault? seenVault,
-    OrbitMomentBookmarkVault? bookmarkVault})
+    OrbitMomentBookmarkVault? bookmarkVault,this.expectedOwner})
     : _identity=identity??OrbitIdentityClient.instance,
       _media=media??OrbitMediaRepository(identity:identity),
-      _stager=stager??OrbitMomentMediaStager(identity:identity),
+      _stager=stager??OrbitMomentMediaStager(identity:identity,expectedOwner:expectedOwner),
       _keys=recipientKeys??OrbitMediaRecipientKeys(identity:identity),
       _circles=circles??OrbitCircleRepository(identity:identity),
       _crypto=crypto??OrbitMediaCrypto(),
@@ -80,6 +80,7 @@ class OrbitMomentRepository {
       _bookmarks=bookmarkVault??OrbitMomentBookmarkVault(
         owner:(identity??OrbitIdentityClient.instance).currentLocalSocialOwner);
   final OrbitIdentityClient _identity;
+  final String? expectedOwner;
   final OrbitMediaRepository _media;
   final OrbitMomentMediaStager _stager;
   final OrbitMediaRecipientKeys _keys;
@@ -96,8 +97,10 @@ class OrbitMomentRepository {
 
   Future<Map<String,dynamic>> _api(String method,String path,
       {Map<String,Object?>? body,String? key}) async {
+    if(expectedOwner!=null&&await _identity.currentLocalSocialOwner()!=expectedOwner)throw StateError('Capture account changed.');
     final r=await _identity.socialRequest(method,path,body:body,
         idempotencyKey:key);
+    if(expectedOwner!=null&&await _identity.currentLocalSocialOwner()!=expectedOwner)throw StateError('Capture account changed.');
     final d=r['data'];
     if(d is! Map)throw const FormatException('Unexpected private Moments response.');
     return Map<String,dynamic>.from(d);
@@ -303,6 +306,8 @@ class OrbitMomentRepository {
   }
   Future<MomentPublishReceipt> publish(MomentPublishRequest request,
       void Function(double) progress) async {
+    final initialOwner=await _identity.currentLocalSocialOwner();
+    if(initialOwner==null||(expectedOwner!=null&&initialOwner!=expectedOwner))throw StateError('Sign in to the original capture account.');
     final audience=request.audienceKind;
     final targets=request.targetIds.toList();
     if(!['only_me','accepted_friends','selected_friends','selected_circles'].contains(audience))
@@ -315,7 +320,7 @@ class OrbitMomentRepository {
       throw StateError('Update Moment sharing in Privacy Settings first.');
     }
     final owner=await _identity.currentLocalSocialOwner();
-    if(owner==null)throw StateError('Sign in before publishing.');
+    if(owner==null||owner!=initialOwner)throw StateError('Sign in to the original capture account.');
     // Recovered pre-publish captures reuse the original client UUID. If a
     // previous attempt already committed on the server, never stage/upload
     // new ciphertext or create a second Moment from the same draft.
@@ -362,6 +367,7 @@ class OrbitMomentRepository {
     String? id;
     Future<void> commit(OrbitSealedMedia original,OrbitSealedMedia? derivative,
         String mediaId) async {
+      if(await _identity.currentLocalSocialOwner()!=owner||original.ownerId!=owner)throw StateError('Capture account changed.');
       final existing=await _existingReceipt(request.clientId);
       if(existing!=null){id=existing;return;}
       if(audience!='only_me'){
@@ -404,7 +410,7 @@ class OrbitMomentRepository {
         throw StateError('Captured clip is no longer available.');
       }
       final stager=OrbitEncryptedClipStager(identity:_identity,crypto:_crypto,
-        media:_media);
+        media:_media,expectedOwner:owner);
       if(request.mediaKind=='video'){
         await stager.stageVideo(source,muteAudio:request.muteVideo,
           lowBandwidth:request.dataSaver,
@@ -527,7 +533,7 @@ class OrbitMomentRepository {
     String? onlyClientId,
   }) async {
     final owner=await _identity.currentLocalSocialOwner();
-    if(owner==null)return 0;
+    if(owner==null||(expectedOwner!=null&&owner!=expectedOwner))return 0;
     final intents=await _intents.pending(owner);
     if(intents.isEmpty)return 0;
     var completed=0;
@@ -568,6 +574,7 @@ class OrbitMomentRepository {
       onRetryStart:(parent)=>
         _intents.markAttempt(owner,parent.transfer).then((_){ }),
       onRecovered:(transfer,original,derivative,mediaId) async {
+        if(await _identity.currentLocalSocialOwner()!=owner||original.ownerId!=owner)throw StateError('Capture account changed.');
         final intent=await _intents.read(owner,transfer);
         if(intent==null)return;
         final previous=await _existingReceipt(intent.clientId);

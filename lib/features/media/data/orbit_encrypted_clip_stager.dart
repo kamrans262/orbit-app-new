@@ -147,7 +147,7 @@ class OrbitEncryptedClipStager {
   OrbitEncryptedClipStager({OrbitIdentityClient? identity,
     OrbitMediaCrypto? crypto, OrbitMediaRepository? media,
     OrbitMediaOutbox? outbox, OrbitVideoProcessor? processor,
-    Future<Directory> Function()? temporaryDirectory})
+    Future<Directory> Function()? temporaryDirectory,this.expectedOwner})
       : _identity=identity??OrbitIdentityClient.instance,
         _crypto=crypto??OrbitMediaCrypto(),
         _media=media??OrbitMediaRepository(identity:identity),
@@ -155,6 +155,7 @@ class OrbitEncryptedClipStager {
         _processor=processor??OrbitNativeVideoProcessor(),
         _temp=temporaryDirectory??getTemporaryDirectory;
   final OrbitIdentityClient _identity;
+  final String? expectedOwner;
   final OrbitMediaCrypto _crypto;
   final OrbitMediaRepository _media;
   final OrbitMediaOutbox _outbox;
@@ -169,7 +170,7 @@ class OrbitEncryptedClipStager {
        bool muteAudio=false,bool lowBandwidth=false}) async {
     return OrbitMediaTransferGate.run(() async {
     final owner=await _identity.currentLocalSocialOwner();
-    if(owner==null)throw OrbitIdentityException('Please sign in.',401);
+    if(owner==null||(expectedOwner!=null&&owner!=expectedOwner))throw OrbitIdentityException('Please sign in to the original capture account.',401);
     final device=await _identity.trustedMediaDevice();
     final prepared=await (_processor is OrbitNativeVideoProcessor
       ? _processor.prepareForNetwork(original,
@@ -189,6 +190,7 @@ class OrbitEncryptedClipStager {
     final poster=await _crypto.sealBytes(prepared.posterJpeg,
       destination:File(root.path+'/'+posterId+'.cipher'),
       ownerId:owner,transferId:posterId,purpose:'moment',variant:'poster');
+    if(await _identity.currentLocalSocialOwner()!=owner){await video.file.delete();await poster.file.delete();throw StateError('Capture account changed.');}
     final first=await _outbox.enqueue(video,kind:'video',
       mime:'video/mp4',width:prepared.width,height:prepared.height,
       durationMs:prepared.durationMs);
@@ -286,7 +288,7 @@ class OrbitEncryptedClipStager {
         durationMs=await OrbitCaptureInspection.validate(encoded,kind:'audio',policy:OrbitCameraPolicy.current);
       }
       final owner=await _identity.currentLocalSocialOwner();
-      if(owner==null)throw OrbitIdentityException('Please sign in.',401);
+      if(owner==null||(expectedOwner!=null&&owner!=expectedOwner))throw OrbitIdentityException('Please sign in to the original capture account.',401);
       final device=await _identity.trustedMediaDevice();
       final temp=await _temp();
       final id=const Uuid().v4();
@@ -294,6 +296,7 @@ class OrbitEncryptedClipStager {
         destination:File(temp.path+'/'+id+'.voice.cipher'),
         ownerId:owner,transferId:id,purpose:purpose,
         maxInputBytes:OrbitMediaFormat.audioLimit);
+      if(await _identity.currentLocalSocialOwner()!=owner){await sealed.file.delete();throw StateError('Capture account changed.');}
       final draft=await _outbox.enqueue(sealed,kind:'audio',mime:mime,
         durationMs:durationMs);
       OrbitSealedMedia? waveform;

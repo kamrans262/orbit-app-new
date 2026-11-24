@@ -32,12 +32,14 @@ class OrbitMomentMediaStager {
     OrbitMediaRepository? repository,
     OrbitMediaOutbox? outbox,
     Future<Directory> Function()? temporaryDirectory,
+    this.expectedOwner,
   }) : _identity=identity??OrbitIdentityClient.instance,
        _crypto=crypto??OrbitMediaCrypto(),
        _repo=repository??OrbitMediaRepository(identity:identity),
        _outbox=outbox??OrbitMediaOutbox(),
        _directory=temporaryDirectory??getTemporaryDirectory;
   final OrbitIdentityClient _identity;
+  final String? expectedOwner;
   final OrbitMediaCrypto _crypto;
   final OrbitMediaRepository _repo;
   final OrbitMediaOutbox _outbox;
@@ -55,7 +57,7 @@ class OrbitMomentMediaStager {
        bool lowBandwidth=false}) async {
     return OrbitMediaTransferGate.run(() async {
     final owner=await _identity.currentLocalSocialOwner();
-    if(owner==null)throw OrbitIdentityException('Please sign in first.',401);
+    if(owner==null||(expectedOwner!=null&&owner!=expectedOwner))throw OrbitIdentityException('Please sign in to the original capture account.',401);
     final device=await _identity.trustedMediaDevice();
     final policy=OrbitCameraPolicy.current;
     final prepared=await compute(_prepareMomentPhoto,(captured,policy.photoLimit(lowBandwidth),policy.jpegQuality));
@@ -71,6 +73,7 @@ class OrbitMomentMediaStager {
       destination:File(root.path+'/'+thumbnailId+'.cipher'),
       ownerId:owner,transferId:thumbnailId,purpose:'moment',
       variant:'thumbnail');
+    if(await _identity.currentLocalSocialOwner()!=owner){await original.file.delete();await thumb.file.delete();throw StateError('Capture account changed.');}
     final originalDraft=await _outbox.enqueue(original,kind:'image',
       mime:'image/jpeg',width:prepared.width,height:prepared.height);
     var thumbDraft=await _outbox.enqueue(thumb,kind:'image',
@@ -138,7 +141,7 @@ class OrbitMomentMediaStager {
   }) async {
     return OrbitMediaTransferGate.run(() async {
     final owner=await _identity.currentLocalSocialOwner();
-    if(owner==null)return [];
+    if(owner==null||(expectedOwner!=null&&owner!=expectedOwner))return [];
     final results=<OrbitMediaReceipt>[];
     final drafts=await _outbox.pending(owner);
     for(final parent in drafts.where((x)=>x.variant=='original')) {

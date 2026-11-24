@@ -135,6 +135,15 @@ void main(){
     expect(await orphan.exists(),false);
     expect((await first.restore())!.edits['text'],'latest');
   });
+  test('Stale completion cannot clear a newer encrypted capture',()async{
+    final first=capture();
+    final old=await first.savePhoto(Uint8List.fromList([1,2,3]));
+    final current=await first.savePhoto(Uint8List.fromList([4,5,6]));
+    await first.clearIfCurrent(old);
+    expect((await first.restore())!.clientId,current);
+    await first.clearIfCurrent(current);
+    expect(await first.restore(),isNull);
+  });
   test('Previous audience is account-bound and never a publish authorization',() async{
     final memory=OrbitMomentAudienceMemory(vault:storage,owner:()async=>account);
     await memory.save('selected_friends',['friend-a','friend-a','friend-b']);
