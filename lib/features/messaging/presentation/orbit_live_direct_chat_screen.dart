@@ -48,6 +48,7 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
   Timer? _timer;
   Timer? _typingTimer;
   bool _otherTyping=false;
+  bool _relayWasOffline=false;
   bool _checkingTyping=false;
   int _epoch=0;
   DateTime? _lastOutboxRetry;
@@ -143,6 +144,7 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
       final ready=await _messenger.secureReady();
       List<DirectChatMessage> next=const [];
       if(ready){
+        if(_relayWasOffline){await _messenger.stopRelay();_relayWasOffline=false;_lastOutboxRetry=null;}
         await _retryQueuedCiphertext();
         if(!_recoveringMedia){
           _recoveringMedia=true;
@@ -174,7 +176,7 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
           ...next]..sort((a,b)=>a.createdAt.compareTo(b.createdAt));
       }
       if(!mounted||epoch!=_epoch)return;
-      if(!ready)_olderMessages=const [];
+      if(!ready){_olderMessages=const [];await _messenger.stopRelay();}
       setState((){
         _owner=owner;_thread=thread;_cryptoReady=ready;
         _messages=next;_loading=false;
@@ -196,10 +198,11 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
       if(!mounted||epoch!=_epoch)return;
       final thread=_thread;
       if(error is OrbitIdentityException &&
-         (error.statusCode==null||const [408,429,502,503,504].contains(error.statusCode))&&
+         error.statusCode==null&&
          thread!=null&&await _messenger.canRelay(thread)){
         if(!mounted||epoch!=_epoch)return;
         // Existing chat rendering; offline previews remain local only.
+        _relayWasOffline=true;
         final owner=await _api.owner;
         final history=await _messenger.relayHistory(thread);
         final next=await _renderHistory(history,thread,owner,offline:true);

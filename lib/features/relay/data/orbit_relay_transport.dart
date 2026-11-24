@@ -97,6 +97,8 @@ class OrbitRelayTransport {
   final Set<Socket> _active={};
   Timer? _expiry;
   bool get running=>_server!=null;
+  // Test discovery uses the same real sockets on a private interface.
+  int? get localPort=>_server?.port;
   Future<_Channel> _open(_Wire wire,bool sender) async {
     final x=X25519(),key=await x.newKeyPair(),pub=await key.extractPublicKey();
     final own=base64Encode(pub.bytes);
@@ -151,9 +153,12 @@ class OrbitRelayTransport {
     final peers=await _discovery.peers();
     for(final peer in peers.take(8)){
       if(!running)return null;
+      if(!relayLocalAddress(peer.host)||peer.port<1024||peer.port>65535)continue;
       Socket? socket;_Wire? wire;
       try{
         socket=await Socket.connect(peer.host,peer.port,timeout:const Duration(seconds:2));
+        if(!running){socket.destroy();return null;}
+        _active.add(socket);
         wire=_Wire(socket);
         final result=await (() async {
           final channel=await _open(wire!,true);
@@ -167,7 +172,7 @@ class OrbitRelayTransport {
         })().timeout(const Duration(seconds:15));
         return result;
       }catch(_){/* Try only bounded local endpoints; never disclose to an unverified peer. */}
-      finally{if(wire!=null){await wire.close();}else{socket?.destroy();}}
+      finally{if(socket!=null)_active.remove(socket);if(wire!=null){await wire.close();}else{socket?.destroy();}}
     }
     return null;
   }

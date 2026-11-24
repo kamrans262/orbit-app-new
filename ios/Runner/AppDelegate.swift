@@ -61,7 +61,7 @@ private final class OrbitRelayDiscovery: NSObject, NetServiceDelegate, NetServic
       default: result(FlutterMethodNotImplemented)
       }
     }
-    NotificationCenter.default.addObserver(self, selector: #selector(stop), name: UIApplication.didEnterBackgroundNotification, object: nil)
+    NotificationCenter.default.addObserver(self, selector: #selector(didBackground(_:)), name: UIApplication.didEnterBackgroundNotification, object: nil)
   }
   deinit { NotificationCenter.default.removeObserver(self); stop(); channel.setMethodCallHandler(nil) }
   private func start(name: String, port: Int) {
@@ -73,7 +73,8 @@ private final class OrbitRelayDiscovery: NSObject, NetServiceDelegate, NetServic
     scan.delegate = self; browser = scan
     scan.searchForServices(ofType: "_orbitrelay._tcp.", inDomain: "local.")
   }
-  @objc private func stop() {
+  @objc private func didBackground(_ notification: Notification) { stop() }
+  private func stop() {
     published?.stop(); published = nil
     browser?.stop(); browser = nil
     for service in resolving.values { service.stop() }
@@ -97,7 +98,8 @@ private final class OrbitRelayDiscovery: NSObject, NetServiceDelegate, NetServic
         guard let ptr = raw.baseAddress?.assumingMemoryBound(to: sockaddr.self),
               address.count >= MemoryLayout<sockaddr>.size else { return nil }
         var buffer = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-        let code = getnameinfo(ptr, socklen_t(address.count), &buffer, socklen_t(buffer.count), nil, 0, NI_NUMERICHOST)
+        let bufferSize = socklen_t(buffer.count)
+        let code = getnameinfo(ptr, socklen_t(address.count), &buffer, bufferSize, nil, 0, NI_NUMERICHOST)
         return code == 0 ? String(cString: buffer) : nil
       }
       if let host = host, !host.contains(":") {

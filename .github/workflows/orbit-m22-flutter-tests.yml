@@ -5,6 +5,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: orbit-m22-flutter-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   flutter-integration:
     runs-on: ubuntu-latest
@@ -18,7 +21,7 @@ jobs:
           cache: true
       - run: flutter pub get
       - name: Analyze Relay protocol and test fixtures
-        run: dart analyze lib/features/relay test/features/relay
+        run: dart analyze lib/features/relay lib/features/messaging/data/orbit_messaging_vodozemac_cipher.dart lib/features/messaging/data/orbit_messaging_coordinator.dart lib/features/messaging/presentation/orbit_live_direct_chat_screen.dart lib/features/messaging/presentation/orbit_messaging_conversation_actions.dart test/features/relay
       - name: Relay protocol tests
         run: flutter test test/features/relay
       - name: Analyze M20 integrations and existing approved widgets
@@ -111,3 +114,23 @@ jobs:
       - run: flutter pub get
       - run: flutter build ios --debug --no-codesign
       - run: test -d build/ios/iphoneos/Runner.app
+
+  native-relay-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - run: cargo test --manifest-path native/orbit_vodozemac/Cargo.toml --locked
+      - run: cargo build --manifest-path native/orbit_vodozemac/Cargo.toml --release --locked
+      - run: flutter pub get
+      - name: Verify Relay identity proof and existing Olm/Megolm native ABI
+        run: |
+          export LD_LIBRARY_PATH="$PWD/native/orbit_vodozemac/target/release"
+          export ORBIT_M13_NATIVE_REQUIRED=1
+          flutter test test/features/relay/orbit_relay_native_sign_test.dart test/features/messaging/orbit_vodozemac_native_roundtrip_test.dart

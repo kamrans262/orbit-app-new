@@ -310,7 +310,7 @@ class OrbitMessagingCoordinator {
     var offline=false;
     try{await requireSecure(forSend:true);}
     on OrbitIdentityException catch(error){
-      if(error is OrbitMessagingSecurityException||!_transient(error)||!orbitRelayKinds.contains(kind)||!await canRelay(thread))rethrow;
+      if(error is OrbitMessagingSecurityException||error.statusCode!=null||!orbitRelayKinds.contains(kind)||!await canRelay(thread))rethrow;
       offline=true;
     }
     // Encrypt serially for the owner; ratchet state must be committed
@@ -400,7 +400,7 @@ class OrbitMessagingCoordinator {
       if(error.statusCode==null || error.statusCode==408 ||
           error.statusCode==429 || error.statusCode==502 ||
           error.statusCode==503 || error.statusCode==504){
-        if(relay?.canUse(thread.id,account)==true){try{await relay?.transfer(outgoing);}catch(_){}}
+        if(error.statusCode==null&&relay?.canUse(thread.id,account)==true){try{await relay?.transfer(outgoing);}catch(_){}}
         return OrbitMessagingSendResult(
           accepted:false,queued:true,clientId:outgoing.clientId);
       }

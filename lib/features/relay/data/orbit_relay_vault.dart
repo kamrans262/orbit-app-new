@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:crypto/crypto.dart' as hashes;
@@ -19,6 +20,13 @@ class OrbitRelayVault {
   final AesGcm _aead=AesGcm.with256bits();
   static const _prefix='orbit.m22.relay.v1.';
   static const maxBytes=5*1024*1024;
+  static final Map<String,Future<void>> _locks={};
+  Future<T> _serial<T>(String owner,Future<T> Function() action) async {
+    final previous=_locks[owner]??Future.value(),done=Completer<void>();
+    _locks[owner]=done.future;
+    try{await previous;return await action();}
+    finally{done.complete();if(identical(_locks[owner],done.future))_locks.remove(owner);}
+  }
   Future<void> _check(String owner) async {
     relayCheck(await _identity.currentLocalSocialOwner()==owner,'Relay account changed.');
   }
@@ -26,13 +34,13 @@ class OrbitRelayVault {
     final root=await getApplicationSupportDirectory();
     return root.path+Platform.pathSeparator+'orbit_m22_'+hashes.sha256.convert(utf8.encode(owner)).toString()+'.db';
   }
-  Future<T> _db<T>(String owner,Future<T> Function(Database) action) async {
+  Future<T> _db<T>(String owner,Future<T> Function(Database) action)=>_serial(owner,() async {
     await _check(owner);
-    final db=await openDatabase(await _path(owner),version:1,
+    final db=await openDatabase(await _path(owner),version:1,singleInstance:false,
       onConfigure:(db)=>db.execute('PRAGMA synchronous = FULL'),
       onCreate:(db,_)=>db.execute('CREATE TABLE relay (idx TEXT PRIMARY KEY, blob TEXT NOT NULL, size INTEGER NOT NULL, expiry INTEGER NOT NULL)'));
     try{await _check(owner);return await action(db);}finally{await db.close();}
-  }
+  });
   Future<List<int>> _key(String owner,{bool create=false}) async {
     var value=await _storage.read(key:_prefix+owner);
     if(value==null&&create){
@@ -49,6 +57,7 @@ class OrbitRelayVault {
       {required int expiry}) async {
     await _db(owner,(db)=>db.transaction((txn) async {
       final key=await _key(owner,create:true),index=_idx(key,device,id);
+      await txn.delete('relay',where:'expiry <= ?',whereArgs:[DateTime.now().toUtc().millisecondsSinceEpoch~/1000]);
       final value=jsonEncode({'device':device,'id':id,'item':item});
       final box=await _aead.encrypt(utf8.encode(value),secretKey:SecretKey(key),
         aad:utf8.encode(owner+'|'+index));
@@ -81,6 +90,8 @@ class OrbitRelayVault {
     });
   }
   Future<Map<String,dynamic>?> get(String owner,String device,String id,{required int now}) async {
+    await _check(owner);
+    if(!await File(await _path(owner)).exists())return null;
     return _db(owner,(db) async {
       final rows=await db.query('relay',columns:['idx'],limit:1);
       if(rows.isEmpty)return null;
@@ -104,8 +115,8 @@ class OrbitRelayVault {
       await db.delete('relay',where:'idx = ?',whereArgs:[_idx(key,device,id)]);
     });
   }
-  Future<void> purge(String owner) async {
+  Future<void> purge(String owner)=>_serial(owner,() async {
     await _storage.delete(key:_prefix+owner);
     await deleteDatabase(await _path(owner));
-  }
+  });
 }

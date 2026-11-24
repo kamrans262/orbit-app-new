@@ -308,9 +308,8 @@ class OrbitMessagingVodozemacCipher implements OrbitMessagingCipher {
     await _save(s);
   }
 
-  Future<OrbitCipherEnvelope> _sealOne(
+  Future<Map<String,dynamic>> _relayOutboundRecord(
       _NativeState s,String recipient,OrbitMessagingRemoteDevice remote,
-      String conversation,int epoch,String kind,Map<String,dynamic> payload,
       {bool allowOnlineKeyClaim=true}) async {
     await _pin(s,recipient,remote);
     final out=s.bucket('sessions_out');
@@ -336,6 +335,7 @@ class OrbitMessagingVodozemacCipher implements OrbitMessagingCipher {
           'Recipient has no available one-time messaging prekey.',409);
       }
       final claimed=matching.single;
+      if(claimed.identity!=remote.identity||claimed.keyVersion!=remote.keyVersion||claimed.signedPrekey!=remote.signedPrekey)throw OrbitMessagingSecurityException('Device roster changed during session preparation.',409);
       await _pin(s,recipient,claimed);
       final initial=_native.invoke({
         'op':'session_outbound','pickle_key_b64':s.key,
@@ -350,6 +350,32 @@ class OrbitMessagingVodozemacCipher implements OrbitMessagingCipher {
         'key_version':claimed.keyVersion,
       };
     }
+    out[remote.id]=record;
+    s.put('sessions_out',out);
+    return record;
+  }
+  /// Pre-establish one-time-prekey sessions while still online. Persist
+  /// each claimed session before moving to the next device.
+  Future<void> prepareRelayDirect({required String owner,required String device,
+      required Map<String,OrbitMessagingKeyDirectory> recipients}) async {
+    if(!independentlyVerified)throw OrbitMessagingSecurityException('Relay unavailable.',503);
+    final s=await _open();
+    if(s.owner!=owner||s.device!=device||s.data['published']!=true||s.data['account']==null){
+      throw OrbitMessagingSecurityException('Relay identity unavailable.',403);
+    }
+    for(final directory in recipients.values){
+      for(final remote in directory.devices){
+        await _relayOutboundRecord(s,directory.userId,remote);
+        await _save(s);
+      }
+    }
+  }
+  Future<OrbitCipherEnvelope> _sealOne(
+      _NativeState s,String recipient,OrbitMessagingRemoteDevice remote,
+      String conversation,int epoch,String kind,Map<String,dynamic> payload,
+      {bool allowOnlineKeyClaim=true}) async {
+    final record=await _relayOutboundRecord(s,recipient,remote,allowOnlineKeyClaim:allowOnlineKeyClaim);
+    final out=s.bucket('sessions_out');
     final encrypted=_native.invoke({
       'op':'session_encrypt','pickle_key_b64':s.key,
       'session_pickle':record['pickle'],
