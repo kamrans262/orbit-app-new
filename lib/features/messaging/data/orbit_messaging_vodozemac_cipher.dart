@@ -6,6 +6,7 @@ import 'package:cryptography/cryptography.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../auth/data/orbit_identity_client.dart';
+import '../../relay/data/orbit_relay_protocol.dart';
 import 'orbit_messaging_api.dart';
 import 'orbit_messaging_cipher.dart';
 import 'orbit_messaging_models.dart';
@@ -404,7 +405,7 @@ class OrbitMessagingVodozemacCipher implements OrbitMessagingCipher {
 
   Future<Map<String,dynamic>> _openOlm(
       _NativeState s,OrbitMailboxEnvelope envelope,
-      String conversation,{bool remember=false}) async {
+      String conversation,{bool remember=false,OrbitMessagingKeyDirectory? relayDirectory}) async {
     final header=_header(envelope.headerB64);
     if(header['v']!=1||header['type']!='olm'||
         header['protocol']!=protocol||
@@ -418,8 +419,9 @@ class OrbitMessagingVodozemacCipher implements OrbitMessagingCipher {
       throw OrbitMessagingSecurityException(
         'Encrypted message scope or recipient device changed.',409);
     }
-    final directory=await _api.discoverKeys(envelope.senderId,
+    final directory=relayDirectory??await _api.discoverKeys(envelope.senderId,
       consumeOneTimePrekey:false);
+    if(directory.userId!=envelope.senderId)throw OrbitMessagingSecurityException('Sender directory mismatch.',409);
     final candidates=directory.devices.where(
       (d)=>d.id==envelope.senderDeviceId).toList();
     if(candidates.length!=1)throw OrbitMessagingSecurityException(
@@ -775,6 +777,39 @@ class OrbitMessagingVodozemacCipher implements OrbitMessagingCipher {
     }
   }
 
+  String _relayFingerprint(OrbitMailboxEnvelope e,String scope)=>relayMailboxFingerprint(
+    scope,e.senderId,e.senderDeviceId,e.kind,e.groupEpoch,e.ciphertextB64,e.headerB64);
+  Map<String,dynamic> _relayDecrypted(_NativeState s)=>s.data['relay_decrypted'] is Map
+    ?Map<String,dynamic>.from(s.data['relay_decrypted'] as Map):<String,dynamic>{};
+  /// Only called under the coordinator's owner crypto lock and an active
+  /// verified lease. Commit ratchet and exact-packet bridge atomically.
+  Future<Uint8List> decryptRelayDirect({required String owner,required String device,
+    required OrbitMailboxEnvelope envelope,required String conversationId,
+    required OrbitMessagingKeyDirectory directory}) async {
+    if(!independentlyVerified||await OrbitIdentityClient.instance.currentLocalSocialOwner()!=owner||
+       directory.userId!=envelope.senderId||!orbitRelayKinds.contains(envelope.kind)){
+      throw OrbitMessagingSecurityException('Relay decryption unavailable.',403);
+    }
+    final state=await _store.read(owner,device);
+    if(state['published']!=true||state['account']==null)throw OrbitMessagingSecurityException('Relay identity unavailable.',403);
+    final s=_NativeState(owner,device,await _store.pickleKey(owner,device),state);
+    final cache=_relayDecrypted(s),id=_relayFingerprint(envelope,conversationId);
+    final existing=cache[id];
+    if(existing is Map){
+      if(existing['local_id']!=envelope.id)throw OrbitMessagingSecurityException('Relay ciphertext replay conflict.',409);
+      return Uint8List.fromList(base64Decode(existing['body_b64'] as String));
+    }
+    if(cache.length>=160)throw OrbitMessagingSecurityException('Pending Relay history must synchronize first.',503);
+    final data=await _openOlm(s,envelope,conversationId,relayDirectory:directory);
+    if(data['t']!='direct'||data['body_b64'] is! String)throw OrbitMessagingSecurityException('Invalid Relay content.',409);
+    final body=data['body_b64'] as String;
+    cache[id]={'local_id':envelope.id,'body_b64':body};
+    s.data['relay_decrypted']=cache;
+    if(await OrbitIdentityClient.instance.currentLocalSocialOwner()!=owner)throw OrbitMessagingSecurityException('Relay account changed.',401);
+    await _save(s);
+    return Uint8List.fromList(base64Decode(body));
+  }
+
   @override
   Future<Uint8List> decrypt({
     required OrbitMailboxEnvelope envelope,
@@ -796,6 +831,29 @@ class OrbitMessagingVodozemacCipher implements OrbitMessagingCipher {
     }
     final header=_header(envelope.headerB64);
     if(header['type']=='olm'){
+      final relayCache=_relayDecrypted(s);
+      final fingerprint=_relayFingerprint(envelope,conversationId);
+      final bridged=relayCache[fingerprint];
+      if(bridged is Map){
+        // Server mailbox is newly authorized; revalidate the current
+        // sender identity before mapping the exact same bytes to its ID.
+        final directory=await _api.discoverKeys(envelope.senderId,consumeOneTimePrekey:false);
+        final remote=directory.devices.where((d)=>d.id==envelope.senderDeviceId).toList();
+        if(directory.userId!=envelope.senderId||remote.length!=1||
+           header['sender_identity']!=remote.single.identity||
+           header['sender_curve']!=remote.single.signedPrekey||header['recipient_device']!=s.device){
+          throw OrbitMessagingSecurityException('Relay source identity changed.',409);
+        }
+        await _pin(s,directory.userId,remote.single);
+        if(bridged['canonical_id']!=null&&bridged['canonical_id']!=envelope.id){
+          throw OrbitMessagingSecurityException('Relay packet replayed under another canonical ID.',409);
+        }
+        final body=bridged['body_b64'] as String;
+        relayCache[fingerprint]={...Map<String,dynamic>.from(bridged),'canonical_id':envelope.id};
+        s.data['relay_decrypted']=relayCache;
+        await _save(s);
+        return Uint8List.fromList(base64Decode(body));
+      }
       final payload=await _openOlm(s,envelope,conversationId,remember:true);
       if(payload['t']!='direct'||payload['body_b64'] is! String){
         throw OrbitMessagingSecurityException(
@@ -880,8 +938,13 @@ class OrbitMessagingVodozemacCipher implements OrbitMessagingCipher {
   Future<void> confirmStoredDecryption(String envelopeId) async {
     final s=await _open();
     final pending=s.bucket('decryption_pending');
-    if(pending.remove(envelopeId)!=null){
+    final removed=pending.remove(envelopeId)!=null;
+    final relayCache=_relayDecrypted(s);
+    final before=relayCache.length;
+    relayCache.removeWhere((_,value)=>value is Map&&value['canonical_id']==envelopeId);
+    if(removed||before!=relayCache.length){
       s.put('decryption_pending',pending);
+      s.data['relay_decrypted']=relayCache;
       await _save(s);
     }
   }

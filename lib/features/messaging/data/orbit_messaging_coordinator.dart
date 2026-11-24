@@ -57,6 +57,16 @@ class OrbitMessagingCoordinator {
     if(relay==null)return false;
     try{return relay.canUse(thread.id,await api.owner);}catch(_){return false;}
   }
+  Future<List<OrbitLocalDecryptedMessage>> relayHistory(OrbitConversation thread) async {
+    final owner=await api.owner;
+    return _serialMailbox(owner,'__crypto__',() async{
+      final relay=_relay;
+      if(relay==null||!relay.canUse(thread.id,owner))return <OrbitLocalDecryptedMessage>[];
+      final local=await vault.history(thread.id,limit:100);
+      final received=await relay.incoming();
+      return [...local,...received]..sort((a,b)=>a.createdAt.compareTo(b.createdAt));
+    });
+  }
   bool _transient(OrbitIdentityException error)=>error.statusCode==null||
     const [408,429,502,503,504].contains(error.statusCode);
 
@@ -300,7 +310,7 @@ class OrbitMessagingCoordinator {
     var offline=false;
     try{await requireSecure(forSend:true);}
     on OrbitIdentityException catch(error){
-      if(!_transient(error)||!orbitRelayKinds.contains(kind)||!await canRelay(thread))rethrow;
+      if(error is OrbitMessagingSecurityException||!_transient(error)||!orbitRelayKinds.contains(kind)||!await canRelay(thread))rethrow;
       offline=true;
     }
     // Encrypt serially for the owner; ratchet state must be committed

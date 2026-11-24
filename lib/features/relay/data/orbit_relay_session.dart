@@ -30,6 +30,7 @@ class OrbitRelaySession {
   Map<String,OrbitMessagingKeyDirectory> _directories={};
   Map<String,OrbitMessagingRemoteDevice> _keys={};
   List<OrbitRelayLease> _leases=[];
+  final Map<String,OrbitRelayLease> _incomingLeases={};
   int _generation=0;
   Future<void> _receiveTail=Future.value();
   bool get active=>_transport.running&&_cap!=null&&_leases.any((l)=>l.live(_cap!));
@@ -104,7 +105,7 @@ class OrbitRelaySession {
     final id=packet['envelope_id'] as String,client=packet['source_client_id'] as String,
       digest=packet['digest'] as String,peerDigest=packet['peer_digest'] as String;
     // Stable IDs/digests are signed and validated before local persistence.
-    relayCheck(RegExp(r'^[0-9a-f-]{36}$').hasMatch(id)&&RegExp(r'^[0-9a-f]{64}$').hasMatch(digest),
+    relayCheck(relayUuid(id)&&RegExp(r'^[0-9a-f]{64}$').hasMatch(digest),
       'Invalid Relay identity.');
     final source=relayMap(packet['source']);
     relayCheck(source['client_id']==client&&source['group_epoch']==lease.epoch,'Relay source mismatch.');
@@ -124,6 +125,7 @@ class OrbitRelaySession {
     if(old!=null){
       relayCheck(old['digest']==digest&&old['peer_digest']==peerDigest&&old['lease_id']==lease.id&&
         old['source_client_id']==client,'Relay replay conflict.');
+      _incomingLeases[recordId]=lease;
       return Map<String,Object?>.from(relayMap(old['receipt']));
     }
     final received=cap.clock.seconds;
@@ -136,7 +138,39 @@ class OrbitRelaySession {
       'source_client_id':client,'peer_digest':peerDigest,'source':source,'peer_envelope':envelope,'receipt':receipt},
       expiry:lease.expires+7*86400);
     await _current(generation);
+    _incomingLeases[recordId]=lease;
     return receipt;
+  }
+  /// Decrypt only in this live lease session under the M13 owner crypto
+  /// lock. Local previews are not canonical history or read receipts.
+  Future<List<OrbitLocalDecryptedMessage>> incoming() async {
+    final generation=_generation,cap=_cap,owner=_owner,device=_device,thread=_thread;
+    if(cap==null||owner==null||device==null||thread==null||!active)return [];
+    final results=<OrbitLocalDecryptedMessage>[];
+    for(final entry in Map<String,OrbitRelayLease>.of(_incomingLeases).entries){
+      await _current(generation);
+      final lease=entry.value;
+      if(!lease.live(cap))continue;
+      final record=await _vault.get(owner,device,entry.key,now:cap.clock.seconds);
+      if(record==null)continue;
+      final source=relayMap(record['source']),peer=relayMap(record['peer_envelope']);
+      final receipt=relayMap(record['receipt']);
+      final client=record['source_client_id'] as String;
+      final localId='local-relay-$client';
+      final envelope=OrbitMailboxEnvelope(id:localId,messageId:localId,
+        senderId:thread.peerId!,senderDeviceId:lease.sender,kind:source['kind'] as String,
+        protocol:orbitRelayMessageProtocol,groupEpoch:lease.epoch,keyVersion:lease.claims['peer_key_version'] as int,
+        ciphertextB64:peer['ciphertext_b64'] as String,headerB64:peer['protocol_header_b64'] as String,
+        createdAt:DateTime.fromMillisecondsSinceEpoch((receipt['received_at'] as int)*1000,isUtc:true));
+      try{
+        final clear=await cipher.decryptRelayDirect(owner:owner,device:device,envelope:envelope,
+          conversationId:thread.id,directory:_directories[thread.peerId]!);
+        await _current(generation);
+        results.add(OrbitLocalDecryptedMessage(id:localId,conversationId:thread.id,senderId:thread.peerId!,
+          kind:envelope.kind,text:utf8.decode(clear),createdAt:envelope.createdAt));
+      }catch(_){/* Durable ciphertext remains for ordinary authenticated sync. */}
+    }
+    results.sort((a,b)=>a.createdAt.compareTo(b.createdAt));return results;
   }
   /// Existing M13 outbox owns stable client ID and all device ciphertext.
   /// Relay stores only a receipt checkpoint; no fresh encryption or duplicate
@@ -177,7 +211,7 @@ class OrbitRelaySession {
   Future<void> stop({bool revoke=false}) async {
     final old=List<OrbitRelayLease>.of(_leases);
     _generation++;_cap=null;_thread=null;_owner=null;_device=null;_rosterHash=null;
-    _directories={};_keys={};_leases=[];
+    _directories={};_keys={};_leases=[];_incomingLeases.clear();
     await _transport.stop();
     if(revoke){for(final lease in old){try{await api.revoke(lease.id,reason:'opt_out');}catch(_){}}}
   }
@@ -216,4 +250,7 @@ class OrbitRelayReconcile {
     _vault.get(owner,device,'out:'+clientId,now:DateTime.now().toUtc().millisecondsSinceEpoch~/1000);
   Future<void> clear(String owner,String device,String clientId)=>
     _vault.remove(owner,device,'out:'+clientId);
+  /// Explicitly read own backend outcome page; never treat it as new
+  /// authorization, a read acknowledgement or proof of peer plaintext.
+  Future<Map<String,dynamic>> sync({String? cursor})=>api.sync(cursor:cursor);
 }

@@ -13,6 +13,7 @@ Map<String,dynamic> relayMap(Object? raw){
   relayCheck(raw is Map,'Invalid Relay object.');
   return Map<String,dynamic>.from(raw as Map);
 }
+bool relayUuid(String value)=>_uuid.hasMatch(value);
 String relayHash(Object? value)=>hashes.sha256.convert(utf8.encode(jsonEncode(value))).toString();
 String relayNonce()=>List.generate(32,(_)=>Random.secure().nextInt(256).toRadixString(16).padLeft(2,'0')).join();
 List<int> relayBytes(String value,int length){
@@ -65,7 +66,7 @@ class OrbitRelayLease {
   int get issued=>claims['issued_at'] as int;
   int get epoch=>claims['source_epoch'] as int;
   bool live(OrbitRelayCapabilities cap)=>cap.ready&&claims['kid']==cap.keyId&&
-    claims['policy_revision']==cap.revision&&cap.clock.seconds>=issued&&cap.clock.seconds<expires;
+    claims['policy_revision']==cap.revision&&cap.clock.seconds+2>=issued&&cap.clock.seconds+2<expires;
   static Future<OrbitRelayLease> verify(String token,OrbitRelayCapabilities cap,
       {required String scope,required String localDevice,required bool receiving}) async {
     relayCheck(cap.ready&&token.length<=4096,'Relay is unavailable.');
@@ -130,3 +131,11 @@ String relayReceiptInput(OrbitRelayLease lease,String envelopeId,String clientId
   'orbit-relay-receipt-v1',lease.id,lease.scope,lease.sender,lease.peer,envelopeId,clientId,
   digest,peerDigest,'received',envelopeId,receivedAt.toString(),
 ].join('|');
+
+
+/// Exact encrypted packet identity, independent of the server-generated
+/// mailbox UUID. The same ciphertext must never advance an Olm ratchet twice.
+String relayMailboxFingerprint(String scope,String sender,String senderDevice,
+    String kind,int epoch,String cipher,String header)=>relayHash([
+  'orbit-relay-mailbox-v1',scope,sender,senderDevice,kind,epoch,cipher,header,
+]);

@@ -199,8 +199,12 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
          (error.statusCode==null||const [408,429,502,503,504].contains(error.statusCode))&&
          thread!=null&&await _messenger.canRelay(thread)){
         if(!mounted||epoch!=_epoch)return;
-        // Preserve existing chat and composer during a bounded Relay session.
-        setState((){_loading=false;_cryptoReady=true;_error=null;_otherTyping=false;});
+        // Existing chat rendering; offline previews remain local only.
+        final owner=await _api.owner;
+        final history=await _messenger.relayHistory(thread);
+        final next=await _renderHistory(history,thread,owner,offline:true);
+        if(!mounted||epoch!=_epoch)return;
+        setState((){_messages=next;_loading=false;_cryptoReady=true;_error=null;_otherTyping=false;});
         return;
       }
       await _messenger.stopRelay();
@@ -217,7 +221,7 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
   }
   Future<List<DirectChatMessage>> _renderHistory(
       List<OrbitLocalDecryptedMessage> history,
-      OrbitConversation thread,String owner) async {
+      OrbitConversation thread,String owner,{bool offline=false}) async {
     final reactionState=OrbitReactionReducer.fold(history,localUser:owner);
     final reviewIds=await _messenger.vault.reviewRequiredMessageIds(thread.id);
     // Only the newest few sent messages need receipt polling on shared
@@ -227,7 +231,7 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
     final newest=history.where((e)=>e.senderId==owner &&
       !e.id.startsWith('local-') &&
       (e.kind=='text'||e.kind=='reply')).toList().reversed.take(5);
-    for(final entry in newest){
+    for(final entry in offline?<OrbitLocalDecryptedMessage>[]:newest){
       try{
         final r=await _api.receipts(thread.id,entry.id);
         final reads=(r['read_users'] as num?)?.toInt()??0;
@@ -270,6 +274,7 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
       Duration? audioLength;
       if(manifest!=null){
         try{
+          if(offline)throw const FormatException('Media requires internet.');
           if(manifest.kind!='video'){
             bytes=await _media.open(manifest);
           }
@@ -477,6 +482,8 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
         await OrbitChatVoiceRecorder.discardTemporaryCapture(recording);
       }
     }else if(message.replyToId!=null){
+      if(message.replyToId!.startsWith('local-relay-'))throw OrbitIdentityException(
+        'Wait for the encrypted message to synchronize.',503);
       result=await _messenger.sendReply(thread,
         targetId:message.replyToId!,text:message.text??'');
     }else{
@@ -503,8 +510,8 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
 
   Future<void> _react(String id,String? selected,Map<String,int> counts) async {
     final thread=_thread;
-    if(thread==null||!_cryptoReady)throw OrbitIdentityException(
-      'Encrypted messaging is not available.',503);
+    if(thread==null||!_cryptoReady||id.startsWith('local-relay-'))throw OrbitIdentityException(
+      'Wait for the encrypted message to synchronize.',503);
     final result=await _messenger.sendReaction(
       thread,targetId:id,selected:selected);
     if(!result.accepted||result.queued)throw OrbitIdentityException(
