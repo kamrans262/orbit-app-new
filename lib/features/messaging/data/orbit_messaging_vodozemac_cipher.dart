@@ -310,7 +310,7 @@ class OrbitMessagingVodozemacCipher implements OrbitMessagingCipher {
   Future<OrbitCipherEnvelope> _sealOne(
       _NativeState s,String recipient,OrbitMessagingRemoteDevice remote,
       String conversation,int epoch,String kind,Map<String,dynamic> payload,
-      ) async {
+      {bool allowOnlineKeyClaim=true}) async {
     await _pin(s,recipient,remote);
     final out=s.bucket('sessions_out');
     var record=out[remote.id] is Map
@@ -323,6 +323,8 @@ class OrbitMessagingVodozemacCipher implements OrbitMessagingCipher {
           'A trusted recipient device changed keys. Review before sending.',409);
       }
     }else{
+      if(!allowOnlineKeyClaim)throw OrbitMessagingSecurityException(
+        'Reconnect to establish all approved encrypted device sessions.',409);
       // Claim a one-time prekey ONLY for this target device, never the
       // entire multi-device roster. Remaining trusted devices keep their
       // public handshake keys available until actually used.
@@ -375,7 +377,7 @@ class OrbitMessagingVodozemacCipher implements OrbitMessagingCipher {
   Future<List<OrbitCipherEnvelope>> _sealAll(
       _NativeState s,Map<String,OrbitMessagingKeyDirectory> recipients,
       String conversation,int epoch,String kind,
-      Map<String,dynamic> payload) async {
+      Map<String,dynamic> payload,{bool allowOnlineKeyClaim=true}) async {
     final envelopes=<OrbitCipherEnvelope>[];
     final ids=<String>{};
     for(final directory in recipients.values){
@@ -385,7 +387,7 @@ class OrbitMessagingVodozemacCipher implements OrbitMessagingCipher {
             'Duplicate recipient device in authenticated roster.',409);
         }
         envelopes.add(await _sealOne(s,directory.userId,remote,
-          conversation,epoch,kind,payload));
+          conversation,epoch,kind,payload,allowOnlineKeyClaim:allowOnlineKeyClaim));
       }
     }
     if(envelopes.isEmpty)throw OrbitMessagingSecurityException(
@@ -616,6 +618,24 @@ class OrbitMessagingVodozemacCipher implements OrbitMessagingCipher {
     pending.remove(conversationId);
     s.put('groups_out',groups);s.put('group_pending',pending);
     await _save(s);
+  }
+
+  /// Offline direct send only uses existing authenticated Olm sessions.
+  /// No prekey claim, device registration, group key or key reset offline.
+  Future<OrbitEncryptedSend> encryptRelayDirect({required String owner,required String device,
+    required String conversationId,required int groupEpoch,required String kind,required Uint8List plaintext,
+    required Map<String,OrbitMessagingKeyDirectory> recipients}) async {
+    if(!independentlyVerified||await OrbitIdentityClient.instance.currentLocalSocialOwner()!=owner||
+       plaintext.isEmpty||plaintext.length>22000)throw OrbitMessagingSecurityException('Relay encryption unavailable.',403);
+    final state=await _store.read(owner,device);
+    if(state['published']!=true||state['account']==null)throw OrbitMessagingSecurityException('Relay keys unavailable.',403);
+    final s=_NativeState(owner,device,await _store.pickleKey(owner,device),state);
+    final payload=<String,dynamic>{'t':'direct','cid':conversationId,'epoch':groupEpoch,'kind':kind,
+      'sender':owner,'sender_device':device,'body_b64':base64Encode(plaintext)};
+    final envelopes=await _sealAll(s,recipients,conversationId,groupEpoch,kind,payload,allowOnlineKeyClaim:false);
+    if(await OrbitIdentityClient.instance.currentLocalSocialOwner()!=owner)throw OrbitMessagingSecurityException('Relay account changed.',401);
+    await _save(s);
+    return OrbitEncryptedSend(protocol:protocol,kind:kind,groupEpoch:groupEpoch,envelopes:envelopes);
   }
 
   @override

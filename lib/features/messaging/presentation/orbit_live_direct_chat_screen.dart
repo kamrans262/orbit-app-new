@@ -71,6 +71,7 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
   @override
   void dispose(){
     _epoch++;
+    unawaited(_messenger.stopRelay());
     _videoManifests.clear();
     _timer?.cancel();
     _typingTimer?.cancel();
@@ -80,6 +81,7 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if(state==AppLifecycleState.resumed)unawaited(_load());
+    else unawaited(_messenger.stopRelay());
   }
   String _time(DateTime date) {
     final local=date.toLocal();
@@ -180,6 +182,7 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
           'verified on this device. No messages can be sent or decrypted.';
       });
     }on OrbitMessagingSecurityException{
+      await _messenger.stopRelay();
       if(!mounted||epoch!=_epoch)return;
       setState((){
         _loading=false;_cryptoReady=false;_thread=null;
@@ -189,7 +192,18 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
         _error='An encrypted message could not be verified. '
           'It was not acknowledged or deleted. Reconnect to retry safely.';
       });
-    }catch(_){
+    }catch(error){
+      if(!mounted||epoch!=_epoch)return;
+      final thread=_thread;
+      if(error is OrbitIdentityException &&
+         (error.statusCode==null||const [408,429,502,503,504].contains(error.statusCode))&&
+         thread!=null&&await _messenger.canRelay(thread)){
+        if(!mounted||epoch!=_epoch)return;
+        // Preserve existing chat and composer during a bounded Relay session.
+        setState((){_loading=false;_cryptoReady=true;_error=null;_otherTyping=false;});
+        return;
+      }
+      await _messenger.stopRelay();
       if(!mounted||epoch!=_epoch)return;
       setState((){
         _loading=false;_cryptoReady=false;_thread=null;
@@ -374,6 +388,12 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
       api:_api,coordinator:_messenger).openDirect(context,
       thread:thread,peerId:widget.peerId,
       showEncryptionReview:_messenger.cipher.independentlyVerified,
+      relayActive:_messenger.relayActive,
+      onToggleRelay:_messenger.cipher.independentlyVerified?() async{
+        if(_messenger.relayActive){await _messenger.stopRelay(revoke:true);}
+        else{await _messenger.startRelay(thread);}
+        if(mounted)setState((){});
+      }:null,
       showFailedReview:_messages.any((m)=>
         m.deliveryStatus==DirectChatDeliveryStatus.failed),
       onFailedCleared:()=>unawaited(_load()),
@@ -384,7 +404,7 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
         message.text!=null && message.text!.trim().isNotEmpty
       ).map<OrbitReportableMessage>((message)=>(
         id:message.id,text:message.text!.trim())).toList(growable:false),
-      onClose:()=>Navigator.of(context).maybePop());
+      onClose:(){unawaited(_messenger.stopRelay());Navigator.of(context).maybePop();});
   }
 
   void _viewed(String envelopeId){

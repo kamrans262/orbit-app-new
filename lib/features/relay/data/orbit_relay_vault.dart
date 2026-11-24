@@ -80,6 +80,24 @@ class OrbitRelayVault {
       return out;
     });
   }
+  Future<Map<String,dynamic>?> get(String owner,String device,String id,{required int now}) async {
+    return _db(owner,(db) async {
+      final rows=await db.query('relay',columns:['idx'],limit:1);
+      if(rows.isEmpty)return null;
+      final key=await _key(owner),index=_idx(key,device,id);
+      final found=await db.query('relay',where:'idx = ?',whereArgs:[index],limit:1);
+      if(found.isEmpty)return null;
+      final row=found.single;
+      if((row['expiry'] as int)<=now){await db.delete('relay',where:'idx = ?',whereArgs:[index]);return null;}
+      final raw=relayMap(jsonDecode(row['blob'] as String));
+      final box=SecretBox(base64Decode(raw['c'] as String),nonce:base64Decode(raw['n'] as String),mac:Mac(base64Decode(raw['m'] as String)));
+      final value=relayMap(jsonDecode(utf8.decode(await _aead.decrypt(box,
+        secretKey:SecretKey(key),aad:utf8.encode(owner+'|'+index)))));
+      relayCheck(value['device']==device&&value['id']==id,'Relay local index mismatch.');
+      await _check(owner);
+      return relayMap(value['item']);
+    });
+  }
   Future<void> remove(String owner,String device,String id) async {
     await _db(owner,(db) async {
       final key=await _key(owner);

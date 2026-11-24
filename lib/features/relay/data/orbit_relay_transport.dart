@@ -37,7 +37,7 @@ class _Wire {
   final StreamIterator<Uint8List> _stream;
   Uint8List _current=Uint8List(0);
   int _offset=0;
-  static const maxFrame=100000;
+  static const maxFrame=150000;
   Future<Uint8List> _take(int n) async {
     final out=Uint8List(n);
     var written=0;

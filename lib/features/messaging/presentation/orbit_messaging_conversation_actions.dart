@@ -140,7 +140,8 @@ class OrbitMessagingConversationActions {
     required OrbitConversation thread,required String peerId,
     required VoidCallback onClose,bool showEncryptionReview=false,
     List<OrbitReportableMessage> evidenceCandidates=const [],
-    bool showFailedReview=false,VoidCallback? onFailedCleared}) async {
+    bool showFailedReview=false,VoidCallback? onFailedCleared,
+    bool relayActive=false,Future<void> Function()? onToggleRelay}) async {
     if(thread.kind!='direct'||thread.peerId!=peerId)return;
     await showOrbitCircleSheet<void>(context:context,
       title:'Conversation Options',
@@ -172,6 +173,18 @@ class OrbitMessagingConversationActions {
             }),
         ],
         const SizedBox(height:10),
+        if(onToggleRelay!=null)...[
+          OrbitCircleSheetAction(title:relayActive?'Stop nearby Relay':'Enable nearby Relay',
+            icon:Icons.wifi_tethering,onTap:() async {
+              Navigator.of(sheet).pop();
+              if(!relayActive && !await _confirm(context,'Enable Nearby Relay?',
+                'Temporarily exchange encrypted messages with this trusted contact on the same local network. '
+                'Both devices must opt in. Relay stops when you leave the chat or app.','Enable Relay'))return;
+              if(!context.mounted)return;
+              await _mutate(context,onToggleRelay,relayActive?'Nearby Relay stopped.':'Nearby Relay enabled for this chat.');
+            }),
+          const SizedBox(height:10),
+        ],
         OrbitCircleSheetAction(title:'Report this conversation',
           icon:Icons.flag_outlined,
           onTap:(){

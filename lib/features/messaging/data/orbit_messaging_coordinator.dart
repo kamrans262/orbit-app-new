@@ -15,6 +15,8 @@ import 'orbit_messaging_reactions.dart';
 import 'orbit_messaging_stickers.dart';
 import 'orbit_messaging_replies.dart';
 import 'orbit_messaging_vodozemac_cipher.dart';
+import '../../relay/data/orbit_relay_session.dart';
+import '../../relay/data/orbit_relay_protocol.dart';
 
 /// Authenticated account-bound messaging orchestration.
 /// No E2EE fallback, no optimistic "sent", no plaintext HTTPS requests.
@@ -31,6 +33,33 @@ class OrbitMessagingCoordinator {
   final OrbitMessagingCipher cipher;
   final OrbitMessagingLocalVault vault;
   final OrbitCircleRepository circles;
+  OrbitRelaySession? _relay;
+  bool get relayActive=>_relay?.active==true;
+  Future<void> startRelay(OrbitConversation thread) async {
+    await requireSecure(forSend:true);
+    final provider=cipher;
+    if(provider is! OrbitMessagingVodozemacCipher)throw OrbitMessagingSecurityException('Relay encryption unavailable.',503);
+    final owner=await api.owner;
+    await _serialMailbox(owner,'__crypto__',() async{
+      await _relay?.stop();
+      final relay=OrbitRelaySession(messaging:api,cipher:provider);
+      _relay=relay;
+      try{await relay.start(thread,await _recipients(thread));}
+      catch(_){await relay.stop();rethrow;}
+    });
+  }
+  Future<void> stopRelay({bool revoke=false}) async {
+    final relay=_relay;_relay=null;
+    await relay?.stop(revoke:revoke);
+  }
+  Future<bool> canRelay(OrbitConversation thread) async{
+    final relay=_relay;
+    if(relay==null)return false;
+    try{return relay.canUse(thread.id,await api.owner);}catch(_){return false;}
+  }
+  bool _transient(OrbitIdentityException error)=>error.statusCode==null||
+    const [408,429,502,503,504].contains(error.statusCode);
+
 
   // Account-scoped server cursors. Repeated foreground refreshes must not
   // reset the older-message paging position to the newest messages.
@@ -267,18 +296,23 @@ class OrbitMessagingCoordinator {
         throw const FormatException('Invalid stable media send identifier.');
       }
     }
-    await requireSecure(forSend:true);
     final account=await api.owner;
+    var offline=false;
+    try{await requireSecure(forSend:true);}
+    on OrbitIdentityException catch(error){
+      if(!_transient(error)||!orbitRelayKinds.contains(kind)||!await canRelay(thread))rethrow;
+      offline=true;
+    }
     // Encrypt serially for the owner; ratchet state must be committed
     // before any authenticated ciphertext is added to the local outbox.
     return _serialMailbox(account,'__crypto__',
       ()=>_sendEncryptedLocked(thread,kind,data,account,
-        stableClientId:stableClientId));
+        stableClientId:stableClientId,relayOffline:offline));
   }
 
   Future<OrbitMessagingSendResult> _sendEncryptedLocked(
       OrbitConversation thread,String kind,Uint8List data,
-      String account,{String? stableClientId}) async {
+      String account,{String? stableClientId,bool relayOffline=false}) async {
     // A second foreground/composer/background invocation must never
     // advance the ratchet or republish a different payload under the same
     // media transfer ID while the first ciphertext is already queued.
@@ -298,7 +332,9 @@ class OrbitMessagingCoordinator {
           'Circle recipients changed. Refresh keys before sending.',409);
       }
     }
-    final devices=await _recipients(thread);
+    final relay=_relay;
+    if(relayOffline&&(relay==null||!relay.canUse(thread.id,account)))throw OrbitMessagingSecurityException('Relay authorization expired.',403);
+    final devices=relayOffline?relay!.recipients:await _recipients(thread);
     if(thread.kind=='circle'){
       // A server epoch is an access-control fence, not an encryption key.
       // Require the vetted provider to rotate and distribute actual group
@@ -309,10 +345,11 @@ class OrbitMessagingCoordinator {
         recipients:devices,
       );
     }
-    final encrypted=await cipher.encrypt(
-      conversationId:thread.id,groupEpoch:thread.groupEpoch,
-      kind:kind,plaintext:data,recipients:devices,
-    );
+    final encrypted=relayOffline
+      ?await (cipher as OrbitMessagingVodozemacCipher).encryptRelayDirect(owner:account,device:relay!.device,
+        conversationId:thread.id,groupEpoch:thread.groupEpoch,kind:kind,plaintext:data,recipients:devices)
+      :await cipher.encrypt(conversationId:thread.id,groupEpoch:thread.groupEpoch,
+        kind:kind,plaintext:data,recipients:devices);
     if(!cipher.independentlyVerified || encrypted.protocol!=cipher.protocol ||
        encrypted.envelopes.isEmpty ||
        encrypted.groupEpoch!=thread.groupEpoch){
@@ -336,6 +373,10 @@ class OrbitMessagingCoordinator {
       senderId:account,kind:kind,text:utf8.decode(data),
       createdAt:DateTime.now().toUtc());
     await vault.queue(outgoing,preview:preview);
+    if(relayOffline){
+      try{await relay?.transfer(outgoing);}catch(_){/* Existing encrypted queue remains authoritative. */}
+      return OrbitMessagingSendResult(accepted:false,queued:true,clientId:outgoing.clientId);
+    }
     try{
       final accepted=await api.publish(thread.id,
         clientId:outgoing.clientId,kind:outgoing.kind,
@@ -349,6 +390,7 @@ class OrbitMessagingCoordinator {
       if(error.statusCode==null || error.statusCode==408 ||
           error.statusCode==429 || error.statusCode==502 ||
           error.statusCode==503 || error.statusCode==504){
+        if(relay?.canUse(thread.id,account)==true){try{await relay?.transfer(outgoing);}catch(_){}}
         return OrbitMessagingSendResult(
           accepted:false,queued:true,clientId:outgoing.clientId);
       }
@@ -386,6 +428,27 @@ class OrbitMessagingCoordinator {
         break;
       }
       try {
+        // Try the durable Relay receipt checkpoint first; ordinary M13
+        // HTTPS is the fallback using the very same ciphertext/client ID.
+        if(cipher is OrbitMessagingVodozemacCipher&&orbitRelayKinds.contains(pending.kind)){
+          final reconcile=OrbitRelayReconcile(messaging:api);
+          final device=await OrbitIdentityClient.instance.trustedMediaDevice();
+          final checkpoint=await reconcile.checkpoint(owner,device.id,pending.clientId);
+          if(checkpoint!=null){
+            final page=await api.conversations();
+            final matches=page.items.where((t)=>t.id==pending.conversationId&&t.kind=='direct').toList();
+            if(matches.length!=1)throw OrbitMessagingSecurityException('Relay conversation needs review.',409);
+            final roster=OrbitRelaySession.rosterHash(await _recipients(matches.single));
+            String? source;
+            try{source=await reconcile.publish(pending,owner,device.id,currentRoster:roster);}
+            on OrbitIdentityException catch(error){if(!_transient(error))rethrow;}
+            if(source!=null){
+              await vault.acknowledge(pending.clientId);
+              try{await reconcile.clear(owner,device.id,pending.clientId);}catch(_){}
+              sent++;continue;
+            }
+          }
+        }
         final result=await api.publish(pending.conversationId,
           clientId:pending.clientId,kind:pending.kind,
           protocol:pending.protocol,groupEpoch:pending.groupEpoch,
@@ -412,6 +475,8 @@ class OrbitMessagingCoordinator {
         // Preserve send order when the oldest ciphertext needs re-approval;
         // do not deliver later messages ahead of a revoked-key envelope.
         break;
+      }on FormatException{
+        await vault.markNeedsReview(pending.clientId);needsReview++;break;
       }
     }
       return OrbitMessagingRetryResult(sent:sent,needsReview:needsReview);
