@@ -124,6 +124,17 @@ void main(){
     expect(await capture().restore(),isNull);
   });
 
+  test('Recovery discovery removes only unreferenced encrypted captures',() async{
+    final first=capture();
+    final id=await first.savePhoto(Uint8List.fromList([1,2,3]));
+    await first.saveEdits(id,{'text':'latest'});
+    final dir=Directory(root.path+'/orbit-m7-encrypted-capture/account-a');
+    final orphan=File(dir.path+'/00000000-0000-4000-8000-000000000000.edits.cipher');
+    await orphan.writeAsBytes([1,2,3]);
+    expect(await first.hasRecoverableDraft(),true);
+    expect(await orphan.exists(),false);
+    expect((await first.restore())!.edits['text'],'latest');
+  });
   test('Previous audience is account-bound and never a publish authorization',() async{
     final memory=OrbitMomentAudienceMemory(vault:storage,owner:()async=>account);
     await memory.save('selected_friends',['friend-a','friend-a','friend-b']);

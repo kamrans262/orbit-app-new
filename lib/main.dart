@@ -9,6 +9,7 @@ import 'core/navigation/orbit_bottom_add_coordinator.dart';
 import 'features/app_update/presentation/orbit_update_runtime.dart';
 import 'features/connectivity/presentation/orbit_connectivity_runtime.dart';
 import 'features/moments/data/orbit_m7_background_retry.dart';
+import 'features/moments/data/orbit_capture_temp_files.dart';
 import 'features/create/presentation/screens/orbit_create_sheet.dart';
 import 'features/splash/presentation/screens/orbit_splash_gate.dart';
 import 'features/messaging/data/orbit_messaging_cipher.dart';
@@ -44,9 +45,9 @@ void main() {
 
   // Resolve session and load available account basics while splash is visible.
   // No Welcome/Get Started route is built before this future completes.
-  final preparedApp = OrbitStartupResolver(
+  final preparedApp = OrbitCaptureTempFiles().sweepInterrupted().catchError((Object _){}).then((_)=>OrbitStartupResolver(
     OrbitIdentityClient.instance,
-  ).resolve().then((startup) {
+  ).resolve()).then((startup) {
     // Resolve first-run state before reading public configuration; optional
     // presentation hints never delay or alter authenticated route selection.
     OrbitPublicConfigRuntime.instance.start();

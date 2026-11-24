@@ -161,6 +161,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
   Timer? _previewDebounce;
   int _previewGeneration=0;
   bool _previewBusy=false;
+  Future<void>? _previewWork;
   Future<void>? _checkpointInFlight;
   Map<String,Object?> _recipe()=>{'sheet_filter':_filter.name,'beauty':_beautyStrength,
     'text':_overlayText.text,'mute':_muteVideo,'saver':_dataSaver,
@@ -190,28 +191,43 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
   }
   void _queuePreview(){
     _checkpoint();
-    if(widget.mediaKind!='image')return;
+    if(widget.mediaKind!='image'||_busy)return;
     _previewDebounce?.cancel();
-    final generation=++_previewGeneration;
-    _previewDebounce=Timer(const Duration(milliseconds:260),()async{
-      if(!mounted)return;
-      setState(()=>_previewBusy=true);
-      try{
-        final encoded=await _encodeImage();
-        if(mounted && generation==_previewGeneration){
-          setState(()=>_editedPreview=encoded);
-        }
-      }catch(_){
-        if(mounted && generation==_previewGeneration){
-          setState(()=>_editedPreview=null);
-        }
-      }finally{
-        if(mounted && generation==_previewGeneration){
-          setState(()=>_previewBusy=false);
-        }
-      }
+    ++_previewGeneration;
+    _previewDebounce=Timer(const Duration(milliseconds:260),(){
+      if(!mounted||_busy||_previewWork!=null)return;
+      _previewWork=_renderLatestPreview();
     });
   }
+  Future<void> _renderLatestPreview() async {
+    if(!mounted||_busy)return;
+    setState(()=>_previewBusy=true);
+    try {
+      while(mounted&&!_busy){
+        final generation=_previewGeneration;
+        try{
+          final encoded=await _encodeImage();
+          if(mounted&&!_busy&&generation==_previewGeneration){
+            setState(()=>_editedPreview=encoded);
+          }
+        }catch(_){
+          if(mounted&&!_busy&&generation==_previewGeneration){
+            setState(()=>_editedPreview=null);
+          }
+        }
+        if(generation==_previewGeneration)break;
+        // Coalesce arbitrary intervening edits into only the newest recipe.
+        _previewDebounce?.cancel();
+      }
+    }finally{
+      // The first await also prevents a synchronous completion from
+      // assigning a stale completed Future back into _previewWork.
+      await Future<void>.value();
+      _previewWork=null;
+      if(mounted)setState(()=>_previewBusy=false);
+    }
+  }
+
   void _beginStroke(Offset position,Size size){
     if(!_drawing || _strokes.length>=48 ||
         size.width<=0 || size.height<=0)return;
@@ -361,6 +377,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
   @override
   void dispose() {
     _previewDebounce?.cancel();
+    ++_previewGeneration;
     _caption.removeListener(_checkpoint);_placeLabel.removeListener(_checkpoint);
     _overlayText.dispose();
     _placeLabel.dispose();
@@ -456,6 +473,10 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
       _error = null;
     });
     try {
+      _previewDebounce?.cancel();
+      ++_previewGeneration;
+      await _previewWork;
+      if(!mounted)return;
       _checkpoint();await _checkpointInFlight;
       if (privateOnly) {
         // Explicit user action. M6 encrypts and saves to the creator's own

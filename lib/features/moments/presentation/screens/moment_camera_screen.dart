@@ -6,7 +6,6 @@ import 'dart:ui' as ui;
 import 'package:camera/camera.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:compress_video/compress_video.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -20,6 +19,7 @@ import '../../domain/models/moment_publish_models.dart';
 import '../../data/orbit_moment_capture_vault.dart';
 import '../../data/moment_photo_processor.dart';
 import '../../data/orbit_camera_policy.dart';
+import '../../data/orbit_capture_temp_files.dart';
 import '../../data/orbit_capture_inspection.dart';
 import '../../../media/data/orbit_bounded_image.dart';
 import 'package:flutter/foundation.dart' show compute;
@@ -139,6 +139,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   _OrbitCaptureMode _mode=_OrbitCaptureMode.photo;
   final AudioRecorder _audioRecorder=AudioRecorder();
   final OrbitMomentCaptureVault _captureVault=OrbitMomentCaptureVault();
+  final OrbitCaptureTempFiles _tempFiles=OrbitCaptureTempFiles();
   bool _hasSavedDraft=false;
   bool _restoringSavedDraft=false;
   String? _captureClientId;
@@ -829,7 +830,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   }
 
   Future<void> _deleteClip(File file) async {
-    try{if(await file.exists())await file.delete();}catch(_){}
+    try{await _tempFiles.deleteCacheFile(file);}catch(_){}
   }
 
 
@@ -894,8 +895,8 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         if(!await _audioRecorder.hasPermission()){
           throw StateError('Microphone permission is required.');
         }
-        final root=await getTemporaryDirectory();
-        final path='${root.path}/orbit-m7-voice-${DateTime.now().microsecondsSinceEpoch}.m4a';
+        final path=(await _tempFiles.allocate('m4a')).path;
+        _capturedClip=File(path);
         await _audioRecorder.start(const RecordConfig(
           encoder:AudioEncoder.aacLc,bitRate:64000,
           sampleRate:44100,numChannels:1),path:path);
@@ -963,7 +964,9 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         final camera=_controller;
         if(camera==null)return;
         final recorded=await camera.stopVideoRecording();
-        clip=File(recorded.path);
+        final original=File(recorded.path);
+        try{clip=await _tempFiles.copyClip(original,extension:'mp4',maxBytes:250*1024*1024);}
+        finally{await _deleteClip(original);}
       }else{
         final path=await _audioRecorder.stop();
         clip=path==null?null:File(path);
@@ -1004,26 +1007,30 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
        _capturedBytes!=null || _capturedClip!=null) return;
     if(_mode==_OrbitCaptureMode.voice)return;
     setState(()=>_isCapturing=true);
+    File? imported;
     try {
       if(_mode==_OrbitCaptureMode.video && widget.galleryPicker==null){
         final clip=await ImagePicker().pickVideo(
           source:ImageSource.gallery,
           maxDuration:Duration(milliseconds:OrbitCameraPolicy.current.videoDuration));
         if(clip==null)return;
-        if(await clip.length()>500*1024*1024 ||
-           await clip.length()==0) {
+        final source=File(clip.path);
+        try{imported=await _tempFiles.copyClip(source,extension:'mp4',maxBytes:250*1024*1024);}
+        finally{await _deleteClip(source);}
+        if(await imported.length()>250*1024*1024 ||
+           await imported.length()==0) {
           throw const FormatException('Video exceeds capture size limits.');
         }
-        final info=await CompressVideo().getMediaInfo(clip.path);
+        final info=await CompressVideo().getMediaInfo(imported.path);
         if(info.durationMs<1 || info.durationMs>OrbitCameraPolicy.current.videoDuration){
           throw const FormatException('Video must be 60 seconds or shorter.');
         }
         if(!mounted)return;
-        await _saveClipDraft(File(clip.path),'video',info.durationMs);
+        await _saveClipDraft(imported,'video',info.durationMs);
         try{await _controller?.pausePreview();}catch(_){}
         if(!mounted)return;
         setState((){
-          _capturedClip=File(clip.path);
+          _capturedClip=imported;
           _capturedDurationMs=info.durationMs;
         });
         return;
@@ -1037,10 +1044,10 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         final selected=await ImagePicker().pickImage(
           source:ImageSource.gallery,maxWidth:1440,imageQuality:80);
         if(selected==null)return;
-        if(await selected.length()>26*1024*1024){
-          throw const FormatException('Image is too large for an encrypted Moment.');
-        }
-        bytes=await selected.readAsBytes();
+        try{
+          if(await selected.length()>25*1024*1024)throw const FormatException('Image is too large for an encrypted Moment.');
+          bytes=await selected.readAsBytes();
+        }finally{await _deleteClip(File(selected.path));}
       }
       if(bytes==null || bytes.isEmpty)return;
       if(bytes.length>26*1024*1024)throw const FormatException('Photo exceeds 26 MB.');
@@ -1060,6 +1067,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
           const SnackBar(content:Text('Unable to open this gallery photo.')));
       }
     }finally{
+      if(imported!=null&&!identical(imported,_capturedClip))await _deleteClip(imported);
       if(mounted){
         setState(()=>_isCapturing=false);
         // The picker can pause/dispose CameraController. Restart only when
@@ -1103,16 +1111,12 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       final file = await controller.takePicture();
       late final Uint8List bytes;
       try {
+        if(await file.length()>25*1024*1024)throw const FormatException('Capture exceeds photo limit.');
         bytes = await file.readAsBytes();
       } finally {
         // The camera plugin stages an unencrypted temporary original.
         // Never retain that file after moving the photo into memory.
-        final plaintext = File(file.path);
-        if (await plaintext.exists()) {
-          try { await plaintext.delete(); } on FileSystemException {
-            // OS cleanup remains a separate fallback; no plaintext is uploaded.
-          }
-        }
+        await _deleteClip(File(file.path));
       }
 
       if(!mounted||epoch!=_captureEpoch)return;

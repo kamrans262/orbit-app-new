@@ -150,13 +150,16 @@ class OrbitMomentCaptureVault {
       throw const FormatException('Capture exceeds photo limit.');
     }
     final owner=await _account();
+    return _serialize(() async {
+    if(await _owner()!=owner)throw StateError('Account changed.');
     final id=const Uuid().v4();
     final root=await _root(owner);
     final target=File('${root.path}/$id.cipher');
     final sealed=await _crypto.sealBytes(bytes,destination:target,
       ownerId:owner,transferId:id,purpose:'moment',variant:'capture');
-    await _serialize(()=>_commit(owner,sealed,'image',null));
+    await _commit(owner,sealed,'image',null);
     return id;
+    });
   }
 
   Future<String> saveClip(File source,{
@@ -167,6 +170,8 @@ class OrbitMomentCaptureVault {
       throw const FormatException('Invalid captured clip.');
     }
     final owner=await _account();
+    return _serialize(() async {
+    if(await _owner()!=owner)throw StateError('Account changed.');
     final id=const Uuid().v4();
     final root=await _root(owner);
     final target=File('${root.path}/$id.cipher');
@@ -174,8 +179,9 @@ class OrbitMomentCaptureVault {
       ownerId:owner,transferId:id,purpose:'moment',
       variant:'capture',maxInputBytes:kind=='video'
         ? OrbitMediaFormat.videoLimit:OrbitMediaFormat.audioLimit);
-    await _serialize(()=>_commit(owner,sealed,kind,durationMs));
+    await _commit(owner,sealed,kind,durationMs);
     return id;
+    });
   }
 
   Future<void> _commit(String owner,OrbitSealedMedia media,
@@ -211,22 +217,34 @@ class OrbitMomentCaptureVault {
   }
 
   /// Detect an encrypted M7 draft without decrypting it or changing the camera view.
-  Future<bool> hasRecoverableDraft() async {
+  Future<bool> hasRecoverableDraft()=>_serialize(_hasRecoverableDraft);
+  Future<bool> _hasRecoverableDraft() async {
     final owner = await _account();
     final data = await _metadata(owner);
-    if (data == null) return false;
+    if (data == null){await _sweepCipherOrphans(owner,{});return false;}
     final saved = DateTime.tryParse(data['saved_at'] as String? ?? '');
     final now = DateTime.now().toUtc();
     if (saved == null || now.difference(saved.toUtc()) > maxAge ||
         saved.toUtc().isAfter(now.add(const Duration(minutes: 5)))) {
-      await clear();
+      await _purge(owner);
       return false;
     }
     final name = data['name'];
     if (name is! String || !name.endsWith('.cipher') ||
         name.contains('/') || name.contains('\\')) return false;
     final root = await _root(owner);
+    final edits=data['edit_blob'];
+    await _sweepCipherOrphans(owner,{name,if(edits is Map&&edits['name'] is String)edits['name'] as String});
     return File(root.path + '/' + name).exists();
+  }
+  Future<void> _sweepCipherOrphans(String owner,Set<String> keep) async{
+    final root=await _root(owner);
+    await for(final entry in root.list(followLinks:false)){
+      final name=entry.uri.pathSegments.last;
+      if(entry is File&&RegExp(r'^[a-fA-F0-9-]{36}(\.edits)?\.cipher$').hasMatch(name)&&!keep.contains(name)){
+        await entry.delete();
+      }
+    }
   }
   Future<OrbitRecoveredMomentCapture?> restore()=>_serialize(_restore);
   Future<OrbitRecoveredMomentCapture?> _restore() async {
