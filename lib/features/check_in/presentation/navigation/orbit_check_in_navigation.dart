@@ -1,3 +1,5 @@
+import '../../../realtime/data/orbit_realtime_contract.dart';
+import '../../../realtime/presentation/orbit_realtime_refresh.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../config/data/orbit_operational_hints.dart';
@@ -425,7 +427,9 @@ abstract final class OrbitCheckInNavigation {
       if(!context.mounted)return;
       await showOrbitCircleSheet<void>(context:context,
         title:'Friends’ Check-Ins',
-        builder:(sheet)=>Column(mainAxisSize:MainAxisSize.min,children:[
+        builder:(sheet)=>_CheckInLiveSheet<OrbitCheckInPage>(initial:page,
+          load:()=>repo.page('feed',cursor:cursor),
+          content:(sheet,page)=>Column(mainAxisSize:MainAxisSize.min,children:[
           if(page.items.isEmpty)const Text('No Check-Ins available right now.'),
           for(final record in page.items)
             OrbitCircleSheetAction(
@@ -441,7 +445,7 @@ abstract final class OrbitCheckInNavigation {
                 Navigator.of(sheet).pop();
                 unawaited(showFeed(context,repository:repo,cursor:page.nextCursor));
               }),
-        ]),
+        ])),
       );
     }catch(e){
       message(context,e is OrbitIdentityException?e.message:
@@ -455,7 +459,8 @@ abstract final class OrbitCheckInNavigation {
       final current=await repo.detail(id);
       if(!context.mounted)return;
       await showOrbitCircleSheet<void>(context:context,title:'Check-In',
-        builder:(sheet)=>Column(mainAxisSize:MainAxisSize.min,
+        builder:(sheet)=>_CheckInLiveSheet(initial:current,load:()=>repo.detail(id),
+          content:(sheet,current)=>Column(mainAxisSize:MainAxisSize.min,
           crossAxisAlignment:CrossAxisAlignment.start,children:[
           Text(current.creatorName,style:const TextStyle(fontWeight:FontWeight.w600)),
           const SizedBox(height:12),
@@ -465,10 +470,62 @@ abstract final class OrbitCheckInNavigation {
             'permissions and your relationship allow it.'),
           const SizedBox(height:12),
           AppPrimaryButton(label:'Close',onPressed:()=>Navigator.of(sheet).pop()),
-        ]),
+        ])),
       );
     }catch(e){
       message(context,'This Check-In is no longer available to you.');
     }
+  }
+}
+
+
+/// Retains the existing approved sheet body. Revocation/expiry clears the
+/// protected projection and re-fetches via Laravel, never from RTDB.
+class _CheckInLiveSheet<T extends Object> extends StatefulWidget{
+  const _CheckInLiveSheet({required this.initial,required this.load,required this.content});
+  final T initial;
+  final Future<T> Function() load;
+  final Widget Function(BuildContext,T) content;
+  @override
+  State<_CheckInLiveSheet<T>> createState()=>_CheckInLiveSheetState<T>();
+}
+class _CheckInLiveSheetState<T extends Object> extends State<_CheckInLiveSheet<T>> with WidgetsBindingObserver{
+  T? _value;
+  OrbitRealtimeRefresh? _refresh;
+  int _epoch=0;
+  @override
+  void initState(){
+    super.initState();_value=widget.initial;
+    if(!OrbitRealtimeRollout.selected)return;
+    WidgetsBinding.instance.addObserver(this);
+    _refresh=OrbitRealtimeRefresh(modules:const {'check_in','activity','social','circles'},
+      visible:()=>OrbitRealtimeRefresh.current(this),refresh:_reload,fallback:true)..start();
+  }
+  Future<void> _reload() async{
+    final epoch=++_epoch;
+    try{
+      final owner=await OrbitIdentityClient.instance.currentLocalSocialOwner();
+      if(owner==null)throw const FormatException('Sign in required.');
+      final next=await widget.load();
+      if(!mounted||epoch!=_epoch||await OrbitIdentityClient.instance.currentLocalSocialOwner()!=owner||!mounted||epoch!=_epoch)return;
+      setState(()=>_value=next);
+    }catch(_){if(mounted&&epoch==_epoch)setState(()=>_value=null);}
+  }
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state){
+    if(state==AppLifecycleState.resumed){unawaited(_reload());}
+    else {++_epoch;if(mounted)setState(()=>_value=null);}
+  }
+  @override
+  void dispose(){
+    ++_epoch;_refresh?.dispose();
+    if(OrbitRealtimeRollout.selected)WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+  @override
+  Widget build(BuildContext context){
+    final value=_value;
+    if(value!=null)return widget.content(context,value);
+    return const Text('Check-In access could not be verified. Reconnect to refresh.');
   }
 }

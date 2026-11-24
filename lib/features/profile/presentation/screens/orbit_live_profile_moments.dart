@@ -1,3 +1,4 @@
+import '../../../realtime/presentation/orbit_realtime_refresh.dart';
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -35,9 +36,12 @@ class _OrbitLiveProfileMomentsState extends State<OrbitLiveProfileMoments>
   int _epoch=0;
   Timer? _authorizationTimer;
 
+  OrbitRealtimeRefresh? _m25Refresh;
   @override
   void initState(){
     super.initState();
+    _m25Refresh=OrbitRealtimeRefresh(modules:const {'moments','circles','social'},visible:()=>OrbitRealtimeRefresh.current(this),refresh:()=>_reload(),fallback:false)..start();
+
     WidgetsBinding.instance.addObserver(this);
     _authorizationTimer=Timer.periodic(const Duration(seconds:25),(_){
       if(!mounted || _loading ||
@@ -83,6 +87,8 @@ class _OrbitLiveProfileMomentsState extends State<OrbitLiveProfileMoments>
 
   @override
   void dispose(){
+    _m25Refresh?.dispose();
+
     ++_epoch;
     _authorizationTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);

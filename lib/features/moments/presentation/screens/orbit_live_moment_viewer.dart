@@ -1,3 +1,4 @@
+import '../../../realtime/presentation/orbit_realtime_refresh.dart';
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -46,9 +47,12 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
   OrbitLiveMoment get _current => widget.playlist.isEmpty
       ? widget.moment : widget.playlist[_index];
   String get _name => widget.authorNames[_current.creatorId]??widget.author;
+  OrbitRealtimeRefresh? _m25Refresh;
   @override
   void initState(){
     super.initState();
+    _m25Refresh=OrbitRealtimeRefresh(modules:const {'moments','circles','social'},visible:()=>OrbitRealtimeRefresh.current(this),refresh:()=>_checkAuthorization(),fallback:false)..start();
+
     WidgetsBinding.instance.addObserver(this);
     _index=widget.playlist.isEmpty?0:widget.initialIndex.clamp(0,widget.playlist.length-1);
     _revalidation=Timer.periodic(const Duration(seconds:20),(_){
@@ -107,6 +111,8 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
 
   @override
   void dispose(){
+    _m25Refresh?.dispose();
+
     ++_loadEpoch;
     _advance?.cancel();
     _revalidation?.cancel();

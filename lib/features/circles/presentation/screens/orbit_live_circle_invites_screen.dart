@@ -1,3 +1,4 @@
+import '../../../realtime/presentation/orbit_realtime_refresh.dart';
 import 'package:flutter/material.dart';
 
 import '../widgets/orbit_circle_confirmation.dart';
@@ -22,8 +23,13 @@ class _OrbitLiveCircleInvitesScreenState extends State<OrbitLiveCircleInvitesScr
   bool _busy=true;
   String? _error;
 
+  OrbitRealtimeRefresh? _m25Refresh;
   @override
-  void initState(){super.initState();_load();}
+  void initState(){super.initState();
+    _m25Refresh=OrbitRealtimeRefresh(modules:const {'circles','social'},visible:()=>OrbitRealtimeRefresh.current(this),refresh:()=>_load(),fallback:true)..start();
+_load();}
+  @override
+  void dispose(){_m25Refresh?.dispose();super.dispose();}
   Future<void> _load() async {
     if(mounted) setState(() {_busy=true;_error=null;});
     try {

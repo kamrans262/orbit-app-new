@@ -1,3 +1,4 @@
+import '../../../realtime/presentation/orbit_realtime_refresh.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -25,9 +26,14 @@ class _OrbitLiveMomentNotificationsScreenState
   bool _loading=true;
   String? _error;
 
+  OrbitRealtimeRefresh? _m25Refresh;
   @override
-  void initState(){super.initState();unawaited(_load());}
+  void initState(){super.initState();
+    _m25Refresh=OrbitRealtimeRefresh(modules:const {'moments','notifications','social','circles'},visible:()=>OrbitRealtimeRefresh.current(this),refresh:()=>_load(),fallback:true)..start();
+unawaited(_load());}
 
+  @override
+  void dispose(){_m25Refresh?.dispose();super.dispose();}
   Future<void> _load() async {
     if(mounted)setState((){_loading=true;_error=null;});
     try{
