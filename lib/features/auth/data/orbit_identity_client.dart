@@ -71,6 +71,7 @@ class OrbitIdentityClient {
   final http.Client _http;
   final FlutterSecureStorage _storage;
   String? _access;
+  String? _billingAccessOwner;
   Future<void>? _pendingRefresh;
   Map<String, dynamic>? _startupProfile;
   Map<String, dynamic>? _startupNotifications;
@@ -189,7 +190,7 @@ class OrbitIdentityClient {
       throw OrbitIdentityException('Unable to connect to Orbit. Check your internet connection.');
     }
     if (protected && response.statusCode == 401 && allowRetry) {
-      _access = null;
+      _access = null; _billingAccessOwner=null;
       await refresh();
       return _send(method, path, body: body, protected: true, allowRetry: false,
         idempotencyKey: idempotencyKey);
@@ -308,6 +309,7 @@ class OrbitIdentityClient {
       await _storage.write(key: _userIdKey, value: nextUser);
     }
     await _storage.write(key: _refreshKey, value: refreshToken);
+    _billingAccessOwner=user is Map&&user['id'] is String?user['id'] as String:null;
     _access = access;
   }
 
@@ -441,7 +443,7 @@ class OrbitIdentityClient {
           try { await OrbitVodozemacStateStore().purgeOwner(oldMediaOwner); }catch(_){}
     }
     abandonStandardSignup();
-    _access = null;
+    _access = null; _billingAccessOwner=null;
     _startupProfile = null;
     _startupNotifications = null;
     _startupPrivacy = null;
@@ -909,7 +911,7 @@ class OrbitIdentityClient {
     if(await currentLocalSocialOwner()!=owner)throw OrbitIdentityException('Billing account changed.',403);
     if(_access==null)await refresh();
     final token=_access;
-    if(token==null||await currentLocalSocialOwner()!=owner||_access!=token)throw OrbitIdentityException('Billing account changed.',403);
+    if(token==null||await currentLocalSocialOwner()!=owner||_access!=token||_billingAccessOwner!=owner)throw OrbitIdentityException('Billing account changed.',403);
     final request=http.Request(method,Uri.parse(_origin+path))..followRedirects=false
       ..headers['Accept']='application/json'..headers['Content-Type']='application/json'
       ..headers['Authorization']='Bearer '+token;

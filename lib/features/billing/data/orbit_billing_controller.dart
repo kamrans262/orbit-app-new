@@ -22,7 +22,7 @@ class OrbitBillingController extends ChangeNotifier{
   Timer? _expiry;
   Map<String,BillingJson> _mapping={};
   Map<String,String> prices={};
-  bool get canManage=>checkoutEnabled&&_readReady&&tier!=null&&tier!='free'&&['active','grace'].contains(state);
+  bool get canManage=>checkoutEnabled&&_readReady&&['active','grace','hold','paused','pending'].contains(state);
   bool canBuy(String selected)=>!busy&&checkoutEnabled&&purchaseEnabled&&_readReady&&['free','expired','revoked'].contains(state)&&_mapping.containsKey(selected)&&prices.containsKey(selected);
   void _emit(){if(!_disposed)notifyListeners();}
   void _unknown(){tier=null;state='unknown';effectiveUntil=null;_readReady=false;purchaseEnabled=false;prices={};_mapping={};_expiry?.cancel();}
@@ -43,9 +43,9 @@ class OrbitBillingController extends ChangeNotifier{
     }else if(t!='free'&&t!=null){throw const FormatException('Invalid subscription tier.');}
     else if(['active','grace'].contains(s)){throw const FormatException('Missing paid tier.');}
     if((s=='unknown')!=(t==null))throw const FormatException('Unknown subscription status.');
-    tier=t as String?;state=s as String;effectiveUntil=expiry;_readReady=true;
+    tier=checkoutEnabled?t as String?:(t=='free'?'free':null);state=checkoutEnabled?s as String:(t=='free'?s as String:'unknown');effectiveUntil=checkoutEnabled?expiry:null;_readReady=true;
     _expiry?.cancel();
-    if(expiry!=null){_expiry=Timer(expiry.difference(DateTime.now().toUtc()),(){_unknown();message='Subscription status needs refreshing.';_emit();});}
+    if(checkoutEnabled&&expiry!=null){_expiry=Timer(expiry.difference(DateTime.now().toUtc()),(){_unknown();message='Subscription status needs refreshing.';_emit();});}
   }
   String _request(String proof,String? context){
     final h=sha256.convert(utf8.encode(['orbit-m19',owner,store.provider,context??'restore',proof].join('|'))).toString();
@@ -122,7 +122,7 @@ class OrbitBillingController extends ChangeNotifier{
       if(same)matched=true;
       if(item['state']=='pending'){pending=true;continue;}
       if(item['state']!='purchased')continue;
-      final contextId=same?(ctx as Map)['context_id'] as String:null;
+      final contextId=same?ctx['context_id'] as String:null;
       try{
         final result=await _checked(()=>api.verify(store.provider,proof,_request(proof,contextId),contextId:contextId));
         final e=result['entitlement'];

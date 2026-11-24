@@ -73,6 +73,9 @@ class SubscriptionScreen extends StatefulWidget {
     this.onPlanRequested,
     this.onRestoreRequested,
     this.onBack,
+    this.liveBilling=false,this.statusText,this.billingNotice,this.storePrices=const {},
+    this.allowedPurchaseTiers=const {},this.externalBusy=false,this.canManage=false,
+    this.onManageRequested,this.restoreEnabled=true,
     super.key,
   });
 
@@ -81,6 +84,11 @@ class SubscriptionScreen extends StatefulWidget {
   final OrbitSubscriptionRequest? onPlanRequested;
   final FutureOr<void> Function()? onRestoreRequested;
   final VoidCallback? onBack;
+  final bool liveBilling,externalBusy,canManage,restoreEnabled;
+  final String? statusText,billingNotice;
+  final Map<String,String> storePrices;
+  final Set<String> allowedPurchaseTiers;
+  final FutureOr<void> Function()? onManageRequested;
 
   @override
   State<SubscriptionScreen> createState() => _SubscriptionScreenState();
@@ -95,6 +103,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   @override
   Widget build(BuildContext context) {
     final selected = _selectedTier;
+    final busy=_isBusy||widget.externalBusy;
+    final manage=widget.liveBilling&&widget.canManage;
+    final enabled=!busy&&(!widget.liveBilling||manage||selected==OrbitSubscriptionTier.free||widget.allowedPurchaseTiers.contains(selected.name));
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -142,7 +153,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                         ),
                       ),
                       const SizedBox(height: 18),
-                      _PlanStatusCard(currentTier: widget.currentTier),
+                      _PlanStatusCard(currentTier: widget.currentTier,statusText:widget.statusText),
                       const SizedBox(height: 16),
                       for (final tier
                           in OrbitSubscriptionTier.values) ...<Widget>[
@@ -151,16 +162,18 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                           tier: tier,
                           isSelected: selected == tier,
                           isCurrent: widget.currentTier == tier,
-                          onPressed: _isBusy
+                          liveBilling:widget.liveBilling,
+                          price:widget.storePrices[tier.name],
+                          onPressed: busy
                               ? null
                               : () => setState(() => _selectedTier = tier),
                         ),
                         const SizedBox(height: 12),
                       ],
                       Text(
-                        'Prices shown are from the Orbit product scope (USD). '
+                        widget.billingNotice??('Prices shown are from the Orbit product scope (USD). '
                         'Final availability, local prices and billing terms '
-                        'will come from the App Store or Google Play.',
+                        'will come from the App Store or Google Play.'),
                         style: AppTypography.body.copyWith(
                           fontSize: 12,
                           color: AppColors.textMuted,
@@ -180,20 +193,20 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                     children: <Widget>[
                       AppPrimaryButton(
                         key: SubscriptionKeys.purchaseButton,
-                        label: _isBusy
+                        label: busy
                             ? 'Please wait…'
-                            : selected == OrbitSubscriptionTier.free
+                            : manage ? 'Manage subscription' : selected == OrbitSubscriptionTier.free
                             ? 'Back to Settings'
                             : 'Choose ${selected.label}',
-                        enabled: !_isBusy,
-                        onPressed: selected == OrbitSubscriptionTier.free
+                        enabled: enabled,
+                        onPressed: manage ? () => unawaited(_manage()) : selected == OrbitSubscriptionTier.free
                             ? _goBack
                             : () => unawaited(_requestPlan(selected)),
                       ),
                       const SizedBox(height: 8),
                       TextButton(
                         key: SubscriptionKeys.restoreButton,
-                        onPressed: _isBusy
+                        onPressed: busy||!widget.restoreEnabled
                             ? null
                             : () => unawaited(_restorePurchases()),
                         style: TextButton.styleFrom(
@@ -232,6 +245,13 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _manage() async {
+    final callback=widget.onManageRequested;if(callback==null||_isBusy)return;
+    setState(()=>_isBusy=true);
+    try{await callback();}catch(_){_showMessage('Subscription management is unavailable.');}
+    finally{if(mounted)setState(()=>_isBusy=false);}
   }
 
   Future<void> _requestPlan(OrbitSubscriptionTier tier) async {
@@ -277,9 +297,10 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 }
 
 class _PlanStatusCard extends StatelessWidget {
-  const _PlanStatusCard({required this.currentTier});
+  const _PlanStatusCard({required this.currentTier,this.statusText});
 
   final OrbitSubscriptionTier? currentTier;
+  final String? statusText;
 
   @override
   Widget build(BuildContext context) {
@@ -311,9 +332,9 @@ class _PlanStatusCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  tier == null
+                  statusText??(tier == null
                       ? 'Not connected to your account yet'
-                      : tier.label,
+                      : tier.label),
                   style: AppTypography.body.copyWith(
                     color: AppColors.textMuted,
                     fontSize: 12,
@@ -334,6 +355,7 @@ class _SubscriptionPlanCard extends StatelessWidget {
     required this.isSelected,
     required this.isCurrent,
     required this.onPressed,
+    this.liveBilling=false,this.price,
     super.key,
   });
 
@@ -341,16 +363,20 @@ class _SubscriptionPlanCard extends StatelessWidget {
   final bool isSelected;
   final bool isCurrent;
   final VoidCallback? onPressed;
+  final bool liveBilling;
+  final String? price;
 
   @override
   Widget build(BuildContext context) {
+    final displayPrice=liveBilling?(tier==OrbitSubscriptionTier.free?r'$0':price??'Unavailable'):tier.price;
+    final benefits=liveBilling?(tier==OrbitSubscriptionTier.free?const ['Core Orbit essentials','Existing privacy and safety controls']:const ['Sandbox subscription testing only','Paid benefits are not available yet']):tier.benefits;
     final borderColor = isSelected
         ? AppColors.primaryEnd
         : const Color(0xFFEDEAF2);
     return Semantics(
       button: true,
       selected: isSelected,
-      label: '${tier.label} plan, ${tier.price} per month',
+      label: '${tier.label} plan, $displayPrice per month',
       child: Material(
         color: Colors.white,
         borderRadius: BorderRadius.circular(22),
@@ -404,7 +430,7 @@ class _SubscriptionPlanCard extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            tier.details,
+                            liveBilling&&tier!=OrbitSubscriptionTier.free?'Sandbox only':tier.details,
                             style: AppTypography.body.copyWith(
                               fontSize: 11,
                               color: AppColors.textMuted,
@@ -418,7 +444,7 @@ class _SubscriptionPlanCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: <Widget>[
                         Text(
-                          tier.price,
+                          displayPrice,
                           style: AppTypography.body.copyWith(
                             fontSize: 17,
                             fontWeight: FontWeight.w600,
@@ -439,7 +465,7 @@ class _SubscriptionPlanCard extends StatelessWidget {
                 if (isCurrent) ...<Widget>[
                   const SizedBox(height: 10),
                   Text(
-                    'Your current plan',
+                    liveBilling&&tier!=OrbitSubscriptionTier.free?'Verified sandbox plan':'Your current plan',
                     style: AppTypography.body.copyWith(
                       color: AppColors.primaryEnd,
                       fontWeight: FontWeight.w600,
@@ -448,7 +474,7 @@ class _SubscriptionPlanCard extends StatelessWidget {
                   ),
                 ],
                 const SizedBox(height: 10),
-                for (final benefit in tier.benefits) ...<Widget>[
+                for (final benefit in benefits) ...<Widget>[
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[

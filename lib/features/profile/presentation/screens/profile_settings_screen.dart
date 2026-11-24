@@ -18,7 +18,7 @@ import '../../../circles/presentation/screens/orbit_live_circles_screen.dart';
 import 'edit_profile_screen.dart';
 import '../../../notifications/presentation/orbit_live_notification_settings_screen.dart';
 import 'devices_screen.dart';
-import 'subscription_screen.dart';
+import '../../../billing/presentation/orbit_live_subscription_screen.dart';
 import 'orbit_live_blocked_users_screen.dart';
 import 'privacy_setting_screen.dart';
 import '../../../../core/popups/orbit_popup_variants.dart';
@@ -265,7 +265,7 @@ class SettingsScreen extends StatelessWidget {
     }
     if (label == 'Subscription') {
       Navigator.of(context).push<void>(
-        AppFadeSlidePageRoute<void>(builder: (_) => const SubscriptionScreen()),
+        AppFadeSlidePageRoute<void>(builder: (_) => const OrbitLiveSubscriptionScreen()),
       );
       return;
     }
