@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 
 import '../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../../core/widgets/app_primary_button.dart';
@@ -50,7 +51,7 @@ abstract final class OrbitMessagingNavigation {
                 onPressed:()=>Navigator.of(sheet).pop(true)),
               const SizedBox(height:8),
               TextButton(onPressed:()=>Navigator.of(sheet).pop(false),
-                child:const Text('Not now')),
+                child:const AppGradientActionLabel('Not now')),
             ]),
         );
         if(accepted!=true||!context.mounted)return;

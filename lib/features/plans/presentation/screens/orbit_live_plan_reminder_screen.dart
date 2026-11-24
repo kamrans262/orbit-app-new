@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_screen_header.dart';
@@ -83,7 +84,7 @@ class _OrbitLivePlanReminderScreenState extends State<OrbitLivePlanReminderScree
             mainAxisSize:MainAxisSize.min,children:[
               Text(_error??'Reminder options unavailable.',
                 style:AppTypography.bodyMuted),
-              TextButton(onPressed:()=>unawaited(_load()),child:const Text('Retry')),
+              TextButton(onPressed:()=>unawaited(_load()),child:const AppGradientActionLabel('Retry')),
             ]))
           :ListView(children:[
             Container(decoration:BoxDecoration(color:Colors.white,

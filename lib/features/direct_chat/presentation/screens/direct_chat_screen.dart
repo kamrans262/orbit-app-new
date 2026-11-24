@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 import 'package:flutter/services.dart';
 import '../../../circles/presentation/widgets/orbit_circle_sheet.dart';
 import '../../../circles/presentation/widgets/orbit_circle_confirmation.dart';
@@ -1351,7 +1352,7 @@ class _DirectErrorState extends StatelessWidget {
             ),
             if (onRetry != null) ...<Widget>[
               const SizedBox(height: 12),
-              TextButton(onPressed: onRetry, child: const Text('Try again')),
+              TextButton(onPressed: onRetry, child: const AppGradientActionLabel('Try again')),
             ],
           ],
         ),

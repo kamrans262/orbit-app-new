@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 
@@ -546,7 +547,7 @@ class _ProfileErrorState extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 14),
-          TextButton(onPressed: onRetry, child: const Text('Try again')),
+          TextButton(onPressed: onRetry, child: const AppGradientActionLabel('Try again')),
         ],
       ),
     );

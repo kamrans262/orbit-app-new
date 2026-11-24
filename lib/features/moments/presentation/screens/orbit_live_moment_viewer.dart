@@ -3,6 +3,7 @@ import '../../../realtime/presentation/orbit_realtime_refresh.dart';
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 import 'package:image/image.dart' as img;
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
@@ -332,7 +333,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
               Expanded(child:Text('Replying to comment',
                 style:AppTypography.bodyMuted)),
               TextButton(onPressed:()=>setSheet(()=>replyingTo=null),
-                child:const Text('Cancel reply')),
+                child:const AppGradientActionLabel('Cancel reply')),
             ]),
             TextField(controller:controller,maxLength:280,maxLines:2,
               decoration:const InputDecoration(hintText:'Write a comment')),

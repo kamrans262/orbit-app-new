@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_typography.dart';
 import '../../../core/widgets/app_action_row.dart';
@@ -97,7 +98,7 @@ class _OrbitCirclePresenceSettingsScreenState extends State<OrbitCirclePresenceS
           ? Center(child:Column(mainAxisSize:MainAxisSize.min,children:[
               Text(_error!,textAlign:TextAlign.center,
                 style:const TextStyle(fontFamily:AppTypography.fontFamily)),
-              TextButton(onPressed:_load,child:const Text('Try again')),
+              TextButton(onPressed:_load,child:const AppGradientActionLabel('Try again')),
             ]))
           : ListView(children:[
               Text(widget.circleName,style:const TextStyle(

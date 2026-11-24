@@ -2,6 +2,7 @@ import '../../realtime/presentation/orbit_realtime_refresh.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 import 'package:flutter/semantics.dart';
 
 import '../../../app/theme/app_colors.dart';
@@ -342,7 +343,7 @@ class _OrbitLiveNotificationsScreenState
             title:'Notifications',prominent:true)),
           if(_items.any((n)=>!n.read))
             TextButton(onPressed:()=>unawaited(_markAll()),
-              child:const Text('Mark all read')),
+              child:const AppGradientActionLabel('Mark all read')),
         ]),
         const SizedBox(height:18),
         Expanded(child:_loading
@@ -353,14 +354,14 @@ class _OrbitLiveNotificationsScreenState
               Text(_error!,textAlign:TextAlign.center,
                 style:AppTypography.bodyMuted),
               TextButton(onPressed:()=>unawaited(_load()),
-                child:const Text('Try again')),
+                child:const AppGradientActionLabel('Try again')),
               // An older server may still expose the original M7 inbox.
               // Keep it accessible until the additive M14 backend deploys.
               TextButton(
                 onPressed:()=>Navigator.of(context).push<void>(
                   MaterialPageRoute(
                     builder:(_)=>const OrbitLiveMomentNotificationsScreen())),
-                child:const Text('Moment notifications')),
+                child:const AppGradientActionLabel('Moment notifications')),
             ]))
           :_items.isEmpty && _cursor==null
             ?Center(child:Text('No notifications',
@@ -375,7 +376,7 @@ class _OrbitLiveNotificationsScreenState
                   if(index==visible.length){
                     return TextButton(
                       onPressed:_more?null:()=>unawaited(_loadMore()),
-                      child:Text(_more?'Loading…':'Load more'));
+                      child:AppGradientActionLabel(_more?'Loading…':'Load more'));
                   }
                   final group=visible[index];
                   final item=group.item;

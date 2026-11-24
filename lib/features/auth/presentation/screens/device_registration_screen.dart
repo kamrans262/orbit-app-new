@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
@@ -158,15 +159,6 @@ class _DeviceRegistrationScreenState extends State<DeviceRegistrationScreen> {
     } finally {
       if (mounted) setState(() => _registering = false);
     }
-  }
-
-  Widget _recoveryActionLabel(String label) {
-    if (_registering) return Text(label);
-    return ShaderMask(
-      blendMode: BlendMode.srcIn,
-      shaderCallback: AppColors.primaryGradient.createShader,
-      child: Text(label),
-    );
   }
 
   @override
@@ -341,14 +333,14 @@ class _DeviceRegistrationScreenState extends State<DeviceRegistrationScreen> {
                                   _password.clear();
                                   _code.clear();
                                 }),
-                                child: _recoveryActionLabel('Cancel'),
+                                child: const AppGradientActionLabel('Cancel'),
                               ),
                               if (widget.onSignInAgain != null)
                                 TextButton(
                                   onPressed: _registering ? null : () async {
                                     await widget.onSignInAgain!();
                                   },
-                                  child: _recoveryActionLabel('Sign in again'),
+                                  child: const AppGradientActionLabel('Sign in again'),
                                 ),
                             ],
                           ),

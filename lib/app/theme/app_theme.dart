@@ -10,11 +10,7 @@ abstract final class AppTheme {
       useMaterial3: true,
       brightness: Brightness.light,
       fontFamily: AppTypography.fontFamily,
-      fontFamilyFallback: const <String>[
-        'Noto Color Emoji',
-        'Apple Color Emoji',
-        'Segoe UI Emoji',
-      ],
+      fontFamilyFallback: AppTypography.emojiFontFallback,
       pageTransitionsTheme: AppPageTransitions.theme,
       scaffoldBackgroundColor: AppColors.background,
       colorScheme: ColorScheme.fromSeed(

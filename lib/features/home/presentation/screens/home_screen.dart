@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
@@ -541,7 +542,7 @@ class _HomeScreenState extends State<HomeScreen> {
           style: const TextStyle(fontFamily:AppTypography.fontFamily,
               fontSize:12,color:AppColors.textMuted))),
         if(widget.onDashboardRetry!=null) TextButton(
-          onPressed:widget.onDashboardRetry,child:const Text('Retry')),
+          onPressed:widget.onDashboardRetry,child:const AppGradientActionLabel('Retry')),
       ]),
     ),
   );

@@ -2,6 +2,7 @@ import '../../../realtime/presentation/orbit_realtime_refresh.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
@@ -86,7 +87,7 @@ WidgetsBinding.instance.addObserver(this);unawaited(_reload());}
                       Text(_error!,textAlign:TextAlign.center,
                         style:AppTypography.bodyMuted),
                       TextButton(onPressed:()=>unawaited(_reload()),
-                        child:const Text('Try again')),
+                        child:const AppGradientActionLabel('Try again')),
                     ],
                   ))
                 :_items.isEmpty

@@ -60,7 +60,12 @@ class OrbitGiftGrid extends StatelessWidget {
                   child: Text(
                     item.emoji,
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: emojiSize, height: 1),
+                    style: TextStyle(
+                      fontSize: emojiSize,
+                      height: 1,
+                      fontFamily: AppTypography.emojiFontFamily(context),
+                      fontFamilyFallback: AppTypography.emojiFontFallback,
+                    ),
                   ),
                 );
               },

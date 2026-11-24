@@ -1,6 +1,7 @@
 import '../../../realtime/presentation/orbit_realtime_refresh.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../app/routing/app_routes.dart';
@@ -103,8 +104,8 @@ WidgetsBinding.instance.addObserver(this);unawaited(_load());}
       title:const Text('Cancel Plan?'),
       content:const Text('Invited friends will be informed, and future reminders will stop.'),
       actions:[
-        TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('Keep Plan')),
-        TextButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('Cancel Plan')),
+        TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const AppGradientActionLabel('Keep Plan')),
+        TextButton(onPressed:()=>Navigator.pop(ctx,true),child:const AppGradientActionLabel('Cancel Plan')),
       ]));
     if(answer==true)await _perform((p)=>_repo.cancel(p.id,p.revision));
   }
@@ -154,7 +155,7 @@ WidgetsBinding.instance.addObserver(this);unawaited(_load());}
           :p==null?Center(child:Column(mainAxisSize:MainAxisSize.min,children:[
             Text(_error??'Plan unavailable.',style:AppTypography.bodyMuted,
               textAlign:TextAlign.center),
-            TextButton(onPressed:()=>unawaited(_load()),child:const Text('Retry')),
+            TextButton(onPressed:()=>unawaited(_load()),child:const AppGradientActionLabel('Retry')),
           ]))
           :RefreshIndicator(onRefresh:_load,child:ListView(children:[
             if(_offline)Padding(padding:const EdgeInsets.only(bottom:12),
@@ -185,7 +186,7 @@ WidgetsBinding.instance.addObserver(this);unawaited(_load());}
                   TextButton.icon(
                     onPressed:_offline?null:()=>unawaited(_openDirections(p)),
                     icon:const Icon(Icons.directions_outlined),
-                    label:const Text('Directions')),
+                    label:const AppGradientActionLabel('Directions')),
 
                 if(p.description.isNotEmpty)_info(Icons.notes_outlined,'Description',
                   p.description),
@@ -205,7 +206,7 @@ WidgetsBinding.instance.addObserver(this);unawaited(_load());}
             if(!_offline && p.canEdit) ...[
               AppPrimaryButton(label:'Edit Plan',onPressed:()=>unawaited(_edit())),
               TextButton(onPressed:_working?null:()=>unawaited(_cancel()),
-                child:const Text('Cancel Plan')),
+                child:const AppGradientActionLabel('Cancel Plan')),
             ] else if(!_offline && p.canRespond) ...[
               if(p.myRsvp!='joined')
                 AppPrimaryButton(label:'Join Plan',onPressed:()=>unawaited(
@@ -213,14 +214,14 @@ WidgetsBinding.instance.addObserver(this);unawaited(_load());}
               if(p.myRsvp=='invited')
                 TextButton(onPressed:_working?null:()=>unawaited(
                   _perform((p)=>_repo.rsvp(p.id,'declined'))),
-                  child:const Text('Decline')),
+                  child:const AppGradientActionLabel('Decline')),
               if(p.myRsvp=='joined')
                 TextButton(onPressed:_working?null:()=>unawaited(
-                  _perform((p)=>_repo.leave(p.id))),child:const Text('Leave Plan')),
+                  _perform((p)=>_repo.leave(p.id))),child:const AppGradientActionLabel('Leave Plan')),
               if(p.myRsvp=='declined')
                 TextButton(onPressed:_working?null:()=>unawaited(
                   _perform((p)=>_repo.rsvp(p.id,'joined'))),
-                  child:const Text('Change response to Join')),
+                  child:const AppGradientActionLabel('Change response to Join')),
             ],
             const SizedBox(height:20),
           ]))),

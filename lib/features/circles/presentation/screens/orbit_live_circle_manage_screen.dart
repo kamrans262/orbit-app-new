@@ -1,5 +1,6 @@
 import '../../../realtime/presentation/orbit_realtime_refresh.dart';
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 
 import '../widgets/orbit_circle_confirmation.dart';
 import '../widgets/orbit_circle_sheet.dart';
@@ -302,7 +303,7 @@ _version++;super.dispose();}
       Expanded(child:_busy ? const Center(child:CircularProgressIndicator())
       : _error!=null ? Center(child:Column(
           mainAxisSize:MainAxisSize.min,children:[
-            Text(_error!),TextButton(onPressed:_load,child:const Text('Try again')),
+            Text(_error!),TextButton(onPressed:_load,child:const AppGradientActionLabel('Try again')),
           ]))
       :ListView(padding:const EdgeInsets.all(20),children:[
         Text(_circle.name,style:const TextStyle(

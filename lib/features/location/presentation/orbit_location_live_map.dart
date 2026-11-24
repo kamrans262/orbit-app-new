@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart' as gl;
 
@@ -565,10 +566,10 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
       if(_active)Positioned(top:105,right:15,child:Row(children:[
         TextButton.icon(onPressed:()=>unawaited(_manage()),
           icon:const Icon(Icons.group_outlined,size:17),
-          label:Text('Sharing · '+_shares.where((s)=>s.active).length.toString())),
+          label:AppGradientActionLabel('Sharing · '+_shares.where((s)=>s.active).length.toString())),
         TextButton.icon(onPressed:()=>unawaited(_stop()),
           icon:const Icon(Icons.location_off_outlined,size:17),
-          label:const Text('Stop')),
+          label:const AppGradientActionLabel('Stop')),
       ])),
     ]);
   }

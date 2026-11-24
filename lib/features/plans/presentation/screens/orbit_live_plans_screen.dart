@@ -1,6 +1,7 @@
 import '../../../realtime/presentation/orbit_realtime_refresh.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 import '../../../../app/routing/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
@@ -164,7 +165,7 @@ WidgetsBinding.instance.addObserver(this);unawaited(_load());}
             :_error!=null&&_items.isEmpty
               ?Center(child:Column(mainAxisSize:MainAxisSize.min,children:[
                   Text(_error!,style:AppTypography.bodyMuted,textAlign:TextAlign.center),
-                  TextButton(onPressed:()=>unawaited(_load()),child:const Text('Retry')),
+                  TextButton(onPressed:()=>unawaited(_load()),child:const AppGradientActionLabel('Retry')),
                 ]))
               :RefreshIndicator(onRefresh:_load,child:ListView.separated(
                 physics:const AlwaysScrollableScrollPhysics(),
@@ -173,7 +174,7 @@ WidgetsBinding.instance.addObserver(this);unawaited(_load());}
                 itemBuilder:(_,index){
                   if(index==_items.length) return TextButton(
                     onPressed:_loadingMore?null:()=>unawaited(_more()),
-                    child:Text(_loadingMore?'Loading…':'Load more'));
+                    child:AppGradientActionLabel(_loadingMore?'Loading…':'Load more'));
                   final p=_items[index];
                   return UpcomingPlanCard(
                     key:ValueKey('plan_'+p.id),

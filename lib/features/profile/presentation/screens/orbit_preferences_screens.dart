@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 import '../../../location/data/orbit_location_repository.dart';
 import '../../data/orbit_profile_settings_repository.dart';
 import '../../domain/models/notification_settings.dart';
@@ -104,7 +105,7 @@ class _LoadingSettings extends StatelessWidget {
       child: error
           ? Column(mainAxisSize: MainAxisSize.min, children: <Widget>[
               const Text('Could not load settings.'),
-              TextButton(onPressed: onRetry, child: const Text('Try again')),
+              TextButton(onPressed: onRetry, child: const AppGradientActionLabel('Try again')),
             ])
           : const CircularProgressIndicator(),
     ),

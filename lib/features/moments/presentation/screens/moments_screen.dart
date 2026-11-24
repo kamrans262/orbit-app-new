@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
@@ -505,7 +506,7 @@ class _MomentsScreenState extends State<MomentsScreen> {
                 ),
                 if(widget.onRefresh!=null)TextButton(
                   onPressed:()=>unawaited(widget.onRefresh!()),
-                  child:const Text('Try again'),
+                  child:const AppGradientActionLabel('Try again'),
                 ),
               ],
             ),

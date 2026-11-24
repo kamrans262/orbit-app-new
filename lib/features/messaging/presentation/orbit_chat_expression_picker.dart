@@ -59,7 +59,9 @@ class _OrbitExpressionChoicesState extends State<_OrbitExpressionChoices> {
                 onTap:()=>widget.onChosen(glyph),
                 borderRadius:BorderRadius.circular(14),
                 child:Center(child:Text(glyph,
-                  style:const TextStyle(fontSize:28,height:1)))));
+                  style:TextStyle(fontSize:28,height:1,
+                    fontFamily:AppTypography.emojiFontFamily(context),
+                    fontFamilyFallback:AppTypography.emojiFontFallback)))));
           }
           final id=OrbitChatSticker.ids.elementAt(index);
           return Semantics(label:'Sticker ${OrbitStickerArtwork.label(id)}',

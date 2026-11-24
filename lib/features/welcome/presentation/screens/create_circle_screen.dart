@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../app/theme/app_colors.dart';
@@ -268,7 +269,7 @@ class _CreateCircleScreenState extends State<CreateCircleScreen> {
                                     color:Color(0xFF64748B),fontSize:13),
                                 )),
                                 TextButton(onPressed:_chooseExpiry,
-                                  child:const Text('Set expiry')),
+                                  child:const AppGradientActionLabel('Set expiry')),
                                 if(_expiresAt != null)
                                   IconButton(
                                     tooltip:'Clear expiry',

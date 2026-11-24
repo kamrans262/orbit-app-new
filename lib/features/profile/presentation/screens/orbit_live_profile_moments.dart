@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 
 import '../../../../app/theme/app_colors.dart';
@@ -173,7 +174,7 @@ class _OrbitLiveProfileMomentsState extends State<OrbitLiveProfileMoments>
     if(_error!=null)return Column(children:[
       Text(_error!,style:AppTypography.bodyMuted,textAlign:TextAlign.center),
       TextButton(onPressed:()=>unawaited(_reload()),
-        child:const Text('Try again')),
+        child:const AppGradientActionLabel('Try again')),
     ]);
     if(_authorized.isEmpty)return const Padding(
       padding:EdgeInsets.all(22),

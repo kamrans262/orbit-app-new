@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../core/widgets/app_screen_header.dart';
@@ -121,7 +122,7 @@ class _OrbitFriendRequestsScreenState extends State<OrbitFriendRequestsScreen> {
             if (_busy) const Center(child:CircularProgressIndicator()),
             if (_error != null) ...[
               Text(_error!,textAlign:TextAlign.center),
-              TextButton(onPressed: () => _load(reset:true),child:const Text('Retry')),
+              TextButton(onPressed: () => _load(reset:true),child:const AppGradientActionLabel('Retry')),
             ],
             if (!_busy && _error == null && _requests.isEmpty)
               const Padding(padding: EdgeInsets.all(20),
@@ -139,19 +140,19 @@ class _OrbitFriendRequestsScreenState extends State<OrbitFriendRequestsScreen> {
               Row(mainAxisAlignment: MainAxisAlignment.end,children: [
                 if (_direction == 'incoming') ...[
                   TextButton(onPressed:_busy ? null:()=>_action(request,'decline'),
-                    child: const Text('Decline')),
+                    child: const AppGradientActionLabel('Decline')),
                   const SizedBox(width:8),
                   TextButton(onPressed:_busy ? null:()=>_action(request,'accept'),
-                    child: const Text('Accept')),
+                    child: const AppGradientActionLabel('Accept')),
                 ] else TextButton(
                   onPressed:_busy ? null:()=>_action(request,'cancel'),
-                  child:const Text('Cancel request')),
+                  child:const AppGradientActionLabel('Cancel request')),
               ]),
               const SizedBox(height:10),
             ],
             if (_hasMore) Center(child:TextButton(
               onPressed:_busy ? null:()=>_load(),
-              child:const Text('Load more'))),
+              child:const AppGradientActionLabel('Load more'))),
           ],
         )),
       ])),

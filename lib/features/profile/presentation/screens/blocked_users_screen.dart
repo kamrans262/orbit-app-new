@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_screen_header.dart';
@@ -231,7 +232,7 @@ class _BlockUsersScreenState extends State<BlockUsersScreen> {
         if (index == _users.length) {
           return Center(child: TextButton(
             onPressed: widget.isLoadingMore ? null : widget.onLoadMore,
-            child: Text(widget.isLoadingMore ? 'Loading…' : 'Load more'),
+            child: AppGradientActionLabel(widget.isLoadingMore ? 'Loading…' : 'Load more'),
           ));
         }
         final user = _users[index];

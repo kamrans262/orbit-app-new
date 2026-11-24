@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
@@ -269,7 +270,7 @@ class _PingScreenState extends State<PingScreen> {
                     Text('Failed · '+_failure!,textAlign:TextAlign.center),
                     TextButton.icon(key:PingKeys.retry,
                       onPressed:_sendingId==null?()=>_send(_failedOption!):null,
-                      icon:const Icon(Icons.refresh_rounded),label:const Text('Retry Ping')),
+                      icon:const Icon(Icons.refresh_rounded),label:const AppGradientActionLabel('Retry Ping')),
                   ])),
                 ),
               const SliverToBoxAdapter(child: SizedBox(height: 16)),

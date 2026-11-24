@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:uuid/uuid.dart';
@@ -116,7 +117,7 @@ abstract final class OrbitChatVoiceRecorder {
                   onPressed:()=>unawaited(toggle())),
                 const SizedBox(height:10),
                 TextButton(onPressed:()=>Navigator.of(ctx).pop(),
-                  child:const Text('Cancel')),
+                  child:const AppGradientActionLabel('Cancel')),
               ],
             );
           },

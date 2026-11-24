@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
 import '../../../../app/theme/app_typography.dart';
@@ -182,7 +183,7 @@ class _OrbitPersonScreenState extends State<OrbitPersonScreen> {
                 color: Color(0xFFB91C1C),
               )),
           ),
-          TextButton(onPressed: _refresh, child: const Text('Retry')),
+          TextButton(onPressed: _refresh, child: const AppGradientActionLabel('Retry')),
         ],
         if (_error == null)
           SettingsListCard(

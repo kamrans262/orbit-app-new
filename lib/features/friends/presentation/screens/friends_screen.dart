@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
@@ -201,7 +202,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
                     ),
                     TextButton(
                       onPressed: widget.isLoading ? null : widget.onRetry,
-                      child: const Text('Reconnect and verify'),
+                      child: const AppGradientActionLabel('Reconnect and verify'),
                     ),
                   ]),
                 ),
@@ -212,7 +213,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
                         ? Center(child: Column(mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(widget.errorMessage!, textAlign: TextAlign.center),
-                              TextButton(onPressed: widget.onRetry, child: const Text('Try again')),
+                              TextButton(onPressed: widget.onRetry, child: const AppGradientActionLabel('Try again')),
                             ]))
                         : visibleFriends.isEmpty
                             ? const _FriendsEmptyState()
@@ -233,7 +234,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
                           if (index == visibleFriends.length) {
                             return Center(child: TextButton(
                               onPressed: widget.isLoading ? null : widget.onLoadMore,
-                              child: Text(widget.isLoading ? 'Loading…' : 'Load more'),
+                              child: AppGradientActionLabel(widget.isLoading ? 'Loading…' : 'Load more'),
                             ));
                           }
                           final friend = visibleFriends[index];

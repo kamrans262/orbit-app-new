@@ -12,6 +12,7 @@ import '../../../auth/data/orbit_identity_client.dart';
 import 'orbit_moment_draft_player.dart';
 
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../app/theme/app_colors.dart';
@@ -771,7 +772,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
                 setState(()=>_strokes.removeLast());
                 _queuePreview();
               },
-              child:const Text('Undo')),
+              child:const AppGradientActionLabel('Undo')),
           ]),
         ],
         const SizedBox(height: 16),
@@ -875,10 +876,10 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
         if(_canPublish && _canSavePrivate && widget.mediaKind=='image')
           TextButton(
             onPressed:()=>unawaited(_submit(privateOnly:true)),
-            child:const Text('Save privately without publishing'),
+            child:const AppGradientActionLabel('Save privately without publishing'),
           ),
         TextButton(onPressed:_back,
-          child:const Text('Retake / Back to Camera')),
+          child:const AppGradientActionLabel('Retake / Back to Camera')),
       ]),
     );
   }
@@ -916,7 +917,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
               child:TextButton.icon(
                 onPressed:_selectPreviousAudience,
                 icon:const Icon(Icons.history_rounded),
-                label:Text('Choose previous audience: $_previousAudienceLabel'),
+                label:AppGradientActionLabel('Choose previous audience: $_previousAudienceLabel'),
               ),
             ),
             for(final type in types)
@@ -1053,7 +1054,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
               onPressed: () => Navigator.of(context).pop(),
             ),
           if (failed)
-            TextButton(onPressed: _back, child: const Text('Back to review')),
+            TextButton(onPressed: _back, child: const AppGradientActionLabel('Back to review')),
           if (!finished && _simulated)
             Text(
               'Demo only — no upload or notification is sent.',

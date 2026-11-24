@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../../app/theme/app_colors.dart';
@@ -163,7 +164,7 @@ class _OrbitLiveNotificationSettingsScreenState
                   await openAppSettings();
                   if(mounted)await _readSystemPermission();
                 },
-                child:const Text('Open phone notification settings')),
+                child:const AppGradientActionLabel('Open phone notification settings')),
               ValueListenableBuilder<String>(
                 valueListenable:OrbitNotificationPushRuntime.instance.registrationStatus,
                 builder:(context,status,_)=>Text('Firebase push: $status',
@@ -174,7 +175,7 @@ class _OrbitLiveNotificationSettingsScreenState
                   await OrbitNotificationPushRuntime.instance.configure(force:true);
                   if(mounted)await _readSystemPermission();
                 },
-                child:const Text('Retry push connection'),
+                child:const AppGradientActionLabel('Retry push connection'),
               ),
               const Text('Android alerts use a generic Orbit notification. '
                 'Device permission and power settings affect delivery while '
@@ -198,7 +199,7 @@ class _OrbitLiveNotificationSettingsScreenState
               Text(_error??'Notification settings unavailable.',
                 style:AppTypography.bodyMuted,textAlign:TextAlign.center),
               const SizedBox(height:12),
-              TextButton(onPressed:_load,child:const Text('Try again')),
+              TextButton(onPressed:_load,child:const AppGradientActionLabel('Try again')),
             ]))),
       ])),
     );

@@ -3,6 +3,7 @@ import '../../../realtime/presentation/orbit_realtime_refresh.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../../auth/data/orbit_identity_client.dart';
@@ -129,9 +130,9 @@ _epoch++;_timer?.cancel();WidgetsBinding.instance.removeObserver(this);super.dis
             const SizedBox(height:12),
             Padding(padding:const EdgeInsets.all(20),child:Text(_error??'Incident unavailable.',
               textAlign:TextAlign.center,style:const TextStyle(color:Colors.white))),
-            TextButton(onPressed:_refresh,child:const Text('Retry')),
+            TextButton(onPressed:_refresh,child:const AppGradientActionLabel('Retry')),
           ],
-          TextButton(onPressed:()=>Navigator.of(context).maybePop(),child:const Text('Back')),
+          TextButton(onPressed:()=>Navigator.of(context).maybePop(),child:const AppGradientActionLabel('Back')),
         ])),));
     }
     Widget? map;

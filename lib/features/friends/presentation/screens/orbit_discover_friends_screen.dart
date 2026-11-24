@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -166,7 +167,7 @@ class _OrbitDiscoverFriendsScreenState extends State<OrbitDiscoverFriendsScreen>
               const SizedBox(height: 12),
               TextButton.icon(
                 onPressed: () async => Share.share(url, subject: 'Orbit friend invitation'),
-                icon: const Icon(Icons.ios_share), label: const Text('Share invitation')),
+                icon: const Icon(Icons.ios_share), label: const AppGradientActionLabel('Share invitation')),
               const SizedBox(height: 8),
             ]),
           ),
@@ -396,7 +397,7 @@ class _OrbitDiscoverFriendsScreenState extends State<OrbitDiscoverFriendsScreen>
             if (_error != null) ...[
               Text(_error!,textAlign:TextAlign.center),
               TextButton(onPressed: () => _load(_generation,reset:true),
-                child: const Text('Try again')),
+                child: const AppGradientActionLabel('Try again')),
             ],
             if (!_loading && _error == null && _query.length >= 2 && _results.isEmpty)
               const Padding(padding: EdgeInsets.all(18),
@@ -413,7 +414,7 @@ class _OrbitDiscoverFriendsScreenState extends State<OrbitDiscoverFriendsScreen>
             ],
             if (_hasMore) Center(child: TextButton(
               onPressed: _loading ? null : () => _load(_generation),
-              child: const Text('Load more'))),
+              child: const AppGradientActionLabel('Load more'))),
           ],
         )),
       ])),

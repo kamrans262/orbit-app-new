@@ -2,6 +2,7 @@ import '../../../realtime/data/orbit_realtime_runtime.dart';
 import '../../../realtime/presentation/orbit_realtime_refresh.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 import '../../../config/data/orbit_operational_hints.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
@@ -83,7 +84,7 @@ abstract final class OrbitCheckInNavigation {
             onPressed:()=>Navigator.of(sheet).pop(true)),
           const SizedBox(height:8),
           TextButton(onPressed:()=>Navigator.of(sheet).pop(false),
-            child:const Text('Change or cancel')),
+            child:const AppGradientActionLabel('Change or cancel')),
         ]),
       );
       if(accepted!=true||!context.mounted)return;
@@ -409,7 +410,7 @@ abstract final class OrbitCheckInNavigation {
           }),
           TextButton(onPressed:()=>Navigator.of(sheet).pop(
             DateTime.fromMillisecondsSinceEpoch(0)),
-            child:const Text('No expiration')),
+            child:const AppGradientActionLabel('No expiration')),
         ]),
       ),
     );

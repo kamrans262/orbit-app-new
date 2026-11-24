@@ -5,6 +5,22 @@ import 'app_colors.dart';
 abstract final class AppTypography {
   static const String fontFamily = 'Poppins';
 
+  static const List<String> emojiFontFallback = <String>[
+    'Apple Color Emoji',
+    'Noto Color Emoji',
+    'Samsung Color Emoji',
+    'Segoe UI Emoji',
+  ];
+
+  /// Standalone emoji must use the native Apple glyph font on iOS/macOS
+  /// rather than the app's Latin text font or Android-only Noto.
+  static String? emojiFontFamily(BuildContext context) {
+    final platform = Theme.of(context).platform;
+    return platform == TargetPlatform.iOS || platform == TargetPlatform.macOS
+        ? 'Apple Color Emoji'
+        : null;
+  }
+
   static const TextStyle largeHeading = TextStyle(
     fontFamily: fontFamily,
     fontSize: 29,

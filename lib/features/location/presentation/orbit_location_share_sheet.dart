@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import '../data/orbit_location_permission_service.dart';
 import '../data/orbit_location_avatar_grant_service.dart';
@@ -190,7 +191,7 @@ class _OrbitLocationShareFormState extends State<OrbitLocationShareForm> {
             enabled:!_creating&&widget.capabilities.global.canShare&&map.containsKey(_target),
             onPressed:()=>_submit()),
         ],
-        if(_error!=null&&_busy==false)TextButton(onPressed:_load,child:const Text('Retry')),
+        if(_error!=null&&_busy==false)TextButton(onPressed:_load,child:const AppGradientActionLabel('Retry')),
       ]);
   }
 }

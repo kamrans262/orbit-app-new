@@ -1,5 +1,6 @@
 import '../../../realtime/presentation/orbit_realtime_refresh.dart';
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 
 import '../widgets/orbit_circle_confirmation.dart';
 
@@ -81,7 +82,7 @@ _load();}
       Expanded(child:_loading ? const Center(child:CircularProgressIndicator())
       : _error!=null ? Center(child:Column(mainAxisSize:MainAxisSize.min,children:[
         Text(_error!,textAlign:TextAlign.center),
-        TextButton(onPressed:_load,child:const Text('Try again')),
+        TextButton(onPressed:_load,child:const AppGradientActionLabel('Try again')),
       ]))
       : _circles.isEmpty ? const Center(child:Text('No archived Circles.'))
       : ListView.builder(
@@ -94,7 +95,7 @@ _load();}
                   fontFamily:AppTypography.fontFamily,fontWeight:FontWeight.w600)),
                 subtitle:const Text('Archived • private access paused'),
                 trailing:TextButton(onPressed:()=>_restore(circle),
-                  child:const Text('Restore')),
+                  child:const AppGradientActionLabel('Restore')),
               ));
           }),
       ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
@@ -289,10 +290,10 @@ class _CheckInScreenState extends State<CheckInScreen> {
                         children:[
                           if(widget.onViewHistory!=null)
                             TextButton(onPressed:widget.onViewHistory,
-                              child:const Text('My Check-Ins')),
+                              child:const AppGradientActionLabel('My Check-Ins')),
                           if(widget.onViewFeed!=null)
                             TextButton(onPressed:widget.onViewFeed,
-                              child:const Text('Friends’ Check-Ins')),
+                              child:const AppGradientActionLabel('Friends’ Check-Ins')),
                         ]),
                     ],
                   ],

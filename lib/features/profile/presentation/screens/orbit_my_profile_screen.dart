@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/navigation/app_fade_slide_page_route.dart';
@@ -114,7 +115,7 @@ class _OrbitMyProfileScreenState extends State<OrbitMyProfileScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: <Widget>[
                         const Text('Could not load your profile.'),
-                        TextButton(onPressed: _reload, child: const Text('Try again')),
+                        TextButton(onPressed: _reload, child: const AppGradientActionLabel('Try again')),
                       ],
                     )
                   : const CircularProgressIndicator(),

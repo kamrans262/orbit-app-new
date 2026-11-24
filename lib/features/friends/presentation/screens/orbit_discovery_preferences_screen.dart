@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../core/widgets/app_action_row.dart';
@@ -86,7 +87,7 @@ class _OrbitDiscoveryPreferencesScreenState extends State<OrbitDiscoveryPreferen
           if (_error != null) ...[
             Text(_error!,textAlign:TextAlign.center,
               style:const TextStyle(color:Color(0xFFB91C1C))),
-            TextButton(onPressed:_load,child:const Text('Retry')),
+            TextButton(onPressed:_load,child:const AppGradientActionLabel('Retry')),
           ],
           if (_prefs != null) ...[
             IgnorePointer(

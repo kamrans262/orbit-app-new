@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 
 import '../../../../app/routing/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
@@ -569,7 +570,7 @@ class _CircleListMessage extends StatelessWidget {
               TextButton(
                 key: actionKey,
                 onPressed: onAction,
-                child: Text(action!),
+                child: AppGradientActionLabel(action!),
               ),
             ],
           ],

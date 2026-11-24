@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -656,7 +657,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
           if(!_publishingNow && _pendingPublishCount==0 &&
              _lastPublishFailure!=null)
             TextButton(onPressed:()=>setState(()=>_lastPublishFailure=null),
-              child:const Text('Dismiss')),
+              child:const AppGradientActionLabel('Dismiss')),
         ]),
       ),
     );

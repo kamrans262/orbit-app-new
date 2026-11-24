@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
@@ -285,8 +286,8 @@ class _OrbitLivePlanEditorScreenState extends State<OrbitLivePlanEditorScreen> w
       title:const Text('Discard pending Plan?'),
       content:const Text('A previous submission may have succeeded. Review your Plans before starting another.'),
       actions:[
-        TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('Keep')),
-        TextButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('Discard')),
+        TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const AppGradientActionLabel('Keep')),
+        TextButton(onPressed:()=>Navigator.pop(ctx,true),child:const AppGradientActionLabel('Discard')),
       ]));
     if(confirm!=true || !mounted)return;
     await _vault.clearIfMatches(_owner??'',_clientId);
@@ -317,7 +318,7 @@ class _OrbitLivePlanEditorScreenState extends State<OrbitLivePlanEditorScreen> w
               color:AppColors.primaryEnd))
           :!ready?Center(child:Column(mainAxisSize:MainAxisSize.min,children:[
               Text(_error??'Plan unavailable.',style:AppTypography.bodyMuted),
-              TextButton(onPressed:()=>unawaited(_load()),child:const Text('Retry')),
+              TextButton(onPressed:()=>unawaited(_load()),child:const AppGradientActionLabel('Retry')),
             ]))
           :Form(key:_form,child:AbsorbPointer(absorbing:_saving||_frozen,
             child:ListView(children:[
@@ -364,7 +365,7 @@ class _OrbitLivePlanEditorScreenState extends State<OrbitLivePlanEditorScreen> w
                   }),
               if(_hasMoreFriends)TextButton(
                 onPressed:_paging?null:()=>unawaited(_moreFriends()),
-                child:const Text('Load more friends')),
+                child:const AppGradientActionLabel('Load more friends')),
               const SizedBox(height:12),
               Text('Invite Circles',style:AppTypography.smallHeading),
               Text('Recipients must satisfy current Circle consent and privacy rules.',
@@ -386,7 +387,7 @@ class _OrbitLivePlanEditorScreenState extends State<OrbitLivePlanEditorScreen> w
                   }),
               if(_hasMoreCircles)TextButton(
                 onPressed:_paging?null:()=>unawaited(_moreCircles()),
-                child:const Text('Load more Circles')),
+                child:const AppGradientActionLabel('Load more Circles')),
               const SizedBox(height:20),
             ]))),
           ),
@@ -400,10 +401,10 @@ class _OrbitLivePlanEditorScreenState extends State<OrbitLivePlanEditorScreen> w
             enabled:!_saving,onPressed:()=>unawaited(_submit())),
           if(_frozen && !_saving) ...[
             TextButton(onPressed:()=>Navigator.of(context).pop(),
-              child:const Text('Close — keep pending Plan for later')),
+              child:const AppGradientActionLabel('Close — keep pending Plan for later')),
             if(!_editing)TextButton(
               onPressed:()=>unawaited(_discardPending()),
-              child:const Text('Discard pending Plan')),
+              child:const AppGradientActionLabel('Discard pending Plan')),
           ],
         ]))),
       ))

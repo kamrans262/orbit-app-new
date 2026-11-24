@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 import 'package:flutter/services.dart';
 import '../../../circles/presentation/widgets/orbit_circle_sheet.dart';
 import '../../../circles/presentation/widgets/orbit_circle_confirmation.dart';
@@ -993,7 +994,7 @@ class _ErrorState extends StatelessWidget {
               TextButton(
                 key: GroupChatScreenKeys.retryButton,
                 onPressed: onRetry,
-                child: const Text('Try again'),
+                child: const AppGradientActionLabel('Try again'),
               ),
             ],
           ],

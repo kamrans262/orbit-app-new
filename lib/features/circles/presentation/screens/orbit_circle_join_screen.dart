@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 
 import '../widgets/orbit_circle_confirmation.dart';
 
@@ -134,7 +135,7 @@ class _OrbitCircleJoinScreenState extends State<OrbitCircleJoinScreen> {
         key:const Key('m5_join_scan'),
         onPressed:_busy ? null : _scan,
         icon:const Icon(Icons.qr_code_scanner),
-        label:const Text('Scan invitation QR'),
+        label:const AppGradientActionLabel('Scan invitation QR'),
       ),
     ])),
   ])),

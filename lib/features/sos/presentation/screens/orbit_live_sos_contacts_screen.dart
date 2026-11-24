@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_screen_header.dart';
@@ -194,7 +195,7 @@ class _OrbitLiveSosContactsScreenState extends State<OrbitLiveSosContactsScreen>
                         Text(_error!,style:AppTypography.bodyMuted,
                           textAlign:TextAlign.center),
                         TextButton(onPressed:()=>unawaited(_load()),
-                          child:const Text('Try again')),
+                          child:const AppGradientActionLabel('Try again')),
                       ],
                     ))
                   :_contacts.isEmpty

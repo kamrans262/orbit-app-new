@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 
 import '../../circles/presentation/widgets/orbit_circle_confirmation.dart';
 import '../../circles/presentation/widgets/orbit_circle_sheet.dart';
@@ -86,7 +87,7 @@ class OrbitMessagingConversationActions {
             }),
             const SizedBox(height:8),
             TextButton(onPressed:()=>Navigator.of(sheet).pop(false),
-              child:const Text('Cancel')),
+              child:const AppGradientActionLabel('Cancel')),
           ],
         ));
       if(approved!=true||!context.mounted)return;

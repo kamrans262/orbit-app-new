@@ -66,13 +66,9 @@ class _PingOptionCardState extends State<PingOptionCard> {
                       child: Text(
                         widget.option.emoji,
                         textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontFamily: 'Noto Color Emoji',
-                          fontFamilyFallback: <String>[
-                            'Segoe UI Emoji',
-                            'Apple Color Emoji',
-                            'sans-serif',
-                          ],
+                        style: TextStyle(
+                          fontFamily: AppTypography.emojiFontFamily(context) ?? 'Noto Color Emoji',
+                          fontFamilyFallback: AppTypography.emojiFontFallback,
                           fontSize: 25,
                           height: 1,
                         ),

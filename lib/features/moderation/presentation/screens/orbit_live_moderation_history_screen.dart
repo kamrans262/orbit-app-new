@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
@@ -155,7 +156,7 @@ class _OrbitLiveModerationHistoryScreenState
                     if (_error != null) ...<Widget>[
                       Text(_error!, style: AppTypography.body),
                       TextButton(onPressed: _refresh,
-                          child: const Text('Try again')),
+                          child: const AppGradientActionLabel('Try again')),
                     ],
                     if (!_loading && _error == null) ...<Widget>[
                       _section('Your reports',
@@ -200,7 +201,7 @@ class _OrbitLiveModerationHistoryScreenState
                         child: TextButton.icon(
                           onPressed: _posting ? null : _refresh,
                           icon: const Icon(Icons.refresh_rounded),
-                          label: const Text('Refresh'),
+                          label: const AppGradientActionLabel('Refresh'),
                         ),
                       ),
                     ],

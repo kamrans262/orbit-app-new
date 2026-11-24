@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../app/theme/app_typography.dart';
+
 /// Rich chat text that keeps the app typeface for normal text while delegating
 /// emoji glyphs to the platform/system emoji fonts.
 class ChatRichText extends StatelessWidget {
@@ -18,12 +20,7 @@ class ChatRichText extends StatelessWidget {
   final int? maxLines;
   final TextOverflow overflow;
 
-  static const List<String> emojiFontFallback = <String>[
-    'Noto Color Emoji',
-    'Samsung Color Emoji',
-    'Segoe UI Emoji',
-    'Apple Color Emoji',
-  ];
+  static const List<String> emojiFontFallback = AppTypography.emojiFontFallback;
 
   // Longest tokens first so variants such as ❤️ and 🏖️ are consumed as one
   // visual glyph rather than leaving a variation selector behind.
@@ -46,14 +43,19 @@ class ChatRichText extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Text.rich(
-      TextSpan(children: _buildSpans(text), style: style),
+      TextSpan(
+        children: _buildSpans(text, context),
+        style: style.copyWith(
+          fontFamilyFallback: style.fontFamilyFallback ?? emojiFontFallback,
+        ),
+      ),
       textAlign: textAlign,
       maxLines: maxLines,
       overflow: overflow,
     );
   }
 
-  List<InlineSpan> _buildSpans(String source) {
+  List<InlineSpan> _buildSpans(String source, BuildContext context) {
     if (source.isEmpty) return const <InlineSpan>[];
 
     final spans = <InlineSpan>[];
@@ -79,14 +81,14 @@ class ChatRichText extends StatelessWidget {
         spans.add(TextSpan(text: source.substring(cursor, nextIndex)));
       }
 
-      spans.add(_emojiSpan(nextEmoji));
+      spans.add(_emojiSpan(nextEmoji, context));
       cursor = nextIndex + nextEmoji.length;
     }
 
     return spans;
   }
 
-  InlineSpan _emojiSpan(String emoji) {
+  InlineSpan _emojiSpan(String emoji, BuildContext context) {
     final fontSize = style.fontSize ?? 14;
     return WidgetSpan(
       alignment: PlaceholderAlignment.baseline,
@@ -97,6 +99,7 @@ class ChatRichText extends StatelessWidget {
         style: TextStyle(
           fontSize: fontSize,
           height: 1,
+          fontFamily: AppTypography.emojiFontFamily(context),
           fontFamilyFallback: emojiFontFallback,
         ),
       ),

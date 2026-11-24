@@ -48,6 +48,7 @@ class _SystemEmoji extends StatelessWidget {
       style: TextStyle(
         fontSize: size,
         height: 1,
+        fontFamily: AppTypography.emojiFontFamily(context),
         fontFamilyFallback: ChatRichText.emojiFontFallback,
       ),
     );
