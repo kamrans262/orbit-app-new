@@ -902,6 +902,24 @@ class OrbitIdentityClient {
     }
   }
 
+  Future<Map<String,dynamic>> billingRequest(String owner,String method,String path,{Map<String,Object?>? body})async{
+    const reads={'/billing/catalog?provider=apple','/billing/catalog?provider=google','/billing/entitlement'};
+    const writes={'/billing/purchase-context','/billing/verify'};
+    if(!((method=='GET'&&reads.contains(path))||(method=='POST'&&writes.contains(path))))throw ArgumentError('Invalid billing route.');
+    if(await currentLocalSocialOwner()!=owner)throw OrbitIdentityException('Billing account changed.',403);
+    if(_access==null)await refresh();
+    final token=_access;
+    if(token==null||await currentLocalSocialOwner()!=owner||_access!=token)throw OrbitIdentityException('Billing account changed.',403);
+    final request=http.Request(method,Uri.parse(_origin+path))..followRedirects=false
+      ..headers['Accept']='application/json'..headers['Content-Type']='application/json'
+      ..headers['Authorization']='Bearer '+token;
+    if(body!=null)request.body=jsonEncode(body);
+    final response=await http.Response.fromStream(await _http.send(request).timeout(const Duration(seconds:20))).timeout(const Duration(seconds:20));
+    if(await currentLocalSocialOwner()!=owner||response.statusCode<200||response.statusCode>=300)throw OrbitIdentityException('Billing verification unavailable.',response.statusCode);
+    if(response.bodyBytes.length>1048576)throw const FormatException('Billing response too large.');
+    return Map<String,dynamic>.from(jsonDecode(response.body) as Map);
+  }
+
   Future<Map<String, dynamic>> socialRequest(String method, String path,
       {Map<String, Object?>? body, String? idempotencyKey}) {
     if (!path.startsWith('/') || path.startsWith('//') ||
