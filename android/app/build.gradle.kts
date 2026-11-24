@@ -34,6 +34,10 @@ val orbitKeyPass = System.getenv("ORBIT_ANDROID_KEY_PASSWORD")
 val orbitHasSigning = listOf(orbitStore, orbitStorePass, orbitKeyAlias, orbitKeyPass)
     .all { !it.isNullOrBlank() }
 
+dependencies {
+    implementation("com.android.billingclient:billing:8.0.0")
+}
+
 android {
     namespace = "com.example.orbit_ui"
     compileSdk = flutter.compileSdkVersion

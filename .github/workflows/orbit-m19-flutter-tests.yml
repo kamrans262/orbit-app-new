@@ -1,0 +1,166 @@
+name: Orbit M19 Flutter Billing and previous modules
+on:
+  push:
+    branches: [feature/m19-billing-flutter-2026-11-24]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: orbit-m19-flutter-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  flutter-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Analyze Billing and existing Subscription screen
+        run: dart analyze lib/features/billing lib/features/profile/presentation/screens/subscription_screen.dart lib/features/profile/presentation/screens/profile_settings_screen.dart test/features/billing test/features/profile/presentation/screens/subscription_screen_test.dart
+      - name: Billing and Subscription UI tests
+        run: flutter test test/features/billing test/features/profile/presentation/screens/subscription_screen_test.dart
+      - name: Analyze Camera policy, editor and media integration
+        run: dart analyze lib/features/moments lib/features/media/data/orbit_media_crypto.dart lib/features/media/data/orbit_bounded_image.dart lib/features/media/data/orbit_moment_media_stager.dart lib/features/media/data/orbit_encrypted_clip_stager.dart lib/features/media/data/orbit_media_repository.dart test/features/moments test/features/media
+      - name: Camera and media regression
+        run: flutter test test/features/moments test/features/media
+      - name: Analyze Relay protocol and test fixtures
+        run: dart analyze lib/features/relay lib/features/messaging/data/orbit_messaging_vodozemac_cipher.dart lib/features/messaging/data/orbit_messaging_coordinator.dart lib/features/messaging/presentation/orbit_live_direct_chat_screen.dart lib/features/messaging/presentation/orbit_messaging_conversation_actions.dart test/features/relay
+      - name: Relay protocol tests
+        run: flutter test test/features/relay
+      - name: Full previous messaging regression
+        run: flutter test test/features/messaging
+      - name: Analyze M20 integrations and existing approved widgets
+        run: |
+          dart analyze lib/features/advertising \
+            lib/features/auth/data/orbit_identity_client.dart \
+            lib/features/home/domain/models/home_models.dart \
+            lib/features/home/presentation/widgets/promo_banner_card.dart \
+            lib/features/home/presentation/screens/home_screen.dart \
+            lib/features/home/presentation/screens/orbit_live_home_screen.dart \
+            lib/features/moments/domain/models/moments_models.dart \
+            lib/features/moments/presentation/screens/moments_screen.dart \
+            lib/features/moments/presentation/screens/orbit_live_moments_screen.dart \
+            test/features/advertising
+      - name: Verify M20 API source and original sponsored UI
+        run: flutter test test/features/advertising
+      - name: Preserve M18 owner-bound Activity contracts
+        run: flutter test test/features/activity
+      - name: Existing M7, M8 and M12 approved UI regression
+        run: |
+          flutter test test/features/moments/presentation/moments_screen_test.dart
+          flutter test test/features/check_in/presentation/check_in_screen_test.dart
+          flutter test test/features/home/presentation/m8_home_sections_test.dart
+          flutter test test/features/home/presentation/home_screen_test.dart
+      - name: Preserve M14, M17 contracts
+        run: |
+          flutter test test/features/notifications/orbit_notification_contract_test.dart
+          flutter test test/features/moderation/orbit_m17_moderation_contract_test.dart
+
+      - name: Analyze refreshed Plans and Notifications integrations
+        run: |
+          dart analyze lib/features/config/data/orbit_public_config_runtime.dart lib/main.dart lib/features/plans/data/orbit_plan_repository.dart lib/features/plans/presentation/screens/orbit_live_plans_screen.dart lib/features/plans/presentation/screens/orbit_live_plan_detail_screen.dart lib/features/notifications/presentation/orbit_live_notifications_screen.dart test/features/integration
+      - name: Admin-state refresh and earlier consumer contract tests
+        run: |
+          flutter test test/features/integration
+          flutter test test/features/plans/orbit_m15_plans_contract_test.dart test/features/sos/orbit_m16_sos_contract_test.dart
+          flutter test test/features/auth/orbit_m3_offline_profile_test.dart test/features/profile/orbit_profile_settings_repository_test.dart test/features/friends/orbit_m4_social_repository_test.dart
+          flutter test test/features/circles/orbit_m5_api_contract_test.dart test/features/media/orbit_media_repository_test.dart test/features/home/data/orbit_dashboard_repository_test.dart test/features/presence/orbit_m9_presence_contract_test.dart
+          flutter test test/features/location/orbit_m10_location_contract_test.dart test/features/ping/data/orbit_ping_record_test.dart test/features/messaging/orbit_m13_messaging_safety_test.dart test/features/app_update/orbit_update_runtime_test.dart
+
+  android-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: CI-only Firebase compile registration, never committed
+        run: |
+          test ! -e android/app/google-services.json
+          cat > android/app/google-services.json <<'EOF'
+          {
+            "project_info": {
+              "project_number": "123456789012",
+              "project_id": "orbit-ci-compile-only",
+              "storage_bucket": "orbit-ci-compile-only.invalid"
+            },
+            "client": [{
+              "client_info": {
+                "mobilesdk_app_id": "1:123456789012:android:abcdef0123456789",
+                "android_client_info": {"package_name": "com.orbit.orbit_app"}
+              },
+              "api_key": [{"current_key": "CI_ONLY_NOT_A_REAL_GOOGLE_API_KEY"}]
+            }],
+            "configuration_version": "1"
+          }
+          EOF
+          test -z "$(git ls-files android/app/google-services.json)"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build real native Olm and Relay library for Android
+        run: |
+          cargo install cargo-ndk --locked
+          bash native/orbit_vodozemac/build_android.sh
+      - run: flutter build apk --debug
+      - name: Verify all three native library ABIs in the APK
+        run: |
+          apk=build/app/outputs/flutter-apk/app-debug.apk
+          test -s "$apk"
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            unzip -Z1 "$apk" | grep -Fx "lib/$abi/liborbit_vodozemac.so"
+          done
+
+  ios-no-sign-build:
+    runs-on: macos-15
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build real native device and simulator Rust archives
+        run: bash native/orbit_vodozemac/build_ios.sh
+      - run: flutter build ios --debug --no-codesign
+      - name: Verify linked native ABI symbols
+        run: |
+          binary=build/ios/iphoneos/Runner.app/Runner
+          test -s "$binary"
+          nm -g "$binary" > /tmp/orbit-m22-symbols.txt
+          grep -q '_orbit_vodozemac_call' /tmp/orbit-m22-symbols.txt
+          grep -q '_orbit_vodozemac_free' /tmp/orbit-m22-symbols.txt
+
+  native-relay-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - run: cargo test --manifest-path native/orbit_vodozemac/Cargo.toml --locked
+      - run: cargo build --manifest-path native/orbit_vodozemac/Cargo.toml --release --locked
+      - run: flutter pub get
+      - name: Verify Relay identity proof and existing Olm/Megolm native ABI
+        run: |
+          export LD_LIBRARY_PATH="$PWD/native/orbit_vodozemac/target/release"
+          export ORBIT_M13_NATIVE_REQUIRED=1
+          flutter test test/features/relay/orbit_relay_native_sign_test.dart test/features/messaging/orbit_vodozemac_native_roundtrip_test.dart test/features/messaging/orbit_vodozemac_provider_integration_test.dart

@@ -14,9 +14,11 @@ import io.flutter.plugin.common.MethodChannel
 // Foreground-only local DNS-SD. Names are random per session, never user IDs.
 class MainActivity : FlutterActivity() {
     private var relay: RelayDiscovery? = null
+    private var billing: OrbitStoreBilling? = null
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         relay = RelayDiscovery(this, MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "orbit/relay_discovery"))
+        billing = OrbitStoreBilling(this, MethodChannel(flutterEngine.dartExecutor.binaryMessenger,"orbit/billing"))
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger,"orbit/capture_inspection").setMethodCallHandler { call,result ->
             if(call.method!="inspect"){result.notImplemented();return@setMethodCallHandler}
             val path=call.argument<String>("path")
@@ -41,6 +43,8 @@ class MainActivity : FlutterActivity() {
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
         relay?.stop()
         relay = null
+        billing?.close()
+        billing = null
         super.cleanUpFlutterEngine(flutterEngine)
     }
 }

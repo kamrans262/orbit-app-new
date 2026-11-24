@@ -4,11 +4,13 @@ import UIKit
 import Darwin
 import AVFoundation
 import AudioToolbox
+import StoreKit
 import workmanager_apple
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private var relayDiscovery: OrbitRelayDiscovery?
+  private var billing: OrbitStoreBilling?
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
@@ -31,6 +33,9 @@ import workmanager_apple
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "OrbitRelayDiscovery") {
       relayDiscovery = OrbitRelayDiscovery(messenger: registrar.messenger())
+    }
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "OrbitStoreBilling") {
+      billing = OrbitStoreBilling(messenger: registrar.messenger())
     }
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "OrbitCaptureInspection") {
       let channel = FlutterMethodChannel(name: "orbit/capture_inspection", binaryMessenger: registrar.messenger())
@@ -164,4 +169,99 @@ private func inspectOrbitCapture(_ path: String) -> [String:Any]? {
     out["fps"]=Double(track.nominalFrameRate);out["video_bps"]=Double(track.estimatedDataRate)
   }
   return out
+}
+
+
+// StoreKit2 returns signed JWS to Laravel. No local entitlement or receipt
+// persistence. Unfinished transactions remain recoverable across restarts.
+@available(iOS 15.0, *)
+private final class OrbitStoreBilling {
+  private let channel: FlutterMethodChannel
+  private var busy = false
+  init(messenger: FlutterBinaryMessenger) {
+    channel = FlutterMethodChannel(name:"orbit/billing",binaryMessenger:messenger)
+    channel.setMethodCallHandler { [weak self] call,result in
+      #if DEBUG
+      guard let self = self else { result(FlutterError(code:"unavailable",message:"Store unavailable",details:nil)); return }
+      Task { @MainActor in await self.handle(call,result) }
+      #else
+      result(FlutterError(code:"disabled",message:"Sandbox billing disabled",details:nil))
+      #endif
+    }
+  }
+  @MainActor private func handle(_ call:FlutterMethodCall,_ result:@escaping FlutterResult) async {
+    guard !busy else {result(FlutterError(code:"busy",message:"Store busy",details:nil));return}
+    busy=true;defer{busy=false}
+    let args=call.arguments as? [String:Any] ?? [:]
+    do {
+      switch call.method {
+      case "products":
+        let mappings=args["mappings"] as? [[String:Any]] ?? []
+        guard mappings.count<=16 else {throw BillingError.invalid}
+        let ids=mappings.compactMap{$0["product_id"] as? String}
+        let products=try await Product.products(for:ids)
+        let rows:[[String:Any]]=mappings.compactMap { mapping in
+          guard let id=mapping["product_id"] as? String, let product=products.first(where:{$0.id==id}),self.monthly(product) else{return nil}
+          return ["id":mapping["id"] ?? NSNull(),"product_id":id,"base_plan_id":NSNull(),"price":product.displayPrice]
+        }
+        result(rows)
+      case "purchase":
+        guard args["environment"] as? String=="sandbox",let id=args["product_id"] as? String,
+              let binding=args["account_binding"] as? String,let token=UUID(uuidString:binding) else {throw BillingError.invalid}
+        // Never launch against a currently active store subscription.
+        for await value in StoreKit.Transaction.currentEntitlements {
+          if case .verified(let tx)=value,tx.productType == .autoRenewable {throw BillingError.invalid}
+        }
+        guard let product=try await Product.products(for:[id]).first,monthly(product) else {throw BillingError.invalid}
+        switch try await product.purchase(options:[.appAccountToken(token)]) {
+        case .success(let verification):
+          guard case .verified(let tx)=verification,tx.appAccountToken==token else {throw BillingError.invalid}
+          if #available(iOS 16.0, *) {guard tx.environment == .sandbox else {throw BillingError.invalid}}
+          else {throw BillingError.invalid}
+          result("purchased")
+        case .pending: result("pending")
+        case .userCancelled: result("cancelled")
+        @unknown default: throw BillingError.invalid
+        }
+      case "recover":
+        if args["restore"] as? Bool==true {try await AppStore.sync()}
+        var rows:[[String:Any]]=[]
+        var seen=Set<UInt64>()
+        for await item in StoreKit.Transaction.unfinished {
+          if let row=record(item,&seen){rows.append(row)}
+          if rows.count>64{throw BillingError.invalid}
+        }
+        for await item in StoreKit.Transaction.currentEntitlements {
+          if let row=record(item,&seen){rows.append(row)}
+          if rows.count>64{throw BillingError.invalid}
+        }
+        result(rows)
+      case "finish":
+        guard let proof=args["proof"] as? String else {throw BillingError.invalid}
+        for await item in StoreKit.Transaction.unfinished {
+          if item.jwsRepresentation==proof,case .verified(let tx)=item {
+            if #available(iOS 16.0, *),tx.environment == .sandbox {await tx.finish()}
+            else {throw BillingError.invalid}
+            break
+          }
+        }
+        result(nil)
+      case "manage":
+        guard let scene=UIApplication.shared.connectedScenes.compactMap({$0 as? UIWindowScene}).first(where:{$0.activationState == .foregroundActive}) else {throw BillingError.invalid}
+        try await AppStore.showManageSubscriptions(in:scene);result(nil)
+      default: result(FlutterMethodNotImplemented)
+      }
+    }catch{result(FlutterError(code:"unavailable",message:"Store operation unavailable; restore purchases to retry",details:nil))}
+  }
+  private enum BillingError:Error{case invalid}
+  private func monthly(_ product:Product)->Bool{
+    guard product.type == .autoRenewable,let period=product.subscription?.subscriptionPeriod else{return false}
+    return period.unit == .month && period.value==1
+  }
+  private func record(_ value:VerificationResult<StoreKit.Transaction>,_ seen:inout Set<UInt64>)->[String:Any]?{
+    guard case .verified(let tx)=value,tx.productType == .autoRenewable,let binding=tx.appAccountToken else{return nil}
+    guard #available(iOS 16.0, *),tx.environment == .sandbox else{return nil}
+    guard seen.insert(tx.id).inserted else{return nil}
+    return ["proof":value.jwsRepresentation,"product_id":tx.productID,"binding":binding.uuidString.lowercased(),"state":"purchased"]
+  }
 }
