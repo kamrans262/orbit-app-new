@@ -69,4 +69,18 @@ void main() {
     expect(requested, OrbitSubscriptionTier.plus);
     expect(find.text('Not connected to your account yet'), findsOneWidget);
   });
+
+  testWidgets('live screen uses native prices and never promises unapproved benefits',(tester)async{
+    await tester.binding.setSurfaceSize(const Size(390,844));addTearDown(()=>tester.binding.setSurfaceSize(null));
+    var launches=0;
+    await tester.pumpWidget(MaterialApp(home:SubscriptionScreen(liveBilling:true,storePrices:const {'lite':'PKR 500'},
+      allowedPurchaseTiers:const {},restoreEnabled:false,onPlanRequested:(_){launches++;})));
+    await tester.ensureVisible(find.byKey(SubscriptionKeys.plan('lite')));
+    await tester.pumpAndSettle();
+    expect(find.text('PKR 500'),findsOneWidget);
+    expect(find.text('90-day activity history'),findsNothing);
+    await tester.tap(find.byKey(SubscriptionKeys.plan('lite')).hitTestable());await tester.pump();
+    await tester.tap(find.byKey(SubscriptionKeys.purchaseButton));await tester.pump();
+    expect(launches,0);
+  });
 }

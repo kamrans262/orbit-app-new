@@ -178,8 +178,18 @@ private func inspectOrbitCapture(_ path: String) -> [String:Any]? {
 private final class OrbitStoreBilling {
   private let channel: FlutterMethodChannel
   private var busy = false
+  private var verifiedForFinish:[String:StoreKit.Transaction]=[:]
+  private var updatesTask:Task<Void,Never>?
   init(messenger: FlutterBinaryMessenger) {
     channel = FlutterMethodChannel(name:"orbit/billing",binaryMessenger:messenger)
+    #if DEBUG
+    updatesTask=Task { [weak self] in
+      for await _ in StoreKit.Transaction.updates {
+        // No acknowledgement or entitlement before backend verification.
+        await MainActor.run { self?.channel.invokeMethod("changed",arguments:nil) }
+      }
+    }
+    #endif
     channel.setMethodCallHandler { [weak self] call,result in
       #if DEBUG
       guard let self = self else { result(FlutterError(code:"unavailable",message:"Store unavailable",details:nil)); return }
@@ -206,6 +216,7 @@ private final class OrbitStoreBilling {
         }
         result(rows)
       case "purchase":
+        guard #available(iOS 16.0, *) else {throw BillingError.invalid}
         guard args["environment"] as? String=="sandbox",let id=args["product_id"] as? String,
               let binding=args["account_binding"] as? String,let token=UUID(uuidString:binding) else {throw BillingError.invalid}
         // Never launch against a currently active store subscription.
@@ -216,8 +227,7 @@ private final class OrbitStoreBilling {
         switch try await product.purchase(options:[.appAccountToken(token)]) {
         case .success(let verification):
           guard case .verified(let tx)=verification,tx.appAccountToken==token else {throw BillingError.invalid}
-          if #available(iOS 16.0, *) {guard tx.environment == .sandbox else {throw BillingError.invalid}}
-          else {throw BillingError.invalid}
+          guard tx.environment == .sandbox else {throw BillingError.invalid}
           result("purchased")
         case .pending: result("pending")
         case .userCancelled: result("cancelled")
@@ -226,6 +236,7 @@ private final class OrbitStoreBilling {
       case "recover":
         if args["restore"] as? Bool==true {try await AppStore.sync()}
         var rows:[[String:Any]]=[]
+        verifiedForFinish.removeAll()
         var seen=Set<UInt64>()
         for await item in StoreKit.Transaction.unfinished {
           if let row=record(item,&seen){rows.append(row)}
@@ -238,13 +249,9 @@ private final class OrbitStoreBilling {
         result(rows)
       case "finish":
         guard let proof=args["proof"] as? String else {throw BillingError.invalid}
-        for await item in StoreKit.Transaction.unfinished {
-          if item.jwsRepresentation==proof,case .verified(let tx)=item {
-            if #available(iOS 16.0, *),tx.environment == .sandbox {await tx.finish()}
-            else {throw BillingError.invalid}
-            break
-          }
-        }
+        guard let tx=verifiedForFinish.removeValue(forKey:proof) else {throw BillingError.invalid}
+        if #available(iOS 16.0, *),tx.environment == .sandbox {await tx.finish()}
+        else {throw BillingError.invalid}
         result(nil)
       case "manage":
         guard let scene=UIApplication.shared.connectedScenes.compactMap({$0 as? UIWindowScene}).first(where:{$0.activationState == .foregroundActive}) else {throw BillingError.invalid}
@@ -253,6 +260,7 @@ private final class OrbitStoreBilling {
       }
     }catch{result(FlutterError(code:"unavailable",message:"Store operation unavailable; restore purchases to retry",details:nil))}
   }
+  deinit {updatesTask?.cancel()}
   private enum BillingError:Error{case invalid}
   private func monthly(_ product:Product)->Bool{
     guard product.type == .autoRenewable,let period=product.subscription?.subscriptionPeriod else{return false}
@@ -262,6 +270,7 @@ private final class OrbitStoreBilling {
     guard case .verified(let tx)=value,tx.productType == .autoRenewable,let binding=tx.appAccountToken else{return nil}
     guard #available(iOS 16.0, *),tx.environment == .sandbox else{return nil}
     guard seen.insert(tx.id).inserted else{return nil}
+    verifiedForFinish[value.jwsRepresentation]=tx
     return ["proof":value.jwsRepresentation,"product_id":tx.productID,"binding":binding.uuidString.lowercased(),"state":"purchased"]
   }
 }

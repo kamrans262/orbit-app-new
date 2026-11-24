@@ -91,31 +91,46 @@ class OrbitBillingController extends ChangeNotifier{
   Future<void> choose(String selected)=>_run(()async{
     await _load();
     final saved=await _checked(()=>journal.read(owner));
-    if(saved!=null){await _recover(false);message='Previous purchase checked. Restore purchases before another checkout.';return;}
+    if(saved!=null&&saved['phase']!='requesting'){
+      await _recover(false);
+      message='Previous purchase checked. Restore purchases before another checkout.';
+      return;
+    }
     if(!purchaseEnabled||!['free','expired','revoked'].contains(state)||!prices.containsKey(selected)||!_mapping.containsKey(selected)){
       message='This plan is not available for purchase.';return;
     }
-    final mapping=_mapping[selected]!,request=const Uuid().v4();
-    await _checked(()=>journal.write(owner,{'provider':store.provider,'mapping':mapping['id'],'request_id':request}));
+    final mapping=_mapping[selected]!;
+    if(saved!=null&&(saved['provider']!=store.provider||saved['mapping']!=mapping['id']||saved['request_id'] is! String)){
+      message='Retry the original plan or restore purchases.';return;
+    }
+    final request=saved?['request_id'] as String? ??const Uuid().v4();
+    final checkpoint=<String,dynamic>{'provider':store.provider,'mapping':mapping['id'],'request_id':request,
+      'created_at':saved?['created_at']??DateTime.now().toUtc().toIso8601String(),'phase':'requesting'};
+    await _checked(()=>journal.write(owner,checkpoint));
     final c=await _checked(()=>api.context(store.provider,mapping['id'] as String,request));
     if(!_sandbox(c)||c['context_id'] is! String||c['account_binding'] is! String||c['product_id']!=mapping['product_id']||c['base_plan_id']!=mapping['base_plan_id']||
        !(DateTime.tryParse(c['expires_at']?.toString()??'')?.isAfter(DateTime.now().toUtc())??false))throw const FormatException('Invalid checkout context.');
-    await _checked(()=>journal.write(owner,{'provider':store.provider,'mapping':mapping['id'],'request_id':request,'context':c}));
+    // Persist before crossing the native payment boundary. A crash after
+    // this write must recover rather than launch another checkout.
+    await _checked(()=>journal.write(owner,{...checkpoint,'phase':'launched','context':c}));
     final outcome=await _checked(()=>store.purchase(c));
-    if(outcome=='cancelled'){await _checked(()=>journal.clear(owner));message='Purchase cancelled.';return;}
-    await _recover(false);_apply(await _checked(api.entitlement));
-    message=outcome=='pending'?'Purchase pending store confirmation.':'Purchase checked with the billing server.';
+    if(outcome=='cancelled'){await _checked(()=>journal.clear(owner));message='Purchase cancelled. The checkout context may remain reserved for 15 minutes.';return;}
+    final recovered=await _recover(false);_apply(await _checked(api.entitlement));
+    if(outcome=='pending'||!recovered||await _checked(()=>journal.read(owner))!=null){
+      message='Purchase pending confirmation or verification. Restore purchases to retry.';
+    }else{message='Purchase verified by the billing server.';}
   });
   Future<void> restore()=>_run(()async{
     if(!checkoutEnabled){message='Sandbox test build required.';return;}
-    await _recover(true);await _load();
+    final verified=await _recover(true);await _load();
+    message=verified?'Store purchases verified.':'No newly verified purchase; pending purchases can be restored later.';
   });
-  Future<void> _recover(bool restore)async{
-    if(!checkoutEnabled)return;
+  Future<bool> _recover(bool restore)async{
+    if(!checkoutEnabled)return false;
     final saved=await _checked(()=>journal.read(owner));
     final ctx=saved?['context'];
     final rows=await _checked(()=>store.recover(restore:restore));
-    var pending=false,matched=false;
+    var pending=false,matched=false,verified=false;
     for(final item in rows.take(64)){
       final proof=item['proof'];if(proof is! String||proof.isEmpty||proof.length>65536)continue;
       final same=ctx is Map&&saved?['provider']==store.provider&&item['binding']==ctx['account_binding']&&item['product_id']==ctx['product_id'];
@@ -129,15 +144,17 @@ class OrbitBillingController extends ChangeNotifier{
         if(e is! Map||!['verified','pending'].contains(result['status']))throw const FormatException('Invalid verification result.');
         _apply(Map<String,dynamic>.from(e));
         if(result['status']=='verified'&&result['finish_permitted']==true){
-          await _checked(()=>store.finish(proof));if(same)await _checked(()=>journal.clear(owner));
+          await _checked(()=>store.finish(proof));verified=true;if(same)await _checked(()=>journal.clear(owner));
         }else{pending=true;}
       }catch(_){await _bound();pending=true;}
     }
     if(restore&&saved!=null&&!matched&&!pending){
-      final expired=ctx is! Map||!(DateTime.tryParse(ctx['expires_at']?.toString()??'')?.isAfter(DateTime.now().toUtc())??false);
+      final cutoff=ctx is Map?DateTime.tryParse(ctx['expires_at']?.toString()??''):DateTime.tryParse(saved['created_at']?.toString()??'')?.add(const Duration(minutes:15));
+      final expired=cutoff!=null&&!cutoff.isAfter(DateTime.now().toUtc());
       if(expired)await _checked(()=>journal.clear(owner));
     }
     if(pending)message='Purchase pending verification. Restore purchases to retry.';
+    return verified&&!pending;
   }
   Future<void> manage()=>_run(()async{await _load();if(!canManage){message='Subscription management is unavailable.';return;}await _checked(store.manage);});
   @override void dispose(){_disposed=true;_expiry?.cancel();super.dispose();}

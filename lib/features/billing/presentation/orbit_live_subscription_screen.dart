@@ -31,11 +31,13 @@ class _OrbitLiveSubscriptionScreenState extends State<OrbitLiveSubscriptionScree
         final c=injected??OrbitBillingController(owner:owner,currentOwner:identity.currentLocalSocialOwner,
           api:OrbitBillingRepository(owner),store:OrbitNativeBillingStore(Platform.isIOS?'apple':'google'),
           journal:OrbitSecureBillingJournal(),checkoutEnabled:kDebugMode&&OrbitNativeBillingStore.sandboxBuild);
-        _controller=c;c.addListener(_changed);await c.refresh();
+        _controller=c;c.addListener(_changed);
+        if(injected==null&&c.checkoutEnabled){OrbitNativeBillingStore.channel.setMethodCallHandler((call)async{if(call.method=='changed'&&mounted)await c.refresh();});}
+        await c.refresh();
       }
     }finally{
       if(mounted){setState(()=>_initializing=false);
-        _timer=Timer.periodic(const Duration(seconds:15),(_){final c=_controller;if(c!=null&&WidgetsBinding.instance.lifecycleState==AppLifecycleState.resumed)unawaited(c.refresh());});
+        _timer=Timer.periodic(const Duration(seconds:60),(_){final c=_controller;if(c!=null&&WidgetsBinding.instance.lifecycleState==AppLifecycleState.resumed)unawaited(c.refresh(recover:false));});
       }
     }
   }
@@ -61,6 +63,6 @@ class _OrbitLiveSubscriptionScreenState extends State<OrbitLiveSubscriptionScree
   }
   @override void dispose(){
     _timer?.cancel();WidgetsBinding.instance.removeObserver(this);
-    _controller?.removeListener(_changed);if(widget.controller==null)_controller?.dispose();super.dispose();
+    _controller?.removeListener(_changed);if(widget.controller==null){if(_controller?.checkoutEnabled==true)OrbitNativeBillingStore.channel.setMethodCallHandler(null);_controller?.dispose();}super.dispose();
   }
 }

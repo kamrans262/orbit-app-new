@@ -113,7 +113,9 @@ internal class OrbitStoreBilling(private val activity:FlutterActivity,private va
         }
     }
     override fun onPurchasesUpdated(r:BillingResult,purchases:MutableList<Purchase>?){
-        val result=checkout?:return;checkout=null
+        val result=checkout
+        if(result==null){channel.invokeMethod("changed",null);return}
+        checkout=null
         when(r.responseCode){
             BillingClient.BillingResponseCode.USER_CANCELED->result.success("cancelled")
             BillingClient.BillingResponseCode.OK->result.success(if(purchases?.any{it.purchaseState==Purchase.PurchaseState.PENDING}==true)"pending" else "purchased")

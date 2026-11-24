@@ -5,13 +5,13 @@ import 'package:orbit_ui/features/billing/data/orbit_billing_controller.dart';
 BillingJson sampleEntitlement({String? tier='free',String state='free',String environment='sandbox'})=>{'environment':environment,'tier':tier,'state':state,'revision':1,'capabilities':{},'effective_until':tier=='lite'||tier=='plus'?DateTime.now().toUtc().add(const Duration(days:1)).toIso8601String():null};
 class Api implements OrbitBillingApi{
   BillingJson status=sampleEntitlement();
-  bool verifyFails=false,enabled=true;
+  bool verifyFails=false,enabled=true,contextFails=false;
   int contexts=0,verifies=0;
-  final requests=<String>[];
+  final requests=<String>[],contextRequests=<String>[];
   @override Future<BillingJson> catalog(String provider)async=>{'environment':'sandbox','production_enabled':false,'provider':provider,'purchase_enabled':enabled,'products':[{'id':'mapped','tier':'lite','product_id':'orbit.lite','base_plan_id':'monthly','interval':'month','available':true}]};
   @override Future<BillingJson> entitlement()async=>status;
   @override Future<BillingJson> context(String provider,String mapping,String requestId)async{
-    contexts++;
+    contexts++;contextRequests.add(requestId);if(contextFails)throw StateError('lost context response');
     return {'environment':'sandbox','context_id':'context','account_binding':'binding','product_id':'orbit.lite','base_plan_id':'monthly','expires_at':DateTime.now().toUtc().add(const Duration(minutes:15)).toIso8601String()};
   }
   @override Future<BillingJson> verify(String provider,String proof,String requestId,{String? contextId})async{
@@ -76,6 +76,13 @@ void main(){
     final c=controller();store.onPurchase=()async{owner='b';};await c.choose('lite');
     expect(c.tier,isNull);expect(api.verifies,0);expect(store.finishes,0);
     expect(journal.values['a'],isNotNull);expect(journal.values['b'],isNull);
+  });
+  test('lost context response resumes original request instead of creating another',()async{
+    final c=controller();api.contextFails=true;await c.choose('lite');
+    expect(store.purchases,0);expect(journal.values['a']!['phase'],'requesting');
+    api.contextFails=false;await c.choose('lite');
+    expect(api.contextRequests.length,2);expect(api.contextRequests.first,api.contextRequests.last);
+    expect(store.purchases,1);expect(c.tier,'lite');
   });
   test('malformed environment never activates paid status',()async{
     final c=controller();api.status={'environment':'production','tier':'lite','state':'active','revision':1,'capabilities':{}};
