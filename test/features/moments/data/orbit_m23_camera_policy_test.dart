@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:orbit_ui/features/moments/data/orbit_camera_policy.dart';
+import 'package:orbit_ui/features/moments/data/orbit_camera_tool_catalog.dart';
 import 'package:orbit_ui/features/moments/data/orbit_capture_inspection.dart';
 import 'package:orbit_ui/features/moments/data/moment_photo_processor.dart';
 import 'package:orbit_ui/features/media/data/orbit_media_crypto.dart';
@@ -12,6 +13,15 @@ Map<String,Object> hints()=>{'schema_version':1,'revision':4,'enhancements_enabl
   'video_target_bps':3000000,'video_data_saver_target_bps':1000000,
   'voice_duration_ms':15000,'voice_codec':'AAC-LC','voice_channels':1,'voice_target_bps':64000};
 void main(){
+  test('M24 camera catalog bounds approved tools and keeps missing baseline',(){
+    expect(OrbitCameraToolCatalog.fromHints(null).filters.length,9);
+    final p=OrbitCameraToolCatalog.fromHints({'schema_version':1,'revision':2,'filters':['warm','natural'],'stickers':['⭐']});
+    expect(p.filters,['natural','warm']);expect(p.stickers,['⭐']);
+    expect(p.allowsFilter('film'),false);expect(p.allowsSticker('🔥'),false);
+    for(final raw in [42,{'schema_version':1,'revision':1,'filters':['warm'],'stickers':[]},{'schema_version':1,'revision':1,'filters':['natural','natural'],'stickers':[]},{'schema_version':1,'revision':1,'filters':['natural'],'stickers':['unknown']}]){
+      final safe=OrbitCameraToolCatalog.fromHints(raw);expect(safe.filters,['natural']);expect(safe.stickers,isEmpty);
+    }
+  });
   test('versioned bounded backend policy consumes literal key values',(){
     final p=OrbitCameraPolicy.fromHints(hints());
     expect(p.revision,4);expect(p.enhanced,true);expect(p.photoLimit(true),720);
