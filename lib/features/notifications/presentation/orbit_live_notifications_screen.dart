@@ -28,7 +28,8 @@ import '../data/orbit_notification_repository.dart';
 /// No fabricated content, persisted targets, automatic "delivered" receipt,
 /// or notification-derived grant to a private feature.
 class OrbitLiveNotificationsScreen extends StatefulWidget {
-  const OrbitLiveNotificationsScreen({super.key,this.repository});
+  const OrbitLiveNotificationsScreen({super.key,this.repository,this.identity});
+  final OrbitIdentityClient? identity;
   final OrbitNotificationRepository? repository;
   @override
   State<OrbitLiveNotificationsScreen> createState()=>
@@ -36,8 +37,9 @@ class OrbitLiveNotificationsScreen extends StatefulWidget {
 }
 class _OrbitLiveNotificationsScreenState
     extends State<OrbitLiveNotificationsScreen> with WidgetsBindingObserver {
+  late final OrbitIdentityClient _identity=widget.identity??OrbitIdentityClient.instance;
   late final OrbitNotificationRepository _repo=
-      widget.repository??OrbitNotificationRepository();
+      widget.repository??OrbitNotificationRepository(identity:_identity);
   final OrbitMomentRepository _moments=OrbitMomentRepository();
   final OrbitPingRepository _pings=OrbitPingRepository();
   final OrbitCheckInRepository _checkins=OrbitCheckInRepository();
@@ -62,17 +64,24 @@ class _OrbitLiveNotificationsScreenState
   @override
   void didChangeAppLifecycleState(AppLifecycleState state){
     if(state==AppLifecycleState.resumed)unawaited(_load());
+    if(state==AppLifecycleState.inactive||state==AppLifecycleState.hidden||
+       state==AppLifecycleState.paused){
+      ++_epoch;
+      if(mounted)setState((){_items.clear();_cursor=null;_owner=null;
+        _loading=true;_more=false;});
+    }
   }
 
   Future<void> _load() async {
     final serial=++_epoch;
-    if(mounted)setState((){_loading=true;_error=null;});
+    if(mounted)setState((){_loading=true;_error=null;_items.clear();
+      _cursor=null;_owner=null;_more=false;});
     try{
-      final owner=await OrbitIdentityClient.instance.currentLocalSocialOwner();
+      final owner=await _identity.currentLocalSocialOwner();
       if(owner==null)throw OrbitIdentityException('Sign in to view notifications.',401);
       final page=await _repo.page();
       if(!mounted || serial!=_epoch)return;
-      if(await OrbitIdentityClient.instance.currentLocalSocialOwner()!=owner) {
+      if(await _identity.currentLocalSocialOwner()!=owner) {
         throw OrbitIdentityException('Account changed.',401);
       }
       if(mounted&&serial==_epoch){
@@ -94,30 +103,39 @@ class _OrbitLiveNotificationsScreenState
   }
   Future<void> _loadMore() async {
     final cursor=_cursor,owner=_owner;
-    if(cursor==null||_more||owner==null)return;
-    _more=true;
+    if(cursor==null||_more||owner==null||_loading)return;
+    final serial=_epoch;
+    setState(()=>_more=true);
     try{
       final page=await _repo.page(cursor:cursor);
-      if(!mounted||_owner!=owner ||
-         await OrbitIdentityClient.instance.currentLocalSocialOwner()!=owner){
-        return;
-      }
+      final current=await _identity.currentLocalSocialOwner();
+      if(!mounted||serial!=_epoch||_owner!=owner)return;
+      if(current!=owner)throw OrbitIdentityException('Account changed.',401);
       final known=_items.map((e)=>e.id).toSet();
       setState((){
         _items.addAll(page.items.where((e)=>known.add(e.id)));
         _cursor=page.nextCursor;_error=null;
       });
-    }catch(_){
-      if(mounted)setState(()=>_error='Could not load older notifications.');
+    }catch(error){
+      if(mounted&&serial==_epoch){
+        if(error is OrbitIdentityException &&
+          const {401,403,404,409,410,503}.contains(error.statusCode)){
+          setState((){_items.clear();_cursor=null;_owner=null;
+            _error='Notifications are unavailable. Check your connection and retry.';});
+        }else{
+          setState(()=>_error='Could not load older notifications.');
+        }
+      }
     }finally{
-      _more=false;
+      if(mounted&&serial==_epoch)setState(()=>_more=false);
     }
   }
 
   Future<void> _markAll() async {
-    if(_opening)return;
+    if(_opening||_loading||_owner==null)return;
     _opening=true;
     try{
+      if(await _identity.currentLocalSocialOwner()!=_owner)return;
       await _repo.markAllRead();
       if(mounted)await _load();
     }catch(_){
@@ -135,9 +153,12 @@ class _OrbitLiveNotificationsScreenState
     if(_opening)return;
     _opening=true;
     try{
-      final owner=_owner;
-      if(owner==null ||
-         await OrbitIdentityClient.instance.currentLocalSocialOwner()!=owner){
+      final owner=_owner,serial=_epoch;
+      Future<bool> authorized() async {
+        final current=await _identity.currentLocalSocialOwner();
+        return mounted&&serial==_epoch&&_owner==owner&&current==owner&&owner!=null;
+      }
+      if(!await authorized()||!_items.any((n)=>n.id==item.id)){
         throw StateError('Session changed.');
       }
       if(item.category=='moments'){
@@ -154,27 +175,27 @@ class _OrbitLiveNotificationsScreenState
         await _repo.markRead(item.id);
         try {await _moments.markNotificationRead(legacy['id'] as String);}
         catch(_){} // Unified read receipt was already acknowledged.
-        if(!mounted)return;
+        if(!await authorized())return;
         await Navigator.of(context).push<void>(MaterialPageRoute(
           builder:(_)=>OrbitLiveMomentViewer(
             moment:moment,repository:_moments,author:author)));
       }else if(item.category=='pings'){
         final ping=await _pings.detail(item.targetId);
         await _repo.markRead(item.id);
-        if(!mounted)return;
+        if(!await authorized())return;
         await OrbitPingNavigation.showIncoming(context,ping,repository:_pings);
       }else if(item.category=='plans'){
         // A private notification is not a read grant. Verify the Plan on
         // the server before acknowledging or routing to its detail screen.
         await _plans.detail(item.targetId);
         await _repo.markRead(item.id);
-        if(!mounted)return;
+        if(!await authorized())return;
         await Navigator.of(context).push<void>(MaterialPageRoute(
           builder:(_)=>OrbitLivePlanDetailScreen(planId:item.targetId)));
       }else if(item.category=='check_ins'){
         final checkin=await _checkins.detail(item.targetId);
         await _repo.markRead(item.id);
-        if(!mounted)return;
+        if(!await authorized())return;
         await showOrbitCircleSheet<void>(
           context:context,title:'Check-In',
           builder:(sheet)=>Column(
@@ -196,7 +217,7 @@ class _OrbitLiveNotificationsScreenState
         // Server read mutation rechecks the target's live ACL first; each
         // destination also obtains its own fresh authenticated data.
         await _repo.markRead(item.id);
-        if(!mounted)return;
+        if(!await authorized())return;
         switch(item.category){
           case 'messages':
             await OrbitMessagingNavigation.openList(context);

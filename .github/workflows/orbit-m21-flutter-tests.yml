@@ -1,0 +1,56 @@
+name: Orbit M21 Flutter consumer integration and existing UI
+on:
+  push:
+    branches: [feature/m21-admin-integration-flutter-2026-11-24]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  flutter-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Analyze M20 integrations and existing approved widgets
+        run: |
+          dart analyze lib/features/advertising \
+            lib/features/auth/data/orbit_identity_client.dart \
+            lib/features/home/domain/models/home_models.dart \
+            lib/features/home/presentation/widgets/promo_banner_card.dart \
+            lib/features/home/presentation/screens/home_screen.dart \
+            lib/features/home/presentation/screens/orbit_live_home_screen.dart \
+            lib/features/moments/domain/models/moments_models.dart \
+            lib/features/moments/presentation/screens/moments_screen.dart \
+            lib/features/moments/presentation/screens/orbit_live_moments_screen.dart \
+            test/features/advertising
+      - name: Verify M20 API source and original sponsored UI
+        run: flutter test test/features/advertising
+      - name: Preserve M18 owner-bound Activity contracts
+        run: flutter test test/features/activity
+      - name: Existing M7, M8 and M12 approved UI regression
+        run: |
+          flutter test test/features/moments/presentation/moments_screen_test.dart
+          flutter test test/features/check_in/presentation/check_in_screen_test.dart
+          flutter test test/features/home/presentation/m8_home_sections_test.dart
+          flutter test test/features/home/presentation/home_screen_test.dart
+      - name: Preserve M14, M17 contracts
+        run: |
+          flutter test test/features/notifications/orbit_notification_contract_test.dart
+          flutter test test/features/moderation/orbit_m17_moderation_contract_test.dart
+
+      - name: Analyze refreshed Plans and Notifications integrations
+        run: |
+          dart analyze lib/features/plans/data/orbit_plan_repository.dart lib/features/plans/presentation/screens/orbit_live_plans_screen.dart lib/features/plans/presentation/screens/orbit_live_plan_detail_screen.dart lib/features/notifications/presentation/orbit_live_notifications_screen.dart test/features/integration
+      - name: Admin-state refresh and earlier consumer contract tests
+        run: |
+          flutter test test/features/integration
+          flutter test test/features/plans/orbit_m15_plans_contract_test.dart test/features/sos/orbit_m16_sos_contract_test.dart
+          flutter test test/features/auth/orbit_m3_offline_profile_test.dart test/features/profile/orbit_profile_settings_repository_test.dart test/features/friends/orbit_m4_social_repository_test.dart
+          flutter test test/features/circles/orbit_m5_api_contract_test.dart test/features/media/orbit_media_repository_test.dart test/features/home/data/orbit_dashboard_repository_test.dart test/features/presence/orbit_m9_presence_contract_test.dart
+          flutter test test/features/location/orbit_m10_location_contract_test.dart test/features/ping/data/orbit_ping_record_test.dart test/features/messaging/orbit_m13_messaging_safety_test.dart test/features/app_update/orbit_update_runtime_test.dart

@@ -12,7 +12,8 @@ import '../../data/orbit_plan_repository.dart';
 import '../../domain/orbit_plan_models.dart';
 
 class OrbitLivePlanDetailScreen extends StatefulWidget {
-  const OrbitLivePlanDetailScreen({super.key,required this.planId,this.repository});
+  const OrbitLivePlanDetailScreen({super.key,required this.planId,this.repository,this.identity});
+  final OrbitIdentityClient? identity;
   final String planId;
   final OrbitPlanRepository? repository;
   @override
@@ -20,7 +21,8 @@ class OrbitLivePlanDetailScreen extends StatefulWidget {
 }
 class _OrbitLivePlanDetailScreenState extends State<OrbitLivePlanDetailScreen>
     with WidgetsBindingObserver {
-  late final OrbitPlanRepository _repo=widget.repository??OrbitPlanRepository();
+  late final OrbitIdentityClient _identity=widget.identity??OrbitIdentityClient.instance;
+  late final OrbitPlanRepository _repo=widget.repository??OrbitPlanRepository(identity:_identity);
   OrbitPlan? _plan;
   bool _loading=true,_working=false,_offline=false;
   String? _error;
@@ -32,7 +34,7 @@ class _OrbitLivePlanDetailScreenState extends State<OrbitLivePlanDetailScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state){
     if(state==AppLifecycleState.resumed)unawaited(_load());
-    if(state==AppLifecycleState.paused||state==AppLifecycleState.hidden){
+    if(state==AppLifecycleState.paused||state==AppLifecycleState.hidden||state==AppLifecycleState.inactive){
       ++_epoch;
       if(mounted)setState((){_plan=null;_loading=true;});
     }
@@ -42,26 +44,26 @@ class _OrbitLivePlanDetailScreenState extends State<OrbitLivePlanDetailScreen>
     setState((){_loading=true;_plan=null;_error=null;_offline=false;});
     String? owner;
     try{
-      owner=await OrbitIdentityClient.instance.currentLocalSocialOwner();
+      owner=await _identity.currentLocalSocialOwner();
       if(owner==null)throw StateError('Signed out');
       final value=await _repo.detail(widget.planId);
-      if(!mounted||serial!=_epoch||
-          await OrbitIdentityClient.instance.currentLocalSocialOwner()!=owner)return;
+      final current=await _identity.currentLocalSocialOwner();
+      if(!mounted||serial!=_epoch)return;
+      if(current!=owner)throw OrbitIdentityException('Account changed.',401);
       setState((){_plan=value;_loading=false;});
     }catch(e){
       if(!mounted||serial!=_epoch)return;
       if(owner!=null && OrbitPlanRepository.temporaryOffline(e)){
         try{
           final cached=await _repo.lastVerifiedDetail(widget.planId);
-          if(cached!=null && mounted && serial==_epoch &&
-              await OrbitIdentityClient.instance.currentLocalSocialOwner()==owner){
+          final current=await _identity.currentLocalSocialOwner();
+          if(cached!=null && mounted && serial==_epoch && current==owner){
             setState((){_plan=cached;_loading=false;_offline=true;});
             return;
           }
         }catch(_){}
       }
-      if(e is OrbitIdentityException &&
-          const {401,403,404}.contains(e.statusCode)){
+      if(OrbitPlanRepository.accessDenied(e)){
         try{await _repo.clearCachedPlans();}catch(_){}
       }
       if(mounted&&serial==_epoch)setState((){

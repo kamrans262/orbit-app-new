@@ -13,14 +13,16 @@ import '../../domain/orbit_plan_models.dart';
 
 /// Dedicated list reuses the approved Home Plan card without demo members.
 class OrbitLivePlansScreen extends StatefulWidget {
-  const OrbitLivePlansScreen({super.key,this.repository});
+  const OrbitLivePlansScreen({super.key,this.repository,this.identity});
+  final OrbitIdentityClient? identity;
   final OrbitPlanRepository? repository;
   @override
   State<OrbitLivePlansScreen> createState()=>_OrbitLivePlansScreenState();
 }
 class _OrbitLivePlansScreenState extends State<OrbitLivePlansScreen>
     with WidgetsBindingObserver {
-  late final OrbitPlanRepository _repo=widget.repository??OrbitPlanRepository();
+  late final OrbitIdentityClient _identity=widget.identity??OrbitIdentityClient.instance;
+  late final OrbitPlanRepository _repo=widget.repository??OrbitPlanRepository(identity:_identity);
   final _items=<OrbitPlan>[];
   String _tab='upcoming';
   String? _cursor,_error,_owner;
@@ -33,22 +35,23 @@ class _OrbitLivePlansScreenState extends State<OrbitLivePlansScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state){
     if(state==AppLifecycleState.resumed)unawaited(_load());
-    if(state==AppLifecycleState.paused||state==AppLifecycleState.hidden) {
+    if(state==AppLifecycleState.paused||state==AppLifecycleState.hidden||state==AppLifecycleState.inactive) {
       ++_epoch;
-      if(mounted)setState((){_items.clear();_cursor=null;_owner=null;});
+      if(mounted)setState((){_items.clear();_cursor=null;_owner=null;_loadingMore=false;_loading=true;});
     }
   }
   Future<void> _load() async {
     final serial=++_epoch;
     if(mounted)setState((){_loading=true;_error=null;_offline=false;
-      _items.clear();_cursor=null;});
+      _items.clear();_cursor=null;_owner=null;_loadingMore=false;});
     String? owner;
     try {
-      owner=await OrbitIdentityClient.instance.currentLocalSocialOwner();
+      owner=await _identity.currentLocalSocialOwner();
       if(owner==null)throw StateError('Sign in required');
       final result=await _repo.list(tab:_tab);
-      if(!mounted||serial!=_epoch ||
-          await OrbitIdentityClient.instance.currentLocalSocialOwner()!=owner)return;
+      final current=await _identity.currentLocalSocialOwner();
+      if(!mounted||serial!=_epoch)return;
+      if(current!=owner)throw OrbitIdentityException('Account changed.',401);
       setState((){_items..clear()..addAll(result.items);_cursor=result.nextCursor;
         _owner=owner;_loading=false;});
     }catch(e) {
@@ -56,8 +59,8 @@ class _OrbitLivePlansScreenState extends State<OrbitLivePlansScreen>
       if(owner!=null && OrbitPlanRepository.temporaryOffline(e)){
         try{
           final page=await _repo.lastVerifiedList(_tab);
-          if(page!=null && mounted && serial==_epoch &&
-              await OrbitIdentityClient.instance.currentLocalSocialOwner()==owner){
+          final current=await _identity.currentLocalSocialOwner();
+          if(page!=null && mounted && serial==_epoch && current==owner){
             setState((){
               _items..clear()..addAll(page.items);
               _cursor=null;_owner=owner;_loading=false;_offline=true;
@@ -66,8 +69,7 @@ class _OrbitLivePlansScreenState extends State<OrbitLivePlansScreen>
           }
         }catch(_){}
       }
-      if(e is OrbitIdentityException &&
-          const {401,403,404}.contains(e.statusCode)){
+      if(OrbitPlanRepository.accessDenied(e)){
         try{await _repo.clearCachedPlans();}catch(_){}
       }
       if(mounted&&serial==_epoch)setState((){
@@ -79,18 +81,28 @@ class _OrbitLivePlansScreenState extends State<OrbitLivePlansScreen>
   }
   Future<void> _more() async {
     if(_cursor==null||_loadingMore||_loading||_owner==null)return;
-    _loadingMore=true;
+    setState(()=>_loadingMore=true);
     final owner=_owner!,cursor=_cursor!,tab=_tab,serial=_epoch;
     try {
       final page=await _repo.list(tab:tab,cursor:cursor);
-      if(!mounted||serial!=_epoch || _tab!=tab ||
-          await OrbitIdentityClient.instance.currentLocalSocialOwner()!=owner)return;
+      final current=await _identity.currentLocalSocialOwner();
+      if(!mounted||serial!=_epoch || _tab!=tab)return;
+      if(current!=owner)throw OrbitIdentityException('Account changed.',401);
       final ids=_items.map((e)=>e.id).toSet();
       setState((){_items.addAll(page.items.where((e)=>ids.add(e.id)));
         _cursor=page.nextCursor;_error=null;});
-    }catch(_) {
-      if(mounted&&serial==_epoch)setState(()=>_error='Could not load more Plans.');
-    }finally{_loadingMore=false;}
+    }catch(error) {
+      if(mounted&&serial==_epoch){
+        if(OrbitPlanRepository.accessDenied(error)){
+          // Discard the previous page as well: the server has denied access.
+          setState((){_items.clear();_cursor=null;_owner=null;_offline=false;
+            _error='Plans could not be verified. Reconnect and retry.';});
+          try{await _repo.clearCachedPlans();}catch(_){}
+        }else{
+          setState(()=>_error='Could not load more Plans.');
+        }
+      }
+    }finally{if(mounted&&serial==_epoch)setState(()=>_loadingMore=false);}
   }
   Future<void> _open(String id) async {
     await Navigator.of(context).pushNamed(AppRoutes.planDetail,arguments:id);

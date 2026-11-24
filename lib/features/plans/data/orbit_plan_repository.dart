@@ -15,6 +15,11 @@ class OrbitPlanRepository {
     error is OrbitIdentityException &&
     (error.statusCode==null || error.statusCode==502 || error.statusCode==504);
 
+  /// Explicit server denial is not temporary connectivity loss. Invalidate
+  /// previously authorized snapshots before any later offline fallback.
+  static bool accessDenied(Object error) => error is OrbitIdentityException &&
+      const {401,403,404,409,410,503}.contains(error.statusCode);
+
   Future<void> clearCachedPlans()=>_cache.clear();
 
   Future<OrbitPlanPage?> lastVerifiedList(String tab) async {
@@ -46,11 +51,18 @@ class OrbitPlanRepository {
   Future<Map<String,dynamic>> _call(String method,String path,{
       Map<String,Object?>? body}) async {
     final owner=await _owner();
-    final response=await _identity.socialRequest(method,path,body:body);
-    if(await _identity.currentLocalSocialOwner()!=owner){
-      throw OrbitIdentityException('Account changed. Reload Plans.',401);
+    try {
+      final response=await _identity.socialRequest(method,path,body:body);
+      if(await _identity.currentLocalSocialOwner()!=owner){
+        throw OrbitIdentityException('Account changed. Reload Plans.',401);
+      }
+      return response;
+    }catch(error){
+      if(accessDenied(error) && await _identity.currentLocalSocialOwner()==owner){
+        try{await _cache.clear();}catch(_){}
+      }
+      rethrow;
     }
-    return response;
   }
 
   Future<Map<String,dynamic>> _data(String method,String path,{
@@ -84,7 +96,11 @@ class OrbitPlanRepository {
     final response=await _data('GET','/plans/'+Uri.encodeComponent(id));
     final plan=OrbitPlan.fromJson(response);
     if(await _identity.currentLocalSocialOwner()==owner){
-      try{await _cache.rememberDetail(owner,id,response);}catch(_){}
+      try{
+        // A confirmed Admin cancellation supersedes old list/detail snapshots.
+        if(plan.status=='cancelled')await _cache.clear();
+        await _cache.rememberDetail(owner,id,response);
+      }catch(_){}
     }
     return plan;
   }
