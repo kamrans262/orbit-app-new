@@ -44,6 +44,9 @@ class OrbitPublicConfigRuntime extends ChangeNotifier with WidgetsBindingObserve
   final OrbitIdentityClient _identity;
   OrbitPublicConfigSnapshot? _snapshot;
   OrbitPublicConfigSnapshot? get snapshot=>_snapshot;
+  // Retain last confirmed camera restrictions on transient refresh failure.
+  Object? _cameraToolHints;
+  Object? get cameraToolHints=>_cameraToolHints;
   bool _started=false;
   int _epoch=0;
 
@@ -72,6 +75,7 @@ class OrbitPublicConfigRuntime extends ChangeNotifier with WidgetsBindingObserve
       final next=OrbitPublicConfigSnapshot.fromResponse(response);
       if(serial!=_epoch)return;
       _snapshot=next;
+      _cameraToolHints=next.config['m24.camera_tools'];
     }catch(_){
       if(serial!=_epoch)return;
       _snapshot=null;
