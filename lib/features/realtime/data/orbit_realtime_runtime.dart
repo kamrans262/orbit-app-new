@@ -76,7 +76,14 @@ class OrbitRealtimeRuntime with WidgetsBindingObserver {
       }
       _owner=owner;
       final response=await _bootstrap(owner).timeout(const Duration(seconds:8));
-      if(!_current(epoch)||await _readOwner()!=owner||!_current(epoch))return;
+      if(!_current(epoch))return;
+      final currentOwner=await _readOwner();
+      if(!_current(epoch))return;
+      if(currentOwner!=owner){
+        _owner=null;
+        await _drop(notify:false);
+        return;
+      }
       final next=OrbitRealtimeTicket.parse(response,platform:defaultTargetPlatform,
         expectedProject:OrbitRealtimeRollout.project,now:DateTime.now(),requestElapsed:clock.elapsed);
       if(next==null){
@@ -147,12 +154,12 @@ class OrbitRealtimeRuntime with WidgetsBindingObserver {
     try{await _transport.close();}catch(_){}
   }
 
-  Future<void> _drop() async{
+  Future<void> _drop({bool notify=true}) async{
     final old=_ticket;
     _ticket=null;_revision=null;_online=false;
     _renewal?.cancel();_renewal=null;
     _expiry?.cancel();_expiry=null;
-    if(old!=null)_events.add(Set.unmodifiable(old.modules));
+    if(notify&&old!=null)_events.add(Set.unmodifiable(old.modules));
     await _sdk(_closeSdk);
     if(_started&&_foreground&&!_busy)_scheduleRetry();
   }
@@ -188,7 +195,7 @@ class OrbitRealtimeRuntime with WidgetsBindingObserver {
     _started=false;_foreground=false;++_epoch;_owner=null;
     WidgetsBinding.instance.removeObserver(this);
     _retry?.cancel();
-    final cleanup=_drop();
+    final cleanup=_drop(notify:false);
     if(disconnect&&hadLease&&owner!=null){_queueDisconnect(owner);await _disconnecting;}
     // Local access is already fenced by epoch and lease cancellation. Never
     // block Laravel logout indefinitely on a stalled native SDK call.
