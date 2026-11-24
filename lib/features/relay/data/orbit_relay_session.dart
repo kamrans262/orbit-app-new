@@ -32,6 +32,10 @@ class OrbitRelaySession {
   Map<String,OrbitMessagingRemoteDevice> _keys={};
   List<OrbitRelayLease> _leases=[];
   final Map<String,OrbitRelayLease> _incomingLeases={};
+  final Set<String> _eligibleClients={};
+  void allowFresh(OrbitQueuedCiphertext queued){
+    if(active&&queued.conversationId==_thread?.id&&queued.groupEpoch==_thread?.groupEpoch){_eligibleClients.add(queued.clientId);}
+  }
   int _generation=0;
   Future<void> _receiveTail=Future.value();
   bool get active=>_transport.running&&_cap!=null&&_leases.any((l)=>l.live(_cap!));
@@ -81,8 +85,8 @@ class OrbitRelaySession {
     if(generation!=_generation){await stop();throw const FormatException('Relay session closed.');}
   }
   Future<void> _current(int generation) async {
-    relayCheck(generation==_generation&&active&&_owner!=null&&
-      await messaging.owner==_owner,'Relay session unavailable.');
+    final owner=await messaging.owner;
+    relayCheck(generation==_generation&&active&&_owner!=null&&owner==_owner,'Relay session unavailable.');
   }
   Future<String> _sign(int generation,String message) async {
     await _current(generation);
@@ -133,6 +137,7 @@ class OrbitRelaySession {
     }
     final received=math.max(cap.clock.seconds,lease.issued);
     relayCheck(received<lease.expires,'Relay lease expired.');
+    relayCheck(_incomingLeases.length<160,'Relay session queue limit reached.');
     final receipt={'nonce':id,'received_at':received,'peer_digest':peerDigest,
       'signature_b64':await _sign(generation,relayReceiptInput(lease,id,client,digest,peerDigest,received))};
     await _current(generation);
@@ -186,12 +191,14 @@ class OrbitRelaySession {
     await _current(generation);
     final recordId='out:'+queued.clientId;
     final existing=await _vault.get(owner,device,recordId,now:cap.clock.seconds);
-    if(existing!=null&&existing['receipt'] is Map)return true;
+    if(existing==null&&!_eligibleClients.contains(queued.clientId))return false;
     final source=Map<String,dynamic>.from(queued.toJson())..remove('conversation_id');
     final digest=relaySourceDigest(queued.conversationId,source,cap.frameBytes);
     if(existing!=null){
       relayCheck(existing['digest']==digest&&existing['roster_hash']==_rosterHash,'Relay queue identity changed.');
+      if(existing['receipt'] is Map)return true;
     }
+    relayCheck(queued.envelopes.length==_keys.length&&queued.envelopes.every((e)=>_keys.containsKey(e.deviceId)),'Relay device roster changed.');
     for(final lease in _leases){
       if(!lease.live(cap)||queued.groupEpoch!=lease.epoch)continue;
       // Reuse the original lease for a lost receipt. Never rebind an
@@ -209,10 +216,17 @@ class OrbitRelaySession {
         'roster_hash':_rosterHash,'lease_expires':lease.expires,'peer_user':_thread!.peerId};
       // Durable before any bytes leave. A crash/lost receipt can be
       // recovered by same-ID HTTPS or reconciliation without a receipt.
-      await _vault.put(owner,device,recordId,checkpoint,expiry:lease.expires+7*86400);
-      await _current(generation);
-      final proof=await _transport.transfer(lease,packet,(message)=>_sign(generation,message));
-      if(proof==null)return false;
+      var attempted=false;
+      final proof=await _transport.transfer(lease,packet,(message)=>_sign(generation,message),beforeSend:() async {
+        await _current(generation);
+        await _vault.put(owner,device,recordId,checkpoint,expiry:lease.expires+7*86400);
+        attempted=true;
+        await _current(generation);
+      });
+      if(proof==null){
+        if(attempted||existing!=null)return false;
+        continue;
+      }
       final received=proof['received_at'];
       if(proof.length!=4||!proof.keys.every(const {'nonce','received_at','peer_digest','signature_b64'}.contains)||proof['nonce']!=queued.clientId||proof['peer_digest']!=pd||received is! int||
           received<lease.issued||received>=lease.expires||
@@ -227,9 +241,9 @@ class OrbitRelaySession {
   Future<void> stop({bool revoke=false}) async {
     final old=List<OrbitRelayLease>.of(_leases);
     _generation++;_cap=null;_thread=null;_owner=null;_device=null;_rosterHash=null;
-    _directories={};_keys={};_leases=[];_incomingLeases.clear();
+    _directories={};_keys={};_leases=[];_incomingLeases.clear();_eligibleClients.clear();
     await _transport.stop();
-    if(revoke){for(final lease in old){try{await api.revoke(lease.id,reason:'opt_out');}catch(_){}}}
+    if(revoke){for(final lease in old){try{await api.revoke(lease.id,reason:'opt_out').timeout(const Duration(seconds:3));}catch(_){}}}
   }
 }
 

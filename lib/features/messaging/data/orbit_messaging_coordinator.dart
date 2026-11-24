@@ -67,7 +67,7 @@ class OrbitMessagingCoordinator {
         if(await vault.requiresReview(queued.clientId))break;
         // Do not skip older same-conversation ratchet messages.
         if(queued.conversationId!=thread.id)continue;
-        if(!orbitRelayKinds.contains(queued.kind))break;
+        if(!orbitRelayKinds.contains(queued.kind))continue;
         try{if(!await relay.transfer(queued))break;}catch(_){break;}
       }
     });
@@ -399,6 +399,7 @@ class OrbitMessagingCoordinator {
       senderId:account,kind:kind,text:utf8.decode(data),
       createdAt:DateTime.now().toUtc());
     await vault.queue(outgoing,preview:preview);
+    if(relay?.canUse(thread.id,account)==true){relay?.allowFresh(outgoing);}
     if(relayOffline){
       try{await relay?.transfer(outgoing);}catch(_){/* Existing encrypted queue remains authoritative. */}
       return OrbitMessagingSendResult(accepted:false,queued:true,clientId:outgoing.clientId);

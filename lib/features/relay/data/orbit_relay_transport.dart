@@ -96,6 +96,7 @@ class OrbitRelayTransport {
   ServerSocket? _server;
   final Set<Socket> _active={};
   Timer? _expiry;
+  int _generation=0;
   bool get running=>_server!=null;
   // Test discovery uses the same real sockets on a private interface.
   int? get localPort=>_server?.port;
@@ -113,8 +114,10 @@ class OrbitRelayTransport {
       await wire.send({'v':1,'ephemeral':own});
     }
     final transcript=relayHash(sender?[own,remote]:[remote,own]);
+    relayCheck(own!=remote,'Reflected Relay ephemeral key.');
     final shared=await x.sharedSecretKey(keyPair:key,
       remotePublicKey:SimplePublicKey(relayBytes(remote,32),type:KeyPairType.x25519));
+    relayCheck((await shared.extractBytes()).any((b)=>b!=0),'Invalid Relay shared secret.');
     final secret=await Hkdf(hmac:Hmac.sha256(),outputLength:32).deriveKey(
       secretKey:shared,nonce:utf8.encode(transcript),info:utf8.encode('orbit-relay-channel-v1'));
     return _Channel(wire,secret,transcript,sender);
@@ -122,7 +125,9 @@ class OrbitRelayTransport {
   Future<void> start({required RelaySign sign,required RelayAccept accept,
       Duration duration=const Duration(minutes:10)}) async {
     await stop();
+    final generation=_generation;
     final server=await ServerSocket.bind(InternetAddress.anyIPv4,0,shared:false);
+    if(generation!=_generation){await server.close();throw const FormatException('Relay discovery stopped.');}
     _server=server;
     _expiry=Timer(duration,()=>unawaited(stop()));
     server.listen((socket){
@@ -132,7 +137,7 @@ class OrbitRelayTransport {
       _active.add(socket);
       unawaited(_receive(socket,sign,accept));
     },onError:(_){unawaited(stop());});
-    try{await _discovery.start(server.port);}catch(_){await stop();rethrow;}
+    try{await _discovery.start(server.port);if(generation!=_generation){await _discovery.stop();throw const FormatException('Relay discovery stopped.');}}catch(_){await stop();rethrow;}
   }
   Future<void> _receive(Socket socket,RelaySign sign,RelayAccept accept) async {
     final wire=_Wire(socket);
@@ -148,16 +153,17 @@ class OrbitRelayTransport {
     finally{_active.remove(socket);await wire.close();}
   }
   Future<Map<String,dynamic>?> transfer(OrbitRelayLease lease,
-      Map<String,Object?> packet,RelaySign sign) async {
+      Map<String,Object?> packet,RelaySign sign,{Future<void> Function()? beforeSend}) async {
     if(!running)return null;
+    final generation=_generation;
     final peers=await _discovery.peers();
     for(final peer in peers.take(8)){
-      if(!running)return null;
+      if(!running||generation!=_generation)return null;
       if(!relayLocalAddress(peer.host)||peer.port<1024||peer.port>65535)continue;
       Socket? socket;_Wire? wire;
       try{
         socket=await Socket.connect(peer.host,peer.port,timeout:const Duration(seconds:2));
-        if(!running){socket.destroy();return null;}
+        if(!running||generation!=_generation){socket.destroy();return null;}
         _active.add(socket);
         wire=_Wire(socket);
         final result=await (() async {
@@ -167,6 +173,8 @@ class OrbitRelayTransport {
             proof['proof'] as String,lease.peerKey),'Unrecognized Relay peer.');
           final signature=await sign('orbit-relay-sender-v1|'+channel.transcript+'|'+lease.id+'|'+
             (packet['envelope_id'] as String)+'|'+(packet['digest'] as String)+'|'+(packet['peer_digest'] as String));
+          if(beforeSend!=null)await beforeSend();
+          relayCheck(running&&generation==_generation,'Relay stopped.');
           await channel.send({...packet,'sender_proof':signature});
           return channel.receive();
         })().timeout(const Duration(seconds:15));
@@ -177,6 +185,7 @@ class OrbitRelayTransport {
     return null;
   }
   Future<void> stop() async {
+    _generation++;
     _expiry?.cancel();_expiry=null;
     final server=_server;_server=null;
     for(final socket in _active){socket.destroy();}
