@@ -160,6 +160,15 @@ class _DeviceRegistrationScreenState extends State<DeviceRegistrationScreen> {
     }
   }
 
+  Widget _recoveryActionLabel(String label) {
+    if (_registering) return Text(label);
+    return ShaderMask(
+      blendMode: BlendMode.srcIn,
+      shaderCallback: AppColors.primaryGradient.createShader,
+      child: Text(label),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final preview = widget.onRegisterDevice == null;
@@ -332,14 +341,14 @@ class _DeviceRegistrationScreenState extends State<DeviceRegistrationScreen> {
                                   _password.clear();
                                   _code.clear();
                                 }),
-                                child: const Text('Cancel'),
+                                child: _recoveryActionLabel('Cancel'),
                               ),
                               if (widget.onSignInAgain != null)
                                 TextButton(
                                   onPressed: _registering ? null : () async {
                                     await widget.onSignInAgain!();
                                   },
-                                  child: const Text('Sign in again'),
+                                  child: _recoveryActionLabel('Sign in again'),
                                 ),
                             ],
                           ),
