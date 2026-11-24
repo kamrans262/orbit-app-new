@@ -86,6 +86,7 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
   String _name='',_owner='';
   String? _notice;
   bool _showCircles=false,_loading=false;
+  bool _showPeople=true,_showMoments=true;
   Timer? _revalidation;
   bool _refreshingPing=false;
   final Set<String> _shownPings=<String>{};
@@ -276,6 +277,7 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
     _people=const [];
     _circleCards=const [];
     _showCircles=false;
+    _showPeople=true;_showMoments=true;
     _peopleById.clear();
     _byId.clear();
     _authors.clear();
@@ -387,6 +389,11 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
       }catch(e){if(_denied(e))rethrow;}
       if(!mounted||serial!=_epoch||_owner!=owner)return;
 
+      bool visibleSection(DashboardState state)=>state==DashboardState.ready||state==DashboardState.empty;
+      if(mounted&&serial==_epoch&&_owner==owner)setState((){
+        _showPeople=snapshot==null||visibleSection(snapshot.people.state);
+        _showMoments=snapshot==null||visibleSection(snapshot.moments.state);
+      });
       // An M8 summary is already viewer-filtered. On legacy rollout,
       // each M4/M5 API must still validate authorization directly.
       try{
@@ -421,10 +428,10 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
       }
 
       try {
-        final page=await _social.friends();
+        final page=_showPeople?await _social.friends():null;
         final allowed=snapshot==null ? null :
           snapshot.people.items.map((p)=>p.id).toSet();
-        final items=page.items.where((p)=>allowed==null||allowed.contains(p.id))
+        final items=(page?.items??<OrbitPerson>[]).where((p)=>allowed==null||allowed.contains(p.id))
           .take(12).toList(growable:false);
         if(mounted&&serial==_epoch&&_owner==owner)setState((){
           _people=items.map((p)=>FavoritePersonData(id:p.id,name:p.name,
@@ -446,7 +453,7 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
       final authorized=<String,OrbitLiveMoment>{};
       final authors=<String,String>{};
       try {
-        final canRead=OrbitM7Rollout.enabled &&
+        final canRead=_showMoments && OrbitM7Rollout.enabled &&
           (snapshot==null || snapshot.can('moments'));
         if(canRead) {
           final allowed=snapshot==null ? null :
@@ -711,6 +718,7 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
     dashboardNotice:_notice,
     onDashboardRetry:()=>unawaited(_reload()),
     showCircleSection:_showCircles,circleSummaries:_circleCards,
+     showPeopleSection:_showPeople,showMomentsSection:_showMoments,
     onCirclePressed:(c) => Navigator.of(context).push<void>(MaterialPageRoute(
       builder:(_)=>OrbitLiveCircleDetailScreen(circleId:c.id))),
     onSeeAllCirclesPressed:()=>Navigator.of(context).push<void>(
