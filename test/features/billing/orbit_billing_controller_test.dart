@@ -16,7 +16,7 @@ class Api implements OrbitBillingApi{
   }
   @override Future<BillingJson> verify(String provider,String proof,String requestId,{String? contextId})async{
     verifies++;requests.add(requestId);if(verifyFails)throw StateError('offline');
-    status={'environment':'sandbox','tier':'lite','state':'active','revision':2,'capabilities':{},'effective_until':DateTime.now().toUtc().add(const Duration(days:1)).toIso8601String()};
+    status={'environment':'sandbox','tier':'lite','state':'active','revision':2,'capabilities':{},'management_providers':['google'],'effective_until':DateTime.now().toUtc().add(const Duration(days:1)).toIso8601String()};
     return {'status':'verified','finish_permitted':true,'entitlement':status};
   }
 }
@@ -89,6 +89,17 @@ void main(){
     api.status={...sampleEntitlement(tier:'plus',state:'active'),'auto_renew':false};
     await c.refresh(recover:false);expect(c.tier,'plus');expect(c.autoRenew,false);
     owner='b';await c.revalidateOwner();expect(c.tier,isNull);expect(c.autoRenew,isNull);
+  });
+  test('management never launches the wrong platform store',()async{
+    final c=controller();
+    api.status={...sampleEntitlement(tier:'plus',state:'active'),'management_providers':['apple']};
+    await c.refresh(recover:false);
+    expect(c.canManage,true);
+    await c.manage();
+    expect(store.manages,0);
+    expect(c.message,contains('original Apple App Store'));
+    api.status={...sampleEntitlement(tier:'plus',state:'active'),'management_providers':['apple','google']};
+    await c.manage();expect(store.manages,1);
   });
   test('malformed environment never activates paid status',()async{
     final c=controller();api.status={'environment':'production','tier':'lite','state':'active','revision':1,'capabilities':{}};

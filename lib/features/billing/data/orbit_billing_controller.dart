@@ -20,13 +20,14 @@ class OrbitBillingController extends ChangeNotifier{
   bool _readReady=false;
   DateTime? effectiveUntil;
   bool? autoRenew;
+  Set<String> managementProviders={};
   Timer? _expiry;
   Map<String,BillingJson> _mapping={};
   Map<String,String> prices={};
-  bool get canManage=>checkoutEnabled&&_readReady&&['active','grace','hold','paused','pending'].contains(state);
+  bool get canManage=>checkoutEnabled&&_readReady&&managementProviders.isNotEmpty;
   bool canBuy(String selected)=>!busy&&checkoutEnabled&&purchaseEnabled&&_readReady&&['free','expired','revoked'].contains(state)&&_mapping.containsKey(selected)&&prices.containsKey(selected);
   void _emit(){if(!_disposed)notifyListeners();}
-  void _unknown(){tier=null;state='unknown';effectiveUntil=null;autoRenew=null;_readReady=false;purchaseEnabled=false;prices={};_mapping={};_expiry?.cancel();}
+  void _unknown(){tier=null;state='unknown';effectiveUntil=null;autoRenew=null;managementProviders={};_readReady=false;purchaseEnabled=false;prices={};_mapping={};_expiry?.cancel();}
   Future<void> _bound()async{
     if(_disposed||await currentOwner()!=owner||_disposed){_unknown();throw StateError('Billing account changed.');}
   }
@@ -48,6 +49,9 @@ class OrbitBillingController extends ChangeNotifier{
     final renewal=e['auto_renew'];
     if(renewal!=null&&renewal is! bool)throw const FormatException('Invalid renewal state.');
     autoRenew=checkoutEnabled?renewal as bool?:null;
+    final providers=e['management_providers'];
+    if(providers!=null&&(providers is! List||providers.any((p)=>p!='apple'&&p!='google')))throw const FormatException('Invalid management provider.');
+    managementProviders=checkoutEnabled&&providers is List?providers.cast<String>().toSet():{};
     _expiry?.cancel();
     if(checkoutEnabled&&expiry!=null){_expiry=Timer(expiry.difference(DateTime.now().toUtc()),(){_unknown();message='Subscription status needs refreshing.';_emit();});}
   }
@@ -87,6 +91,11 @@ class OrbitBillingController extends ChangeNotifier{
       }
     }
     message=checkoutEnabled?'Sandbox billing only. Paid benefits are not enabled.':'Billing is not available for live purchases.';
+    if(managementProviders.isNotEmpty&&!managementProviders.contains(store.provider)){
+      message=managementProviders.contains('apple')?'Manage this sandbox subscription through your original Apple App Store account.':'Manage this sandbox subscription through your original Google Play account.';
+    }else if(managementProviders.length>1){
+      message='Subscriptions exist in both stores. Manage each through its original store account. Sandbox only.';
+    }
   }
   Future<void> refresh({bool recover=true})=>_run(()async{
     await _load();
@@ -167,6 +176,10 @@ class OrbitBillingController extends ChangeNotifier{
     try{await _bound();}
     catch(_){if(!_disposed){_unknown();message='Billing account changed. Reopen Subscription.';_emit();}}
   }
-  Future<void> manage()=>_run(()async{await _load();if(!canManage){message='Subscription management is unavailable.';return;}await _checked(store.manage);});
+  Future<void> manage()=>_run(()async{
+    await _load();if(!canManage){message='Subscription management is unavailable.';return;}
+    if(!managementProviders.contains(store.provider))return;
+    await _checked(store.manage);
+  });
   @override void dispose(){_disposed=true;_expiry?.cancel();super.dispose();}
 }
