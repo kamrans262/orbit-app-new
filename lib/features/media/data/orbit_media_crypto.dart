@@ -51,10 +51,9 @@ class OrbitMediaCrypto {
     if (original.isEmpty || original.length > OrbitMediaFormat.imageLimit) {
       throw const FormatException('Image exceeds the maximum size.');
     }
-    img.Image? decoded;
+    late final img.Image decoded;
     try { decoded = OrbitBoundedImage.decode(original); }
     catch (error) { throw const FormatException('Unsupported image.'); }
-    if (decoded == null) throw const FormatException('Unsupported image.');
     final oriented = img.bakeOrientation(decoded);
     final ratio = min(1.0, maxLongSide / max(oriented.width, oriented.height));
     final width = max(1, (oriented.width * ratio).round());

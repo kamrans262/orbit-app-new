@@ -99,6 +99,27 @@ void main(){
     await expectLater(capture().restore(),throwsA(isA<Exception>()));
   });
 
+  test('Edit checkpoints survive restart, merge and cannot change another draft',() async{
+    final first=capture();
+    final id=await first.savePhoto(Uint8List.fromList([1,2,3,4]));
+    await Future.wait([first.saveEdits(id,{'camera_filter':'warm','stickers':[{'x':.2,'y':.3}]}),
+      first.saveEdits(id,{'text':'Private draft','mute':true})]);
+    final recovered=(await capture().restore())!;
+    expect(recovered.clientId,id);expect(recovered.edits['camera_filter'],'warm');
+    expect(recovered.edits['text'],'Private draft');
+    account='account-b';
+    await capture().saveEdits(id,{'text':'foreign'});
+    expect(await capture().restore(),isNull);
+    account='account-a';
+    final next=await first.savePhoto(Uint8List.fromList([5,6]));
+    await first.saveEdits(id,{'text':'late'});
+    expect((await capture().restore())!.clientId,next);
+    expect((await capture().restore())!.edits,isEmpty);
+    await first.clear();
+    await first.saveEdits(next,{'text':'late'});
+    expect(await capture().restore(),isNull);
+  });
+
   test('Previous audience is account-bound and never a publish authorization',() async{
     final memory=OrbitMomentAudienceMemory(vault:storage,owner:()async=>account);
     await memory.save('selected_friends',['friend-a','friend-a','friend-b']);
