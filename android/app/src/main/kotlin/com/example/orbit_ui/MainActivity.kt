@@ -163,7 +163,13 @@ private fun inspectCapture(path:String):Map<String,Any> {
                 result["video_h264"]=mime=="video/avc"
                 result["width"]=format.getInteger(MediaFormat.KEY_WIDTH)
                 result["height"]=format.getInteger(MediaFormat.KEY_HEIGHT)
-                result["fps"]=try {format.getInteger(MediaFormat.KEY_FRAME_RATE).toDouble()}catch(_:Exception){0.0}
+                result["fps"]=try {format.getInteger(MediaFormat.KEY_FRAME_RATE).toDouble()}catch(_:Exception){
+                    extractor.selectTrack(i)
+                    var count=0
+                    while(extractor.sampleTime>=0 && count<=4000){count++;if(!extractor.advance())break}
+                    extractor.unselectTrack(i)
+                    if(count>4000)0.0 else count*1000.0/duration
+                }
                 result["video_bps"]=if(format.containsKey(MediaFormat.KEY_BIT_RATE))format.getInteger(MediaFormat.KEY_BIT_RATE) else
                     (retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE)?.toIntOrNull() ?: 0)
             }

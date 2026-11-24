@@ -141,7 +141,7 @@ private func inspectOrbitCapture(_ path: String) -> [String:Any]? {
   guard seconds.isFinite, seconds > 0, seconds <= 60 else { return nil }
   let audio = asset.tracks(withMediaType:.audio)
   let video = asset.tracks(withMediaType:.video)
-  let metadata = asset.commonMetadata + asset.metadata
+  let metadata = asset.commonMetadata + asset.metadata + asset.availableMetadataFormats.flatMap { asset.metadata(forFormat:$0) }
   let hasLocation = metadata.contains { item in
     let key = ((item.identifier?.rawValue ?? "")+" "+(item.commonKey?.rawValue ?? "")+" "+String(describing:item.key)).lowercased()
     return key.contains("location") || key.contains("iso6709") || key.contains("gps")

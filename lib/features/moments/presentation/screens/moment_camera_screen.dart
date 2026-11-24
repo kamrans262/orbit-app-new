@@ -10,7 +10,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -711,7 +710,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
 
   Future<void> _toggleFlash() async {
     final controller = _controller;
-    if (_recording || _capturedClip != null || _isCapturing ||
+    if (_recording || _recordStarting || _recordStopping || _capturedClip != null || _isCapturing ||
         _isInitializing) return;
     if (controller == null || !controller.value.isInitialized) {
       _showToolHint('Camera is not ready. Please try again.');
@@ -757,7 +756,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   }
 
   Future<void> _flipCamera() async {
-    if (_capturedBytes != null || _capturedClip != null || _recording ||
+    if (_capturedBytes != null || _capturedClip != null || _recording || _recordStarting || _recordStopping ||
         _isCapturing || _isInitializing) return;
     if (_cameras.length < 2) {
       _showToolHint('No second camera is available.');
@@ -989,6 +988,10 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     }finally{
       _stopWhenStarted=false;_recordStopping=false;
       if(mounted)setState(()=>_recording=false);
+      if(WidgetsBinding.instance.lifecycleState!=AppLifecycleState.resumed){
+        final old=_controller;_controller=null;
+        if(old!=null){final closing=old.dispose();_cameraDisposalInFlight=closing;try{await closing;}catch(_){}}
+      }
     }
   }
 
@@ -1037,7 +1040,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       }
       if(bytes==null || bytes.isEmpty)return;
       if(bytes.length>26*1024*1024)throw const FormatException('Photo exceeds 26 MB.');
-      await compute(_validateCapturePhoto,bytes);
+      if(widget.galleryPicker!=null){_validateCapturePhoto(bytes);}else{await compute(_validateCapturePhoto,bytes);}
       if(!mounted)return;
       final controller=_controller;
       try {await controller?.pausePreview();}catch(_){}
@@ -1355,28 +1358,49 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     final original=_capturedBytes;
     if(original==null)throw StateError('No captured photo.');
     if(_photoStickers.isEmpty && _photoStrokes.isEmpty)return original;
-    // Capture only the image and movable overlays, not camera controls.
-    // Compositing remains in memory; no unencrypted file is stored.
+    // Map the existing cover preview overlays onto the full oriented source.
     setState(()=>_exportingPhoto=true);
+    ui.Codec? codec;
+    ui.Image? source,output;
+    ui.Picture? picture;
     try {
-      await WidgetsBinding.instance.endOfFrame;
-      final boundary=_photoCompositionKey.currentContext
-        ?.findRenderObject() as RenderRepaintBoundary?;
-      if(boundary==null || !boundary.hasSize){
-        throw StateError('Photo editor is not ready.');
+      final boundary=_photoCompositionKey.currentContext?.findRenderObject() as RenderBox?;
+      if(boundary==null||!boundary.hasSize||boundary.size.isEmpty)throw StateError('Photo editor not ready.');
+      final viewport=boundary.size;
+      final cleaned=widget.enableCamera
+        ?await compute(_prepareCaptureComposition,(original,OrbitCameraPolicy.current.photoEdge))
+        :_prepareCaptureComposition((original,OrbitCameraPolicy.current.photoEdge));
+      if(!mounted)throw StateError('Capture closed.');
+      codec=await ui.instantiateImageCodec(cleaned);
+      source=(await codec.getNextFrame()).image;
+      final full=Size(source.width.toDouble(),source.height.toDouble());
+      final fit=applyBoxFit(BoxFit.cover,full,viewport);
+      final visible=Alignment.center.inscribe(fit.source,Offset.zero&full);
+      final recorder=ui.PictureRecorder();
+      final canvas=Canvas(recorder);
+      canvas.drawImage(source,Offset.zero,Paint());
+      canvas.save();
+      canvas.translate(visible.left,visible.top);
+      canvas.scale(visible.width/viewport.width,visible.height/viewport.height);
+      canvas.clipRect(Offset.zero&viewport);
+      _CameraInkPainter(_photoStrokes).paint(canvas,viewport);
+      for(final sticker in _photoStickers){
+        final text=TextPainter(text:TextSpan(text:sticker.emoji,style:const TextStyle(fontSize:48,
+          fontFamilyFallback:['Noto Color Emoji','Apple Color Emoji','Segoe UI Emoji'])),
+          textDirection:TextDirection.ltr)..layout();
+        final left=(sticker.position.dx*viewport.width-32).clamp(0.0,math.max(0.0,viewport.width-64)).toDouble();
+        final top=(sticker.position.dy*viewport.height-32).clamp(0.0,math.max(0.0,viewport.height-64)).toDouble();
+        text.paint(canvas,Offset(left+(64-text.width)/2,top+(64-text.height)/2));
+        text.dispose();
       }
-      final size=boundary.size;
-      final ratio=(1440/math.max(size.width,size.height))
-        .clamp(1.0,3.0).toDouble();
-      final output=await boundary.toImage(pixelRatio:ratio);
-      try {
-        final data=await output.toByteData(format:ui.ImageByteFormat.png);
-        if(data==null)throw StateError('Unable to render edited Moment.');
-        return data.buffer.asUint8List();
-      }finally{
-        output.dispose();
-      }
+      canvas.restore();
+      picture=recorder.endRecording();
+      output=await picture.toImage(source.width,source.height);
+      final data=await output.toByteData(format:ui.ImageByteFormat.png);
+      if(data==null)throw StateError('Unable to render edited Moment.');
+      return data.buffer.asUint8List();
     }finally{
+      output?.dispose();picture?.dispose();source?.dispose();codec?.dispose();
       if(mounted)setState(()=>_exportingPhoto=false);
     }
   }
@@ -2377,3 +2401,6 @@ class _SendToButton extends StatelessWidget {
 }
 
 void _validateCapturePhoto(Uint8List bytes){OrbitBoundedImage.decode(bytes);}
+
+Uint8List _prepareCaptureComposition((Uint8List,int) input)=>
+  MomentPhotoProcessor.render(input.$1,MomentPhotoEdit(maxLongSide:input.$2));

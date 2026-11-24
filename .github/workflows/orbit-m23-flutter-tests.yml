@@ -21,7 +21,7 @@ jobs:
           cache: true
       - run: flutter pub get
       - name: Analyze Camera policy, editor and media integration
-        run: dart analyze lib/features/moments lib/features/media/data/orbit_media_crypto.dart lib/features/media/data/orbit_bounded_image.dart lib/features/media/data/orbit_moment_media_stager.dart lib/features/media/data/orbit_encrypted_clip_stager.dart test/features/moments test/features/media
+        run: dart analyze lib/features/moments lib/features/media/data/orbit_media_crypto.dart lib/features/media/data/orbit_bounded_image.dart lib/features/media/data/orbit_moment_media_stager.dart lib/features/media/data/orbit_encrypted_clip_stager.dart lib/features/media/data/orbit_media_repository.dart test/features/moments test/features/media
       - name: Camera and media regression
         run: flutter test test/features/moments test/features/media
       - name: Analyze Relay protocol and test fixtures

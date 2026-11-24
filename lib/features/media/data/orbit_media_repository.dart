@@ -414,7 +414,7 @@ class OrbitMediaRepository {
       if(claimedHash is! String ||actualHash.toString()!=claimedHash){
         throw StateError('Encrypted video checksum mismatch.');
       }
-      return (crypto??OrbitMediaCrypto()).openFileToPrivateFile(cipherFile,
+      return await (crypto??OrbitMediaCrypto()).openFileToPrivateFile(cipherFile,
         destination:destination,key:contentKey,noncePrefix:noncePrefix,
         ownerId:ownerId,transferId:transferId,
         purpose:'message',variant:'original',

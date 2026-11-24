@@ -249,7 +249,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
     final beauty=recovered['beauty'];if(beauty is num&&beauty.isFinite)_beautyStrength=beauty.clamp(0,0.25).toDouble();
     final text=recovered['text'];if(text is String&&text.runes.length<=80)_overlayText.text=text;
     final caption=recovered['caption'];if(caption is String&&caption.length<=200)_caption.text=caption;
-    final place=recovered['place'];if(place is String&&place.length<=200)_placeLabel.text=place;
+    final place=recovered['place'];if(place is String&&place.length<=90)_placeLabel.text=place;
     _locationConsent=recovered['location_consent']==true&&_placeLabel.text.isNotEmpty;
     final strokes=recovered['sheet_strokes'];
     if(strokes is List&&strokes.length<=48){for(final s in strokes){
@@ -606,7 +606,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
           if (!_busy)
             IconButton(
               tooltip: 'Close publishing flow',
-              onPressed: () => Navigator.of(context).maybePop(),
+              onPressed: () {_checkpoint();Navigator.of(context).maybePop();},
               icon: const Icon(Icons.close_rounded),
             ),
         ],
@@ -648,7 +648,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
                     onPanEnd:(_)=>_finishStroke(),
                     child:CustomPaint(
                       painter:_MomentStrokePainter([
-                        ..._strokes,MomentDrawStroke(_activeStroke)]),
+                        MomentDrawStroke(_activeStroke)]),
                     )),
                   if(_previewBusy)const Align(
                     alignment:Alignment.topRight,
@@ -666,8 +666,8 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
             activeColor:AppColors.primaryEnd,
             title:Text('Save mobile data',style:AppTypography.body),
             subtitle:Text(
-              widget.mediaKind=='video'?'Lower video bitrate (2 Mbps)':
-                'Smaller photo (1080 px)',
+              widget.mediaKind=='video'?'Lower video bitrate (${OrbitCameraPolicy.current.saverVideoBps/1000000} Mbps)':
+                'Smaller photo (${OrbitCameraPolicy.current.saverEdge} px)',
               style:AppTypography.bodyMuted),
             onChanged:(value){
               setState(()=>_dataSaver=value);
@@ -766,7 +766,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
             style:AppTypography.body,
             decoration:const InputDecoration(
               hintText:'Place (optional; entered manually)'),
-            onChanged:(_)=>setState(()=>_locationConsent=false),
+            onChanged:(_){setState(()=>_locationConsent=false);_checkpoint();},
           ),
           CheckboxListTile(
               value:_locationConsent,
