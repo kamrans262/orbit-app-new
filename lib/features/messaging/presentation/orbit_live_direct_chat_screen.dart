@@ -145,6 +145,7 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
       List<DirectChatMessage> next=const [];
       if(ready){
         if(_relayWasOffline){await _messenger.stopRelay();_relayWasOffline=false;_lastOutboxRetry=null;}
+        else if(_messenger.relayActive){await _messenger.revalidateRelay(thread);}
         await _retryQueuedCiphertext();
         if(!_recoveringMedia){
           _recoveringMedia=true;
@@ -373,6 +374,8 @@ class _OrbitLiveDirectChatScreenState extends State<OrbitLiveDirectChatScreen>
         return;
       }
       try{
+        await _messenger.stopRelay();
+        if(!mounted)return;
         await Navigator.of(context).push<void>(AppFadeSlidePageRoute<void>(
           builder:(_)=>OrbitPrivateChatVideoViewer(file:videoFile)));
       }finally{

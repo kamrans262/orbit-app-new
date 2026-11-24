@@ -34,23 +34,52 @@ class OrbitMessagingCoordinator {
   final OrbitMessagingLocalVault vault;
   final OrbitCircleRepository circles;
   OrbitRelaySession? _relay;
+  int _relayGeneration=0;
   bool get relayActive=>_relay?.active==true;
   Future<void> startRelay(OrbitConversation thread) async {
+    final generation=++_relayGeneration;
     await requireSecure(forSend:true);
     final provider=cipher;
     if(provider is! OrbitMessagingVodozemacCipher)throw OrbitMessagingSecurityException('Relay encryption unavailable.',503);
     final owner=await api.owner;
     await _serialMailbox(owner,'__crypto__',() async{
+      if(generation!=_relayGeneration)throw OrbitMessagingSecurityException('Relay activation cancelled.',409);
       await _relay?.stop();
+      final directories=await _recipients(thread);
+      if(generation!=_relayGeneration||await api.owner!=owner||generation!=_relayGeneration){
+        throw OrbitMessagingSecurityException('Relay activation cancelled.',409);
+      }
       final relay=OrbitRelaySession(messaging:api,cipher:provider);
       _relay=relay;
-      try{await relay.start(thread,await _recipients(thread));}
-      catch(_){await relay.stop();rethrow;}
+      try{
+        await relay.start(thread,directories);
+        if(generation!=_relayGeneration||!identical(_relay,relay)){
+          throw OrbitMessagingSecurityException('Relay activation cancelled.',409);
+        }
+      }catch(_){await relay.stop();if(identical(_relay,relay))_relay=null;rethrow;}
     });
   }
   Future<void> stopRelay({bool revoke=false}) async {
+    _relayGeneration++;
     final relay=_relay;_relay=null;
     await relay?.stop(revoke:revoke);
+  }
+  Future<void> revalidateRelay(OrbitConversation thread) async {
+    final relay=_relay;
+    if(relay==null)return;
+    final owner=await api.owner;
+    await _serialMailbox(owner,'__crypto__',() async {
+      if(!identical(_relay,relay))return;
+      try{
+        if(!relay.canUse(thread.id,owner)||
+          !await relay.revalidate(thread,await _recipients(thread))){
+          await stopRelay();
+        }
+      }on OrbitIdentityException catch(error){
+        if(error.statusCode==null)rethrow;
+        await stopRelay();
+      }catch(_){await stopRelay();}
+    });
   }
   Future<bool> canRelay(OrbitConversation thread) async{
     final relay=_relay;

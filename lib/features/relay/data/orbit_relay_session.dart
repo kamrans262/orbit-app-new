@@ -66,6 +66,7 @@ class OrbitRelaySession {
     await cipher.prepareRelayDirect(owner:owner,device:local.id,recipients:directories);
     final leases=<OrbitRelayLease>[];
     for(final peer in peers.take(10)){
+      relayCheck(generation==_generation&&await messaging.owner==owner&&generation==_generation,'Relay activation cancelled.');
       final raw=await api.lease(scope:thread.id,peer:peer.id,keyVersion:own.single.keyVersion,nonce:relayNonce());
       final lease=await OrbitRelayLease.verify(raw['lease'] as String,cap,scope:thread.id,localDevice:local.id,receiving:false);
       relayCheck(lease.id==raw['lease_id']&&lease.peer==peer.id&&lease.peerKey==peer.identity&&
@@ -83,6 +84,19 @@ class OrbitRelaySession {
         duration:Duration(seconds:leases.map((l)=>l.expires-cap.clock.seconds).reduce((a,b)=>a<b?a:b).clamp(1,900).toInt()));
     }catch(_){await stop();rethrow;}
     if(generation!=_generation){await stop();throw const FormatException('Relay session closed.');}
+  }
+  /// Never renew or extend an existing lease by refreshing capabilities.
+  /// A changed server policy/key/roster immediately ends local transfer.
+  Future<bool> revalidate(OrbitConversation thread,Map<String,OrbitMessagingKeyDirectory> directories) async {
+    final generation=_generation,old=_cap;
+    if(old==null||!active||thread.id!=_thread?.id||thread.groupEpoch!=_thread?.groupEpoch)return false;
+    final fresh=OrbitRelayCapabilities.fromJson(await api.capabilities());
+    if(generation!=_generation||!active||!fresh.ready||fresh.keyId!=old.keyId||
+       fresh.publicKey!=old.publicKey||fresh.revision!=old.revision||
+       rosterHash(directories)!=_rosterHash||
+       _leases.any((lease)=>!lease.live(fresh)))return false;
+    await _current(generation);
+    return true;
   }
   Future<void> _current(int generation) async {
     final owner=await messaging.owner;
