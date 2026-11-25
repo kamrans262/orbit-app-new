@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../app/theme/app_typography.dart';
+import '../../../../core/widgets/app_emoji_safe_text.dart';
 import '../../domain/models/ping_models.dart';
 
 class PingOptionCard extends StatefulWidget {
@@ -63,7 +64,17 @@ class _PingOptionCardState extends State<PingOptionCard> {
                   SizedBox.square(
                     dimension: 32,
                     child: Center(
-                      child: Text(
+                      child: Theme.of(context).platform == TargetPlatform.iOS
+                          ? AppEmojiSafeText(
+                              widget.option.emoji,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 25,
+                                height: 1,
+                                color: widget.option.foregroundColor,
+                              ),
+                            )
+                          : Text(
                         widget.option.emoji,
                         textAlign: TextAlign.center,
                         style: TextStyle(

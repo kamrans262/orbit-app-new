@@ -98,7 +98,7 @@ class _LoginScreenState extends State<LoginScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
             const AuthHeader(
-              heading: 'Welcome back 👋',
+              heading: 'Welcome back \u{1F44B}',
               subtitle: 'Log in to continue',
               headingKey: LoginKeys.heading,
               subtitleKey: LoginKeys.subtitle,

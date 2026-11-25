@@ -99,7 +99,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
             const AuthHeader(
-              heading: 'Create your account 👋',
+              heading: 'Create your account \u{1F44B}',
               subtitle: 'Sign up to get started',
               headingKey: SignUpKeys.heading,
               subtitleKey: SignUpKeys.subtitle,

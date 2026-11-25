@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../core/widgets/app_emoji_safe_text.dart';
 
 class AuthHeader extends StatelessWidget {
   const AuthHeader({
@@ -25,23 +26,21 @@ class AuthHeader extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        Text(
-          heading,
-          key: headingKey,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontFamily: AppTypography.fontFamily,
-            fontFamilyFallback: const <String>[
-              'Noto Color Emoji',
-              'Apple Color Emoji',
-              'Segoe UI Emoji',
-            ],
-            fontSize: 24,
-            height: 1.25,
-            fontWeight: FontWeight.w700,
-            color: Color(0xFF0F1724),
+        if (Theme.of(context).platform == TargetPlatform.iOS &&
+            heading.contains('\u{1F44B}'))
+          AppEmojiSafeText(
+            heading,
+            key: headingKey,
+            textAlign: TextAlign.center,
+            style: _headingStyle,
+          )
+        else
+          Text(
+            heading,
+            key: headingKey,
+            textAlign: TextAlign.center,
+            style: _headingStyle,
           ),
-        ),
         const SizedBox(height: headingToSubtitleGap),
         Text(
           subtitle,
@@ -63,4 +62,13 @@ class AuthHeader extends StatelessWidget {
       ],
     );
   }
+
+  static const _headingStyle = TextStyle(
+    fontFamily: AppTypography.fontFamily,
+    fontFamilyFallback: AppTypography.emojiFontFallback,
+    fontSize: 24,
+    height: 1.25,
+    fontWeight: FontWeight.w700,
+    color: Color(0xFF0F1724),
+  );
 }

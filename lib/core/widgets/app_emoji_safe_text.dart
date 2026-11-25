@@ -30,6 +30,26 @@ class AppEmojiSafeText extends StatelessWidget {
       semanticLabel: 'waving hand',
       color: Color(0xFFFFB547),
     ),
+    0x1F4CD: _EmojiIconSpec(
+      icon: Icons.location_on_rounded,
+      semanticLabel: 'location pin',
+    ),
+    0x1F697: _EmojiIconSpec(
+      icon: Icons.directions_car_rounded,
+      semanticLabel: 'car',
+    ),
+    0x23F0: _EmojiIconSpec(
+      icon: Icons.alarm_rounded,
+      semanticLabel: 'alarm clock',
+    ),
+    0x2764: _EmojiIconSpec(
+      icon: Icons.favorite_rounded,
+      semanticLabel: 'heart',
+    ),
+    0x26A0: _EmojiIconSpec(
+      icon: Icons.warning_amber_rounded,
+      semanticLabel: 'warning',
+    ),
     0x1F305: _EmojiIconSpec(
       icon: Icons.wb_twilight_rounded,
       semanticLabel: 'sunset',
