@@ -218,9 +218,11 @@ Future<void> showMomentErrorPopup(
 Future<void> showLoadingPopup(
   BuildContext context, {
   bool showCloseButton = false,
+  ValueChanged<ModalRoute<dynamic>>? onRoute,
 }) {
   return _showConfiguredPopup(
     context,
+    onRoute:onRoute,
     type: OrbitPopupType.loading,
     title: 'Loading...',
     description: 'Please Wait a Moment',
@@ -287,12 +289,16 @@ Future<void> _showConfiguredPopup(
   Color? illustrationBackground,
   double? illustrationBackgroundSize,
   double illustrationSvgSize = 82,
+  ValueChanged<ModalRoute<dynamic>>? onRoute,
 }) async {
   await showOrbitPopupModal<void>(
     context: context,
     popupId: type.name,
     barrierDismissible: false,
-    builder: (dialogContext) => _ConfiguredOrbitPopup(
+    builder: (dialogContext) {
+      final route=ModalRoute.of(dialogContext);
+      if(route!=null)onRoute?.call(route);
+      return _ConfiguredOrbitPopup(
       key: OrbitPopupVariantKeys.popup(type),
       type: type,
       title: title,
@@ -309,7 +315,8 @@ Future<void> _showConfiguredPopup(
       illustrationBackground: illustrationBackground,
       illustrationBackgroundSize: illustrationBackgroundSize,
       illustrationSvgSize: illustrationSvgSize,
-    ),
+    );
+    },
   );
 }
 

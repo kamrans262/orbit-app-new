@@ -17,6 +17,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../domain/models/moment_publish_models.dart';
 import '../../data/orbit_moment_capture_vault.dart';
+import '../../data/orbit_moment_repository.dart';
 import '../../../auth/data/orbit_identity_client.dart';
 import '../../data/moment_photo_processor.dart';
 import '../../data/orbit_camera_policy.dart';
@@ -92,6 +93,7 @@ class MomentCameraScreen extends StatefulWidget {
     this.momentAudienceFriends = const <MomentAudienceCircle>[],
     this.momentPrivacyAudience = 'Nobody',
     this.publishMoment,
+    this.audienceLoader,
     this.privateSaver,
     this.enableCamera = true,
     this.captureOwner,
@@ -115,6 +117,7 @@ class MomentCameraScreen extends StatefulWidget {
   final List<MomentAudienceCircle> momentAudienceFriends;
   final String momentPrivacyAudience;
   final MomentPublisher? publishMoment;
+  final Future<OrbitMomentAudienceOptions> Function()? audienceLoader;
   final OrbitPrivatePhotoSaver? privateSaver;
 
   /// Defaults to true in the real app. Tests can turn this off so widget tests
@@ -203,6 +206,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   Timer? _toolHintTimer;
   int? _countdownValue;
   bool _orbitLoadingPopupVisible = false;
+  ModalRoute<dynamic>? _cameraLoadingRoute;
   bool _orbitErrorPopupVisible = false;
   bool _cameraInitializationInProgress = false;
 
@@ -408,7 +412,15 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     await frameReady.future;
     if (!mounted || !_isInitializing || _orbitLoadingPopupVisible) return;
     _orbitLoadingPopupVisible = true;
-    await showLoadingPopup(context, showCloseButton: false);
+    await showLoadingPopup(context, showCloseButton: false,onRoute:(route){
+      _cameraLoadingRoute=route;
+      if(!_orbitLoadingPopupVisible||!mounted){
+        WidgetsBinding.instance.addPostFrameCallback((_){
+          if(route.isActive)route.navigator?.removeRoute(route);
+        });
+      }
+    });
+    _cameraLoadingRoute=null;
     _orbitLoadingPopupVisible = false;
   }
 
@@ -418,7 +430,8 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     }
 
     _orbitLoadingPopupVisible = false;
-    await Navigator.of(context, rootNavigator: true).maybePop();
+    final route=_cameraLoadingRoute;
+    if(route!=null&&route.isActive)route.navigator?.removeRoute(route);
   }
 
   void _showOrbitMomentErrorPopup() {
@@ -456,7 +469,11 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         });
       }
 
-      if (firstOpen) unawaited(_showOrbitCameraLoadingPopup());
+      // The camera plugin owns the first system permission prompt. Avoid
+      // stacking the custom loading popup underneath that native permission UI.
+      if (firstOpen && await OrbitCameraPermissionMemory.hasConfirmedCameraAccess()) {
+        if(mounted)unawaited(_showOrbitCameraLoadingPopup());
+      }
 
       final disposing = _cameraDisposalInFlight;
       _cameraDisposalInFlight = null;
@@ -1479,6 +1496,14 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     // stay mounted under this sheet; no additional camera instance is created.
     _publishSheetOpen = true;
     try {
+      final loadAudience=widget.audienceLoader;
+      final options=loadAudience==null?null:await loadAudience();
+      if(!mounted)return;
+      if(widget.enableCamera&&await _checkedOwner()==null){
+        if(mounted)_showToolHint('Sign in again before publishing.');
+        return;
+      }
+      if(!mounted)return;
       await showMomentPublishingSheet(
         context,
         photoBytes: editedPhoto,
@@ -1491,9 +1516,9 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         initialFilter:_selectedFilter,
         captureToolsAllowed:()=>captured==null||_cameraToolsAllowed,
         // An authenticated account must never show fabricated Circle names.
-        circles: widget.momentAudienceCircles,
-        friends: widget.momentAudienceFriends,
-        privacyAudience: widget.momentPrivacyAudience,
+        circles: options?.circles??widget.momentAudienceCircles,
+        friends: options?.friends??widget.momentAudienceFriends,
+        privacyAudience: options?.privacy??widget.momentPrivacyAudience,
         publisher: widget.publishMoment,
         privateSaver: widget.privateSaver,
         clientId:_captureClientId,
@@ -1509,6 +1534,8 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
           _captureClientId=null;
         } : null,
       );
+    } catch (_) {
+      if(mounted)_showToolHint('Unable to prepare your Moment. Try again.');
     } finally {
       _publishSheetOpen = false;
     }

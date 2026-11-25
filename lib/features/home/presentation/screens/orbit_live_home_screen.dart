@@ -374,6 +374,8 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
           setState(()=>_name=safe);
         }
       }
+      // Plans have independent authorization; do not wait for media decryption.
+      unawaited(_refreshPlans());
       OrbitDashboardSnapshot? snapshot;
       var partialUnavailable=false;
       if(OrbitM8Rollout.enabled) {
@@ -520,7 +522,7 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
         _byId..clear()..addAll(authorized);
         _authors..clear()..addAll(authors);
         _notice=partialUnavailable
-          ? 'Some Home sections could not be verified. Retry.' : null;
+          ? 'Some Home sections could not be verified.' : null;
       });
     }catch(e){
       if(mounted && serial==_epoch) {
@@ -539,7 +541,6 @@ class _OrbitLiveHomeScreenState extends State<OrbitLiveHomeScreen>
     }finally{
       _loading=false;
       if(mounted && _owner.isNotEmpty){
-        unawaited(_refreshPlans());
         unawaited(_refreshSponsored());
       }
     }

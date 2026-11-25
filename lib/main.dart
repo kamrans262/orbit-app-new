@@ -45,9 +45,10 @@ void main() {
 
   // Resolve session and load available account basics while splash is visible.
   // No Welcome/Get Started route is built before this future completes.
-  final preparedApp = OrbitCaptureTempFiles().sweepInterrupted().catchError((Object _){}).then((_)=>OrbitStartupResolver(
+  unawaited(OrbitCaptureTempFiles().sweepInterrupted().catchError((Object _){}));
+  final preparedApp = OrbitStartupResolver(
     OrbitIdentityClient.instance,
-  ).resolve()).then((startup) {
+  ).resolve().then((startup) {
     // Resolve first-run state before reading public configuration; optional
     // presentation hints never delay or alter authenticated route selection.
     OrbitPublicConfigRuntime.instance.start();

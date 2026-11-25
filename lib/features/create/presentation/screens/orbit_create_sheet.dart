@@ -70,7 +70,7 @@ abstract final class OrbitCreateSheet {
     switch (selected) {
       case _CreateAction.moment:
         // Reuse the existing remembered-permission and single-init camera flow.
-        OrbitMomentCameraLauncher.open(context);
+        OrbitMomentCameraLauncher.openLive(context);
         return;
       case _CreateAction.post:
         await navigator.push<void>(

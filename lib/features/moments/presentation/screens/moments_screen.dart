@@ -339,6 +339,7 @@ class _MomentsScreenState extends State<MomentsScreen> {
   void _openCamera() {
     if(_cameraOpening)return;
     _cameraOpening=true;
+    _noMomentsPopupHandled=true;
     unawaited(_openCameraRespectingStoredPermission());
   }
 
@@ -365,6 +366,8 @@ class _MomentsScreenState extends State<MomentsScreen> {
   }
 
   Future<void> _openCameraAfterPermission() async {
+    if(!mounted)return;
+    _cameraOpening=true;
     try {
     widget.onAddPressed();
     final cameraBuilder = widget.cameraBuilder;

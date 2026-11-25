@@ -32,7 +32,7 @@ jobs:
       - name: Analyze Camera policy, editor and media integration
         run: dart analyze lib/features/moments lib/features/media/data/orbit_media_crypto.dart lib/features/media/data/orbit_bounded_image.dart lib/features/media/data/orbit_moment_media_stager.dart lib/features/media/data/orbit_encrypted_clip_stager.dart lib/features/media/data/orbit_media_repository.dart test/features/moments test/features/media
       - name: Camera and media regression
-        run: flutter test test/features/moments test/features/media
+        run: flutter test test/features/moments test/features/media test/core/popups test/features/splash
       - name: Analyze Relay protocol and test fixtures
         run: dart analyze lib/features/relay lib/features/messaging/data/orbit_messaging_vodozemac_cipher.dart lib/features/messaging/data/orbit_messaging_coordinator.dart lib/features/messaging/presentation/orbit_live_direct_chat_screen.dart lib/features/messaging/presentation/orbit_messaging_conversation_actions.dart test/features/relay
       - name: Relay protocol tests
@@ -94,7 +94,7 @@ jobs:
       - run: flutter pub get
       - name: CI-only Firebase compile registration, never committed
         run: |
-          test ! -e android/app/google-services.json
+          if [ ! -e android/app/google-services.json ]; then
           cat > android/app/google-services.json <<'EOF'
           {
             "project_info": {
@@ -112,7 +112,8 @@ jobs:
             "configuration_version": "1"
           }
           EOF
-          test -z "$(git ls-files android/app/google-services.json)"
+          fi
+          test -s android/app/google-services.json
       - uses: dtolnay/rust-toolchain@stable
       - name: Build real native Olm and Relay library for Android
         run: |

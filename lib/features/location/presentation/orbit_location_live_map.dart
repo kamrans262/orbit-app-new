@@ -497,7 +497,7 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
           zoomControlsEnabled:false,
           onMapCreated:(controller){
             _onMapCreated(controller);
-            _styleReady=true;
+            if(mounted)setState(()=>_styleReady=true);
             unawaited(_syncAnnotations());
             unawaited(_centerOnMyDevice(requestPermission:false));
           },

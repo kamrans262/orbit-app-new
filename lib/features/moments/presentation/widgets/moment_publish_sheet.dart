@@ -174,8 +174,9 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
     ui.Image? image;
     try {
       codec=await ui.instantiateImageCodec(widget.photoBytes);
-      image=(await codec.getNextFrame()).image;
-      if(mounted)setState(()=>_photoSize=Size(image!.width.toDouble(),image.height.toDouble()));
+      final decoded=(await codec.getNextFrame()).image;
+      image=decoded;
+      if(mounted)setState(()=>_photoSize=Size(decoded.width.toDouble(),decoded.height.toDouble()));
     }catch(_){ /* Image.memory displays the existing error state. */ }
     finally {image?.dispose();codec?.dispose();}
   }
@@ -576,6 +577,8 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
             ? 'Camera tools changed. Return to review; your draft is retained.'
             : privateOnly
             ? _explainPrivateSaveFailure(error)
+            : error is OrbitIdentityException && error.statusCode==429
+            ? 'Too many requests. Please wait a moment before retrying.'
             : 'Your Moment could not be published. Nothing was confirmed as sent.';
         _step = _PublishStep.failed;
       });

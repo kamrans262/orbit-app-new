@@ -21,7 +21,6 @@ import '../../../check_in/presentation/navigation/orbit_check_in_navigation.dart
 import '../../data/orbit_m7_rollout.dart';
 import '../../data/orbit_moment_offline_cache.dart';
 import '../../../auth/data/orbit_identity_client.dart';
-import '../../../media/data/orbit_moment_media_stager.dart';
 import '../../domain/models/moments_models.dart';
 import '../screens/moment_camera_screen.dart';
 import '../screens/moments_screen.dart';
@@ -62,8 +61,6 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
   final Map<String,String> _names={};
   final Map<String,String> _captions={};
   final Map<String,String> _places={};
-  OrbitMomentAudienceOptions _options=
-    const OrbitMomentAudienceOptions([],[],'Nobody');
   final Set<String> _likes={};
   final Set<String> _bookmarked={};
   final Set<String> _seen={};
@@ -78,6 +75,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
   bool _hasMore=false;
   int _feedLimit=30;
   bool _feedRequestInFlight=false;
+  bool _feedRefreshQueued=false;
   Timer? _authorizationRefresh;
   int _loadEpoch=0;
 
@@ -281,7 +279,8 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
   }
 
   Future<void> _load({bool incremental=false}) async {
-    if(!mounted||_feedRequestInFlight)return;
+    if(!mounted)return;
+    if(_feedRequestInFlight){_feedRefreshQueued=true;return;}
     if(!OrbitM7Rollout.enabled){
       ++_loadEpoch;
       setState((){
@@ -298,7 +297,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         _hasMore=false;
         _pendingPublishCount=0;
         _pendingWarning=null;
-        _error=null;
+        _error='Moments unavailable.';
         _busy=false;
       });
       return;
@@ -339,9 +338,6 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         ? moments.where((m)=>DateTime.now().difference(m.publishedAt)
           <const Duration(hours:24)).take(20).toList(growable:false)
         : await _repo.feed(rail:true,maxItems:20);
-      OrbitMomentAudienceOptions options;
-      try {options=await _repo.audienceOptions();}
-      catch(_){options=const OrbitMomentAudienceOptions([],[],'Nobody');}
       final seen=await _repo.seenMomentIds(rail.map((m)=>m.id));
       Set<String> saved=<String>{};
       try{saved=await _repo.bookmarkedMomentIds(moments);}catch(_){
@@ -418,7 +414,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       setState((){
         _showingOfflinePreviews=false;
         _evictDecodedMedia();
-        _items=moments;_rail=rail;_options=options;
+        _items=moments;_rail=rail;
         _activityCheckIns=activityCheckIns;
         _hasMore=hasMore && _feedLimit<240;
         _likes..clear()..addAll(moments.where((item)=>item.myReaction=='like').map((item)=>item.id));
@@ -463,7 +459,13 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         _busy=false;
         _error='Unable to load encrypted Moments. Check your connection and try again.';
       });
-    }finally{_feedRequestInFlight=false;}
+    }finally{
+      _feedRequestInFlight=false;
+      if(_feedRefreshQueued){
+        _feedRefreshQueued=false;
+        if(mounted&&WidgetsBinding.instance.lifecycleState==AppLifecycleState.resumed)unawaited(_load());
+      }
+    }
   }
   Future<void> _loadMore() async {
     if(!mounted || _busy || _loadingMore || !_hasMore ||
@@ -594,16 +596,10 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
   }
 
   MomentCameraScreen _camera() => MomentCameraScreen(
-    privateSaver:(bytes,progress) async {
-      final saved=await OrbitMomentMediaStager()
-        .stagePhoto(bytes,onProgress:progress);
-      if(!saved.thumbnailVerified || !saved.privateGrantConfirmed){
-        throw StateError('Private encrypted storage not confirmed.');
-      }
+    audienceLoader:() {
+      if(!OrbitM7Rollout.enabled)throw StateError('Moments unavailable.');
+      return _repo.audienceOptions();
     },
-    momentAudienceCircles:_options.circles,
-    momentAudienceFriends:_options.friends,
-    momentPrivacyAudience:_options.privacy,
     publishMoment:OrbitM7Rollout.enabled ? (request,progress) async {
       if(mounted)setState((){
         _publishingNow=true;
