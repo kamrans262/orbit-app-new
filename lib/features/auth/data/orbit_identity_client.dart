@@ -31,7 +31,8 @@ import '../../moderation/data/orbit_moderation_repository.dart';
 enum OrbitRestoreState { signedOut, authenticated, deviceRegistration, deletionPending, offlineProfile }
 
 class OrbitIdentityException implements Exception {
-  OrbitIdentityException(this.message, [this.statusCode]);
+  OrbitIdentityException(this.message, [this.statusCode, this.retryAfter]);
+  final Duration? retryAfter;
   final String message;
   final int? statusCode;
   @override
@@ -186,13 +187,16 @@ class OrbitIdentityClient {
     try {
       response = await http.Response.fromStream(
         await _http.send(request).timeout(const Duration(seconds: 20)),
-      );
+      ).timeout(const Duration(seconds: 20));
     } catch (_) {
       throw OrbitIdentityException('Unable to connect to Orbit. Check your internet connection.');
     }
     if (protected && response.statusCode == 401 && allowRetry) {
-      _access = null; _billingAccessOwner=null;
-      await refresh();
+      // Do not invalidate a freshly rotated session because of an older response.
+      if (_access == null || request.headers['Authorization'] == 'Bearer $_access') {
+        _access = null; _billingAccessOwner=null;
+        await refresh();
+      }
       return _send(method, path, body: body, protected: true, allowRetry: false,
         idempotencyKey: idempotencyKey);
     }
@@ -207,6 +211,9 @@ class OrbitIdentityClient {
       throw OrbitIdentityException(
         json['message'] is String ? json['message'] as String : 'Orbit could not process this request.',
         response.statusCode,
+        response.statusCode == 429
+          ? Duration(seconds: (int.tryParse(response.headers['retry-after'] ?? '') ?? 60).clamp(1, 3600).toInt())
+          : null,
       );
     }
     return json;

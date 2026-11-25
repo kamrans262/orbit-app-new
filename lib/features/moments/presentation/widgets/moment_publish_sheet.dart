@@ -274,6 +274,8 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
   double _progress = 0;
   String? _error;
   bool _busy = false;
+  Timer? _retryCooldown;
+  bool get _waitingToRetry => _retryCooldown?.isActive ?? false;
   bool _simulated = false;
   bool _savedPrivate = false;
   String _audienceKind = 'only_me';
@@ -402,6 +404,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
   void dispose() {
     OrbitPublicConfigRuntime.instance.removeListener(_onToolPolicyChanged);
     _previewDebounce?.cancel();
+    _retryCooldown?.cancel();
     ++_previewGeneration;
     _caption.removeListener(_checkpoint);_placeLabel.removeListener(_checkpoint);
     _overlayText.dispose();
@@ -484,7 +487,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
   void _onToolPolicyChanged(){if(mounted)setState((){});}
   bool get _toolsAllowed=>widget.mediaKind!='image'||(OrbitCameraToolCatalog.current.allowsFilter(_filter.name)&&(widget.captureToolsAllowed?.call()??true));
   Future<void> _submit({bool previewOnly = false, bool privateOnly = false}) async {
-    if (_busy || !mounted) return;
+    if (_busy || _waitingToRetry || !mounted) return;
     if (privateOnly && !_canSavePrivate) return;
     if (!privateOnly && !_hasAudience) return;
     if (!previewOnly && !privateOnly && !_canPublish) return;
@@ -572,6 +575,12 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
       });
     } catch (error) {
       if (!mounted) return;
+      if(error is OrbitIdentityException && error.statusCode==429){
+        _retryCooldown?.cancel();
+        _retryCooldown=Timer(error.retryAfter??const Duration(seconds:60),(){
+          if(mounted)setState(()=>_retryCooldown=null);
+        });
+      }
       setState(() {
         _error = !_toolsAllowed
             ? 'Camera tools changed. Return to review; your draft is retained.'
@@ -888,7 +897,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
         AppPrimaryButton(
           label:_canPublish?'Publish Moment':
             (_canSavePrivate?'Save privately':'Preview publishing flow'),
-          enabled:_canPublish?_hasAudience:(_canSavePrivate||_hasAudience),
+          enabled:!_waitingToRetry&&(_canPublish?_hasAudience:(_canSavePrivate||_hasAudience)),
           onPressed:()=>unawaited(_submit(
             privateOnly:!_canPublish&&_canSavePrivate,
             previewOnly:!_canPublish&&!_canSavePrivate)),
@@ -1064,7 +1073,8 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
           if (failed)
             AppPrimaryButton(
               key: MomentPublishKeys.retry,
-              label: _savedPrivate ? 'Retry Private Save' : 'Retry Publishing',
+              label: _waitingToRetry ? 'Please wait before retrying' : (_savedPrivate ? 'Retry Private Save' : 'Retry Publishing'),
+               enabled:!_waitingToRetry,
               onPressed: () => unawaited(_submit(privateOnly: _savedPrivate)),
             ),
           if (finished)

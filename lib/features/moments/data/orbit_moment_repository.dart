@@ -549,8 +549,9 @@ class OrbitMomentRepository {
       if(now.difference(intent.createdAt)>const Duration(days:7)){
         continue;
       }
-      if(!force && (intent.attemptCount>=8 ||
-          (intent.retryAfter!=null && now.isBefore(intent.retryAfter!)))){
+      // Explicit retries cannot bypass the active encrypted-upload backoff.
+      if((!force && intent.attemptCount>=8) ||
+          (intent.retryAfter!=null && now.isBefore(intent.retryAfter!))){
         continue;
       }
       final server=await _existingReceipt(intent.clientId);

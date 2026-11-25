@@ -41,7 +41,8 @@ class OrbitMediaRepository {
       }on OrbitIdentityException catch(error){
         final code=error.statusCode;
         if(code!=null && code!=408 && code!=429 && code<500)rethrow;
-        if(attempt==4)rethrow;
+        // Preserve the encrypted intent instead of hammering a throttled API.
+        if(code==429 || attempt==4)rethrow;
       }on TimeoutException {
         if(attempt==4)rethrow;
       }on SocketException {
@@ -187,6 +188,9 @@ class OrbitMediaRepository {
                response.statusCode<500){
               throw const FormatException('Private storage rejected a signed ciphertext part.');
             }
+            if(response.statusCode==429)throw OrbitIdentityException(
+              'Private storage is temporarily rate limited.',429,
+              Duration(seconds:(int.tryParse(response.headers['retry-after']??'')??60).clamp(1,3600).toInt()));
             throw StateError('Temporary encrypted part upload failure.');
           }
           etag = response.headers['etag'];
