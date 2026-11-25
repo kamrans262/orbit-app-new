@@ -2,46 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 import '../../../location/data/orbit_location_repository.dart';
 import '../../data/orbit_profile_settings_repository.dart';
-import '../../domain/models/notification_settings.dart';
 import '../../domain/models/privacy_settings.dart';
-import 'notification_screen.dart';
+import '../../../notifications/presentation/orbit_live_notification_settings_screen.dart';
 import 'privacy_setting_screen.dart';
 
-class OrbitNotificationPreferencesScreen extends StatefulWidget {
+/// Keep older navigation entry points on the shared live notification screen.
+/// This preserves the approved settings UI and includes M14 token registration.
+class OrbitNotificationPreferencesScreen extends StatelessWidget {
   const OrbitNotificationPreferencesScreen({super.key, this.repository});
   final OrbitProfileSettingsRepository? repository;
 
   @override
-  State<OrbitNotificationPreferencesScreen> createState() =>
-      _OrbitNotificationPreferencesScreenState();
-}
-
-class _OrbitNotificationPreferencesScreenState
-    extends State<OrbitNotificationPreferencesScreen> {
-  late final OrbitProfileSettingsRepository _repo =
-      widget.repository ?? OrbitProfileSettingsRepository();
-  late Future<NotificationSettings> _future = _repo.loadNotifications();
-
-  void _retry() {
-    setState(() {
-      _future = _repo.loadNotifications();
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) => FutureBuilder<NotificationSettings>(
-    future: _future,
-    builder: (context, snapshot) {
-      if (!snapshot.hasData) {
-        return _LoadingSettings(error: snapshot.hasError, onRetry: _retry);
-      }
-      return NotificationScreen(
-        initialSettings: snapshot.data!,
-        onSaveSettings: _repo.saveNotifications,
-        onBack: () => Navigator.of(context).pop(),
-      );
-    },
-  );
+  Widget build(BuildContext context) =>
+      OrbitLiveNotificationSettingsScreen(repository: repository);
 }
 
 class OrbitPrivacyPreferencesScreen extends StatefulWidget {
