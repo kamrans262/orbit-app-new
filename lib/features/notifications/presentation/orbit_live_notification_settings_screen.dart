@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_typography.dart';
@@ -33,7 +32,6 @@ class _OrbitLiveNotificationSettingsScreenState
   bool _savingOptional=false;
   String? _error;
   bool _loading=true;
-  PermissionStatus? _osStatus;
   int _epoch=0;
 
   @override
@@ -41,23 +39,13 @@ class _OrbitLiveNotificationSettingsScreenState
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _load();
-    _readSystemPermission();
   }
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if(state==AppLifecycleState.resumed){
-      unawaited(_readSystemPermission());
       if(_current?.pushNotificationsEnabled==true){
         unawaited(OrbitNotificationPushRuntime.instance.configure());
       }
-    }
-  }
-  Future<void> _readSystemPermission() async {
-    try{
-      final status=await Permission.notification.status;
-      if(mounted)setState(()=>_osStatus=status);
-    }catch(_){
-      if(mounted)setState(()=>_osStatus=null);
     }
   }
   Future<void> _load() async {
@@ -149,43 +137,6 @@ class _OrbitLiveNotificationSettingsScreenState
               value:_optional!['friends']??true,
               onChanged:(next)=>_saveOptional('friends',next)),
         ],
-        systemPermissionFooter:Semantics(
-          label:'System notification permission status',
-          child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-              const SizedBox(height:6),
-              Text(_osStatus==null
-                ?'Device permission: Not checked'
-                :_osStatus!.isGranted
-                  ?'Device notifications: Allowed'
-                  :'Device notifications: Blocked or not granted',
-                  style:AppTypography.bodyMuted),
-              TextButton(
-                onPressed:() async {
-                  await openAppSettings();
-                  if(mounted)await _readSystemPermission();
-                },
-                child:const AppGradientActionLabel('Open phone notification settings')),
-              ValueListenableBuilder<String>(
-                valueListenable:OrbitNotificationPushRuntime.instance.registrationStatus,
-                builder:(context,status,_)=>Text('Firebase push: $status',
-                  style:AppTypography.bodyMuted),
-              ),
-              TextButton(
-                onPressed:() async {
-                  await OrbitNotificationPushRuntime.instance.configure(force:true);
-                  if(mounted)await _readSystemPermission();
-                },
-                child:const AppGradientActionLabel('Retry push connection'),
-              ),
-              const Text('Android alerts use a generic Orbit notification. '
-                'Device permission and power settings affect delivery while '
-                'the application is closed.',
-                style:TextStyle(fontSize:12,color:Color(0xFF5D6574))),
-              const SizedBox(height:6),
-              const Text('Account security notices remain available; SOS '
-                'escalation is a later module.',
-                style:TextStyle(fontSize:12,color:Color(0xFF5D6574))),
-          ])),
       );
     }
     return Scaffold(
