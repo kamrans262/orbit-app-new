@@ -484,6 +484,36 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
       'keep your photo, or retry after checking the M6 Media service.';
   }
 
+  String _explainPublishFailure(Object error) {
+    if(error is OrbitIdentityException){
+      switch(error.statusCode){
+        case 401:return 'Your session expired. Sign in again and retry.';
+        case 403:return 'Check device approval and Moment sharing permissions.';
+        case 404:return 'The requested media or Moment service is unavailable.';
+        case 409:return 'Orbit could not confirm the encrypted media or audience. Retry the same draft.';
+        case 413:return 'This Moment exceeds the storage or audience limit.';
+        case 422:return 'The media or selected audience did not pass Orbit validation.';
+        case 429:return 'Too many requests. Please wait before retrying.';
+        default:return 'Orbit could not confirm publishing (${error.statusCode==null?"connection":"HTTP "+error.statusCode.toString()}). Retry the same draft.';
+      }
+    }
+    if(error is StateError){
+      final reason=error.message.toString().toLowerCase();
+      if(reason.contains('no eligible')||reason.contains('recipient')||reason.contains('audience')){
+        return 'The selected audience does not have the required trusted device keys or permissions.';
+      }
+      if(reason.contains('verifying')||reason.contains('pending')){
+        return 'Your encrypted upload is still awaiting verification. Retry the same draft.';
+      }
+      if(reason.contains('grant'))return 'Encrypted media access could not be confirmed.';
+      if(reason.contains('account')||reason.contains('sign in'))return 'Sign in to the original capture account and retry.';
+    }
+    if(error is FileSystemException)return 'The captured media could not be read. Your draft has not been confirmed.';
+    if(error is FormatException)return 'Orbit could not prepare or verify the media format.';
+    if(error is TimeoutException || error is SocketException)return 'The connection was interrupted. Retry the same draft.';
+    return 'Your Moment could not be confirmed. Retry the same draft.';
+  }
+
   void _onToolPolicyChanged(){if(mounted)setState((){});}
   bool get _toolsAllowed=>widget.mediaKind!='image'||(OrbitCameraToolCatalog.current.allowsFilter(_filter.name)&&(widget.captureToolsAllowed?.call()??true));
   Future<void> _submit({bool previewOnly = false, bool privateOnly = false}) async {
@@ -586,9 +616,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
             ? 'Camera tools changed. Return to review; your draft is retained.'
             : privateOnly
             ? _explainPrivateSaveFailure(error)
-            : error is OrbitIdentityException && error.statusCode==429
-            ? 'Too many requests. Please wait a moment before retrying.'
-            : 'Your Moment could not be published. Nothing was confirmed as sent.';
+            : _explainPublishFailure(error);
         _step = _PublishStep.failed;
       });
     } finally {

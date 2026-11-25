@@ -227,7 +227,7 @@ class OrbitMediaRepository {
   }
 
   Future<OrbitMediaReceipt> waitForReady(String mediaId,String uploadId, {
-    String variant = 'original', int attempts = 8,
+    String variant = 'original', int attempts = 65,
   }) async {
     for(var i=0;i<attempts;i++) {
       final status=await control('GET','/media/uploads/'+Uri.encodeComponent(uploadId));
@@ -237,7 +237,9 @@ class OrbitMediaRepository {
       if(!['verifying','initiated','uploading'].contains(state)) {
         throw StateError('Ciphertext verification was rejected.');
       }
-      if(i+1<attempts)await Future<void>.delayed(const Duration(seconds:2));
+      // The Hostinger verification worker runs every five minutes. Large
+      // objects and remote storage may legitimately need that full interval.
+      if(i+1<attempts)await Future<void>.delayed(const Duration(seconds:5));
     }
     return OrbitMediaReceipt(mediaId,uploadId,'verifying',variant:variant);
   }
