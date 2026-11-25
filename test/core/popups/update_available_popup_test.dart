@@ -96,9 +96,13 @@ void main() {
 
     final updateButton = find.byKey(UpdateAvailablePopupKeys.updateNow);
     expect(updateButton.hitTestable(), findsOneWidget);
+    final actionPosition = tester.getCenter(updateButton);
     await tester.tap(updateButton.hitTestable());
     await tester.pump();
-    await tester.tap(updateButton.hitTestable());
+    // A disabled action is deliberately not hit-testable. Try the same
+    // screen position again, rather than requiring an enabled button.
+    expect(find.text('Updating...'), findsOneWidget);
+    await tester.tapAt(actionPosition);
     await tester.pump();
     expect(calls, 1);
 

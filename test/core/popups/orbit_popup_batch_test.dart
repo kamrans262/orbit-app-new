@@ -65,7 +65,10 @@ void main() {
 
     for (final entry in cases.entries) {
       await pumpLauncher(tester, entry.value);
-      expect(find.text(entry.key), findsOneWidget);
+      // The approved title and an action can intentionally share a label.
+      final title = find.byKey(const Key('orbit_popup_title'));
+      expect(title, findsOneWidget);
+      expect(tester.widget<Text>(title).data, entry.key);
       expect(tester.takeException(), isNull);
       await tester.tap(find.byIcon(Icons.close));
       await tester.pumpAndSettle();
