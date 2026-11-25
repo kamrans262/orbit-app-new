@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
 
 abstract final class OrbitRealtimeRollout {
-  static const selected=bool.fromEnvironment('ORBIT_M25_REALTIME_ENABLED',defaultValue:false);
+  // Normal builds select M25; backend deployment and per-module gates remain authoritative.
+  // Emergency client rollback: --dart-define=ORBIT_M25_REALTIME_ENABLED=false.
+  static const selected=bool.fromEnvironment('ORBIT_M25_REALTIME_ENABLED',defaultValue:true);
   static const project=String.fromEnvironment('ORBIT_M25_FIREBASE_PROJECT_ID',defaultValue:'orbit-app-4cb36');
 }
 
