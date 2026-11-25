@@ -3,6 +3,8 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:orbit_ui/features/auth/data/orbit_identity_client.dart';
+import 'package:orbit_ui/core/widgets/app_primary_button.dart';
 import 'package:orbit_ui/features/moments/domain/models/moment_publish_models.dart';
 import 'package:orbit_ui/features/moments/presentation/widgets/moment_publish_sheet.dart';
 
@@ -154,4 +156,46 @@ void main() {
     expect(captured?.mediaFile?.path,source.path);
   });
 
+
+  testWidgets('rate limited publication blocks retries until cooldown, reuses client ID',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final requests = <MomentPublishRequest>[];
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: Builder(
+      builder: (context) => TextButton(
+        onPressed: () => showMomentPublishingSheet(context,
+          photoBytes: realPhoto,
+          circles: const [], privacyAudience: 'Nobody',
+          publisher: (request, progress) async {
+            requests.add(request);
+            if (requests.length == 1) {
+              throw OrbitIdentityException('Too many requests', 429,
+                const Duration(seconds: 10));
+            }
+            return const MomentPublishReceipt(momentId: 'confirmed-retry');
+          }),
+        child: const Text('Open'))))));
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    expect(find.text('Save privately'), findsNothing);
+    expect(find.text('Save privately without publishing'), findsNothing);
+    await tester.ensureVisible(find.text('Publish Moment'));
+    await tester.tap(find.text('Publish Moment'));
+    await tester.pumpAndSettle();
+    final retry = find.byKey(MomentPublishKeys.retry);
+    expect(tester.widget<AppPrimaryButton>(retry).enabled, isFalse);
+    await tester.tap(retry);
+    await tester.pump();
+    expect(requests, hasLength(1));
+    await tester.pump(const Duration(seconds: 11));
+    await tester.pumpAndSettle();
+    expect(tester.widget<AppPrimaryButton>(retry).enabled, isTrue);
+    await tester.tap(retry);
+    await tester.pumpAndSettle();
+    expect(requests, hasLength(2));
+    expect(requests.last.clientId, requests.first.clientId);
+    expect(find.text('Your Moment is live'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
