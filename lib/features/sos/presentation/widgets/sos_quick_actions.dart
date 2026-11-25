@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../app/theme/app_typography.dart';
 import '../../domain/models/sos_models.dart';
 
 class SosQuickActions extends StatelessWidget {
@@ -89,7 +90,7 @@ class _SosQuickActionItem extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
-                  fontFamily: 'Inter',
+                  fontFamily: AppTypography.fontFamily,
                   fontSize: 11,
                   height: 1.3,
                   fontWeight: FontWeight.w500,

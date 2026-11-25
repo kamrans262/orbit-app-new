@@ -16,12 +16,14 @@ class QuickActionCard extends StatelessWidget {
     required this.data,
     required this.onTap,
     this.width = 78,
+    this.enableDemoNavigation = false,
     super.key,
   });
 
   final QuickActionData data;
   final VoidCallback onTap;
   final double width;
+  final bool enableDemoNavigation;
 
   @override
   Widget build(BuildContext context) {
@@ -42,6 +44,12 @@ class QuickActionCard extends StatelessWidget {
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: () {
+              // Live Home owns authenticated navigation. Never intercept it
+              // with a UI-only route.
+              if (!enableDemoNavigation) {
+                onTap();
+                return;
+              }
               if (data.id == 'sos') {
                 Navigator.of(context).push(
                   AppFadeSlidePageRoute<void>(

@@ -17,7 +17,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: Center(
-            child: QuickActionCard(data: data, onTap: () {}),
+            child: QuickActionCard(data: data, onTap: () {}, enableDemoNavigation: true),
           ),
         ),
       ),
@@ -41,7 +41,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: Center(
-            child: QuickActionCard(data: data, onTap: () {}),
+            child: QuickActionCard(data: data, onTap: () {}, enableDemoNavigation: true),
           ),
         ),
       ),

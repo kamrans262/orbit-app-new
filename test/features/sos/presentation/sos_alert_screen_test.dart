@@ -31,6 +31,26 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('live SOS retains readable bundled-font labels and history', (tester) async {
+    var historyOpened = false;
+    await pumpAtSize(tester, const Size(430, 932), SosAlertScreen(
+      onActivateSos: (_) async => null,
+      onViewHistory: () => historyOpened = true,
+    ));
+    for (final label in [
+      '3 second hold', 'Emergency\nContacts', 'Share\nLocation',
+      'Record\nAudio', 'Call\nEmergency',
+    ]) {
+      expect(tester.widget<Text>(find.text(label)).style?.fontFamily, 'Poppins');
+    }
+    expect(find.text('Preview Responder Map (UI only)'), findsNothing);
+    final history = find.text('View SOS Alerts & History');
+    await tester.ensureVisible(history);
+    await tester.tap(history);
+    expect(historyOpened, isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('holding SOS for 3 seconds triggers exactly once', (
     WidgetTester tester,
   ) async {

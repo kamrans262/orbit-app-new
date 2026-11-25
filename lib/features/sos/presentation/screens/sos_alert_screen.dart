@@ -253,7 +253,7 @@ class _SosAlertScreenState extends State<SosAlertScreen> {
                         '3 second hold',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          fontFamily: 'Inter',
+                          fontFamily: AppTypography.fontFamily,
                           fontSize: 11,
                           height: 1.3,
                           fontWeight: FontWeight.w500,

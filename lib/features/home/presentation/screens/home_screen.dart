@@ -738,6 +738,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   key: ValueKey<String>('quick_action_${action.id}'),
                   width: cardWidth,
                   data: action,
+                  enableDemoNavigation: widget.enableDemoCircleNavigation,
                   onTap: () => action.id=='explore'?_openOrbit():widget.onQuickActionPressed(action),
                 );
               },
