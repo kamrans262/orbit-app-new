@@ -57,8 +57,8 @@ void main() {
 
   runApp(
     OrbitSplashGate(
-      displayDuration: const Duration(seconds: 2),
-      fadeDuration: const Duration(milliseconds: 280),
+      displayDuration: Duration.zero,
+      fadeDuration: Duration.zero,
       onSplashFinished: () {
         OrbitConnectivityNavigatorObserver.startMonitoringAfterStartup();
       },

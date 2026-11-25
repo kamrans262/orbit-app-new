@@ -198,6 +198,7 @@ class _MomentsScreenState extends State<MomentsScreen> {
 
   bool _noMomentsPopupScheduled = false;
   bool _noMomentsPopupHandled = false;
+  bool _cameraOpening = false;
 
   @override
   void initState() {
@@ -263,7 +264,7 @@ class _MomentsScreenState extends State<MomentsScreen> {
                 sliver: SliverToBoxAdapter(child: _buildHeader()),
               ),
               const SliverToBoxAdapter(child: SizedBox(height: _sectionGap)),
-              if(widget.pendingCard!=null)SliverPadding(
+              if(widget.pendingCard!=null && widget.viewState!=MomentsViewState.error)SliverPadding(
                 padding:const EdgeInsets.fromLTRB(20,0,20,16),
                 sliver:SliverToBoxAdapter(child:widget.pendingCard!),
               ),
@@ -300,9 +301,10 @@ class _MomentsScreenState extends State<MomentsScreen> {
   }
 
   bool get _shouldShowNoMomentsPopup =>
-      widget.viewState == MomentsViewState.empty ||
-      (widget.viewState == MomentsViewState.populated &&
-          widget.feedItems.isEmpty);
+      !_cameraOpening && widget.pendingCard == null &&
+      (widget.viewState == MomentsViewState.empty ||
+      (!widget.privateMode && widget.viewState == MomentsViewState.populated &&
+          widget.feedItems.isEmpty));
 
   void _scheduleNoMomentsPopupIfNeeded() {
     if (!_shouldShowNoMomentsPopup ||
@@ -314,7 +316,8 @@ class _MomentsScreenState extends State<MomentsScreen> {
     _noMomentsPopupScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       _noMomentsPopupScheduled = false;
-      if (!mounted || !_shouldShowNoMomentsPopup || _noMomentsPopupHandled) {
+      if (!mounted || !_shouldShowNoMomentsPopup || _noMomentsPopupHandled ||
+          ModalRoute.of(context)?.isCurrent != true) {
         return;
       }
 
@@ -334,6 +337,8 @@ class _MomentsScreenState extends State<MomentsScreen> {
   }
 
   void _openCamera() {
+    if(_cameraOpening)return;
+    _cameraOpening=true;
     unawaited(_openCameraRespectingStoredPermission());
   }
 
@@ -346,21 +351,24 @@ class _MomentsScreenState extends State<MomentsScreen> {
     }
 
     if (alreadyConfirmed) {
-      _openCameraAfterPermission();
+      await _openCameraAfterPermission();
       return;
     }
 
-    await showCameraPermissionPopup(
-      context,
-      onAllow: _openCameraAfterPermission,
-      onNotNow: () {},
-    );
+    try {
+      await showCameraPermissionPopup(
+        context,
+        onAllow: _openCameraAfterPermission,
+        onNotNow: () {},
+      );
+    }finally{_cameraOpening=false;}
   }
 
-  void _openCameraAfterPermission() {
+  Future<void> _openCameraAfterPermission() async {
+    try {
     widget.onAddPressed();
     final cameraBuilder = widget.cameraBuilder;
-    Navigator.of(context).push(
+    await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: cameraBuilder ?? (_) => MomentCameraScreen(
           privateSaver: (bytes, progress) async {
@@ -373,6 +381,7 @@ class _MomentsScreenState extends State<MomentsScreen> {
         ),
       ),
     );
+    }finally{_cameraOpening=false;}
   }
 
   void _openMessages() {
@@ -502,7 +511,7 @@ class _MomentsScreenState extends State<MomentsScreen> {
                   key: MomentsKeys.errorState,
                   icon: Icons.cloud_off_outlined,
                   title: 'Unable to load moments',
-                  message: widget.errorMessage,
+                  message: widget.privateMode?'':widget.errorMessage,
                 ),
                 if(widget.onRefresh!=null)TextButton(
                   onPressed:()=>unawaited(widget.onRefresh!()),
@@ -854,8 +863,8 @@ class _MomentsMessageState extends StatelessWidget {
                     color: Color(0xFF0F1724),
                   ),
                 ),
-                const SizedBox(height: 5),
-                Text(
+                if(message.isNotEmpty)const SizedBox(height: 5),
+                if(message.isNotEmpty)Text(
                   message,
                   textAlign: TextAlign.center,
                   style: const TextStyle(

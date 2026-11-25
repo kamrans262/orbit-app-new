@@ -77,7 +77,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
   bool _loadingMore=false;
   bool _hasMore=false;
   int _feedLimit=30;
-  String? _lastPublishFailure;
+  bool _feedRequestInFlight=false;
   Timer? _authorizationRefresh;
   int _loadEpoch=0;
 
@@ -281,7 +281,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
   }
 
   Future<void> _load({bool incremental=false}) async {
-    if(!mounted)return;
+    if(!mounted||_feedRequestInFlight)return;
     if(!OrbitM7Rollout.enabled){
       ++_loadEpoch;
       setState((){
@@ -303,6 +303,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       });
       return;
     }
+    _feedRequestInFlight=true;
     final epoch=++_loadEpoch;
     setState((){
       if(!incremental)_busy=true;
@@ -462,7 +463,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         _busy=false;
         _error='Unable to load encrypted Moments. Check your connection and try again.';
       });
-    }
+    }finally{_feedRequestInFlight=false;}
   }
   Future<void> _loadMore() async {
     if(!mounted || _busy || _loadingMore || !_hasMore ||
@@ -606,16 +607,11 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
     publishMoment:OrbitM7Rollout.enabled ? (request,progress) async {
       if(mounted)setState((){
         _publishingNow=true;
-        _lastPublishFailure=null;
       });
       try{
         final receipt=await _repo.publish(request,progress);
         if(mounted)unawaited(_load());
         return receipt;
-      }catch(_){
-        if(mounted)setState(()=>_lastPublishFailure=
-          'Failed to send Moment. Your encrypted draft is retained if queued.');
-        rethrow;
       }finally{
         if(mounted)setState(()=>_publishingNow=false);
       }
@@ -625,11 +621,8 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
   /// The unconfirmed item belongs in the local feed, not a fabricated
   /// backend Moment. It has no like/comment/share actions or fake receipt.
   Widget? _pendingCard(){
-    if(!_publishingNow && _pendingPublishCount==0 &&
-       _lastPublishFailure==null)return null;
-    final label=_publishingNow?'Sending encrypted Moment…':
-      _pendingWarning!=null?'Failed / Waiting for connection: $_pendingWarning':
-      _lastPublishFailure??'Waiting for connection · $_pendingPublishCount encrypted Moment draft(s)';
+    if(_publishingNow || _pendingPublishCount==0)return null;
+    final label='Moment draft waiting to send';
     return Material(
       color:AppColors.background,
       elevation:2,
@@ -654,10 +647,6 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
               label:_retrying?'Sending…':'Retry encrypted draft',
               enabled:!_retrying,
               onPressed:()=>unawaited(_retryEncryptedDrafts())),
-          if(!_publishingNow && _pendingPublishCount==0 &&
-             _lastPublishFailure!=null)
-            TextButton(onPressed:()=>setState(()=>_lastPublishFailure=null),
-              child:const AppGradientActionLabel('Dismiss')),
         ]),
       ),
     );
@@ -809,6 +798,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       privateSharing:true,
       viewState:_busy?MomentsViewState.loading:
         _error!=null?MomentsViewState.error:
+        _showingOfflinePreviews && feed.isEmpty?MomentsViewState.error:
         feed.isEmpty?MomentsViewState.empty:MomentsViewState.populated,
       errorMessage:_error??'Moments unavailable.',
       onRefresh:_load,

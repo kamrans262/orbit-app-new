@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:async';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import '../../data/moment_photo_processor.dart';
@@ -165,6 +166,19 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
   final List<MomentDrawStroke> _strokes=[];
   List<Offset> _activeStroke=[];
   Uint8List? _editedPreview;
+  Size? _photoSize;
+
+  Future<void> _resolvePhotoSize() async {
+    if(widget.mediaKind!='image')return;
+    ui.Codec? codec;
+    ui.Image? image;
+    try {
+      codec=await ui.instantiateImageCodec(widget.photoBytes);
+      image=(await codec.getNextFrame()).image;
+      if(mounted)setState(()=>_photoSize=Size(image!.width.toDouble(),image.height.toDouble()));
+    }catch(_){ /* Image.memory displays the existing error state. */ }
+    finally {image?.dispose();codec?.dispose();}
+  }
   Timer? _previewDebounce;
   int _previewGeneration=0;
   bool _previewBusy=false;
@@ -266,6 +280,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
   @override
   void initState() {
     super.initState();
+    unawaited(_resolvePhotoSize());
     OrbitPublicConfigRuntime.instance.addListener(_onToolPolicyChanged);
     final recovered=widget.recoveredEdits;
     _filter=MomentFilter.values.where((f)=>f.name==recovered['sheet_filter']).firstOrNull??widget.initialFilter;
@@ -670,14 +685,18 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
                       widget.mediaKind=='video'
                         ? 'Video ready to encrypt':'Voice ready to encrypt',
                       style:AppTypography.body)))
-              : LayoutBuilder(builder:(context,size)=>Stack(
+              : LayoutBuilder(builder:(context,constraints){
+                final photoSize=_photoSize;
+                final fitted=photoSize==null?constraints.biggest:
+                  applyBoxFit(BoxFit.contain,photoSize,constraints.biggest).destination;
+                return Center(child:SizedBox.fromSize(size:fitted,child:LayoutBuilder(builder:(context,size)=>Stack(
                 fit:StackFit.expand,
                 children:[
                   Image.memory(_editedPreview??widget.photoBytes,
-                    fit:BoxFit.fill,
+                    fit:BoxFit.contain,
                     errorBuilder:(_,error,stack)=>const Center(
                       child:Text('Unable to preview this photo'))),
-                  if(_drawing)GestureDetector(
+                  if(_drawing && _photoSize!=null)GestureDetector(
                     behavior:HitTestBehavior.opaque,
                     onPanStart:(details)=>_beginStroke(
                       details.localPosition,size.biggest),
@@ -695,7 +714,8 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
                         child:CircularProgressIndicator(strokeWidth:2))),
                   ),
                 ],
-              )),
+              ))));
+              }),
           ),
         ),
         if(widget.mediaKind=='image'||widget.mediaKind=='video')
@@ -861,9 +881,6 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
         if(!_canPublish && !_canSavePrivate)
           Text('UI preview only. No upload or notification is sent.',
             key:MomentPublishKeys.unavailable,style:AppTypography.bodyMuted),
-        if(_canSavePrivate && widget.mediaKind=='image')
-          Text('Private save needs trusted-device approval and the M6 encrypted media service. It does not publish a Moment.',
-            style:AppTypography.bodyMuted),
         const SizedBox(height:8),
         AppPrimaryButton(
           label:_canPublish?'Publish Moment':

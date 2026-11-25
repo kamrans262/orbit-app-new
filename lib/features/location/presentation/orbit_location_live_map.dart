@@ -118,7 +118,7 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
       _map=null;_styleReady=false;_didZoom=false;
       if(mounted){widget.onMarkersChanged?.call(const []);setState(() {});}
     } else {
-      _foreground=true;
+      if(mounted)setState(()=>_foreground=true);
       unawaited(_refresh());
     }
   }
@@ -388,14 +388,14 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
 
   // Explicitly requested local map positioning. This never creates a share,
   // sends a GPS sample to Orbit or exposes coordinates to other members.
-  Future<void> _centerOnMyDevice() async {
+  Future<void> _centerOnMyDevice({bool requestPermission=true}) async {
     final map=_map;
-    if(!mounted||!_foreground||_cap==null||map==null||_centeringOnDevice)return;
+    if(!mounted||!_foreground||map==null||_centeringOnDevice)return;
     final epoch=_epoch;
     setState(()=>_centeringOnDevice=true);
     try{
-      if(!await _gps.granted(request:true)) {
-        if(mounted&&epoch==_epoch)setState(()=>_message=
+      if(!await _gps.granted(request:requestPermission)) {
+        if(requestPermission&&mounted&&epoch==_epoch)setState(()=>_message=
           'Allow device location to center the map. This does not share your location.');
         return;
       }
@@ -410,10 +410,10 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
       _didZoom=true;
       await map.animateCamera(gl.CameraUpdate.newLatLngZoom(
         gl.LatLng(position.latitude,position.longitude),14));
-      if(mounted&&epoch==_epoch)setState(()=>_message=
+      if(requestPermission&&mounted&&epoch==_epoch)setState(()=>_message=
         'Map centered on your device. Your location has not been shared.');
     }catch(_){
-      if(mounted&&epoch==_epoch)setState(()=>_message=
+      if(requestPermission&&mounted&&epoch==_epoch)setState(()=>_message=
         'Could not locate your device. Check GPS and try again.');
     }finally{
       if(mounted)setState(()=>_centeringOnDevice=false);
@@ -484,7 +484,7 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
     return Stack(children:[
       Positioned.fill(child:!_foreground
         ?const ColoredBox(color:AppColors.background)
-        :configured&&OrbitM10Rollout.enabled&&_cap!=null
+        :configured&&OrbitM10Rollout.enabled
         ?gl.GoogleMap(
           key:const Key('orbit_map'),
           initialCameraPosition:const gl.CameraPosition(
@@ -499,6 +499,7 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
             _onMapCreated(controller);
             _styleReady=true;
             unawaited(_syncAnnotations());
+            unawaited(_centerOnMyDevice(requestPermission:false));
           },
           onCameraMoveStarted:(){
             ++_projectSerial;
@@ -506,10 +507,8 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
           },
           onCameraIdle:()=>unawaited(_syncAnnotations()),
         )
-        // Before the server verifies viewer capabilities, never initialize a
-        // native map or request a position. This also keeps widget tests native-free.
-        :Image.asset('assets/orbit_map.png',fit:BoxFit.cover,
-          semanticLabel:'Map preview, no live location data')),
+        // Map tiles do not grant access to private member locations.
+        :const ColoredBox(color:AppColors.background)),
       // Render the original Orbit avatar component at authorized coordinates.
       // Never synthesize profile photos or reveal names for absent records.
       if(_foreground && _styleReady && configured && OrbitM10Rollout.enabled)
@@ -557,7 +556,7 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
       ])),
       // Keep the original top toolbar unchanged. This action is placed below
       // it and follows Orbit's existing icon button styling.
-      if(_foreground && configured && _cap!=null && _styleReady)
+      if(_foreground && configured && _styleReady)
         Positioned(top:105,left:15,child:AppCircularIconButton(
           icon:Icons.my_location_outlined,
           iconGradient:AppColors.primaryGradient,

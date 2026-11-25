@@ -39,7 +39,9 @@ abstract final class OrbitMomentCameraLauncher {
           circles:options.circles,friends:options.friends,
           privacy:options.privacy,expectedOwner:owner);
       }catch(_){
-        if(context.mounted&&await OrbitIdentityClient.instance.currentLocalSocialOwner()==owner&&context.mounted)await _open(context,circles:const [],expectedOwner:owner);
+        if(context.mounted&&await OrbitIdentityClient.instance.currentLocalSocialOwner()==owner&&context.mounted){
+          await showMomentErrorPopup(context,onRetry:()=>openLive(context));
+        }
       }
     }());
   }
