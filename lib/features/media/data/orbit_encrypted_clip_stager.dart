@@ -146,7 +146,7 @@ class OrbitNativeVideoProcessor implements OrbitVideoProcessor {
     try{return await checked(input);}catch(error){lastFailure=error;}
     // Keep the original capture; the encrypted draft can be retried.
     throw FormatException('Video export could not meet the current capture policy.',
-      lastFailure?.runtimeType.toString());
+      lastFailure.runtimeType.toString());
   }
 
 }

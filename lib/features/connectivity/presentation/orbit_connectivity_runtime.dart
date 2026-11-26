@@ -25,6 +25,7 @@ class OrbitConnectivityNavigatorObserver extends NavigatorObserver
 
   Timer? _timer;
   Timer? _startupTimer;
+  Timer? _scheduledTimer;
   bool _bindingObserverInstalled = false;
   bool _checkScheduled = false;
   bool _checkInFlight = false;
@@ -75,6 +76,7 @@ class OrbitConnectivityNavigatorObserver extends NavigatorObserver
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _probeEpoch++;
+    _scheduledTimer?.cancel();_scheduledTimer=null;_checkScheduled=false;
     _consecutiveFailures=0;
     if (state == AppLifecycleState.resumed && _startupGraceComplete) {
       _scheduleCheck(delay: const Duration(seconds:3));
@@ -128,7 +130,8 @@ class OrbitConnectivityNavigatorObserver extends NavigatorObserver
     }
 
     _checkScheduled = true;
-    Future<void>.delayed(delay, () {
+    _scheduledTimer=Timer(delay, () {
+      _scheduledTimer=null;
       _checkScheduled = false;
       if (autoMonitorEnabled && _startupGraceComplete) {
         unawaited(checkNow());
@@ -209,6 +212,7 @@ class OrbitConnectivityNavigatorObserver extends NavigatorObserver
     ++_probeEpoch;
     _timer?.cancel();
     _startupTimer?.cancel();
+    _scheduledTimer?.cancel();_scheduledTimer=null;
     _timer = null;
     _startupTimer = null;
     _checkScheduled = false;

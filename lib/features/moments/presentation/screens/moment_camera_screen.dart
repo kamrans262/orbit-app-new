@@ -148,6 +148,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   String? _cameraError;
   Uint8List? _capturedBytes;
   bool _publishSheetOpen = false;
+  bool _reviewVisible=false;
   _OrbitCaptureMode _mode=_OrbitCaptureMode.photo;
   final AudioRecorder _audioRecorder=AudioRecorder();
   late final Future<String?> _routeOwner;
@@ -1504,6 +1505,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         return;
       }
       if(!mounted)return;
+      setState(()=>_reviewVisible=true);
       await showMomentPublishingSheet(
         context,
         photoBytes: editedPhoto,
@@ -1539,8 +1541,10 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       if(mounted)_showToolHint('Unable to prepare your Moment. Try again.');
     } finally {
       if(mounted){
-        setState(()=>_publishSheetOpen=false);
-        if(committed)await _retake();
+        setState((){_publishSheetOpen=false;_reviewVisible=committed;});
+        if(committed){
+          try{await _retake();}finally{if(mounted)setState(()=>_reviewVisible=false);}
+        }
       }
     }
   }
@@ -1763,7 +1767,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   Widget _buildCameraBackground() {
     final captured = _capturedBytes;
     if(_capturedClip!=null&&!_recording&&!_recordStarting){
-      if(_publishSheetOpen)return const ColoredBox(color:Colors.black);
+      if(_reviewVisible)return const ColoredBox(color:Colors.black);
       return ColoredBox(color:Colors.black,
         child:OrbitMomentDraftPlayer(
           key:ValueKey(_capturedClip!.path),
