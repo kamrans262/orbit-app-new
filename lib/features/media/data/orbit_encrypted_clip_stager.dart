@@ -12,6 +12,7 @@ import '../../auth/data/orbit_identity_client.dart';
 import 'orbit_media_crypto.dart';
 import '../../moments/data/orbit_camera_policy.dart';
 import '../../moments/data/orbit_capture_inspection.dart';
+import '../../moments/data/orbit_capture_temp_files.dart';
 import 'orbit_media_outbox.dart';
 import 'orbit_media_repository.dart';
 import 'orbit_media_transfer_gate.dart';
@@ -68,68 +69,86 @@ class OrbitNativeVideoProcessor implements OrbitVideoProcessor {
     if(initial.durationMs<=0 || initial.durationMs>policy.videoDuration) {
       throw const FormatException('Orbit supports video clips up to 60 seconds.');
     }
-    // Native Media3/AVFoundation encoding; strips original EXIF/GPS metadata
-    // and makes a bounded MP4 before per-part authenticated encryption.
-    final job=_compressor.compress(input.path,
-      options:CompressOptions(preset:CompressPreset.p720,
-        maxLongSidePx:policy.videoEdge,maxFps:policy.videoFps,
-        videoBitrateBps:policy.videoBitrate(lowBandwidth),
-        audio:stripAudio?const AudioStrip():const AudioPassthrough()));
-    final progress=job.progress.listen((value) {
-      onProgress?.call((value/100).clamp(0.0,1.0));
-    });
-    late final CompressResult result;
-    try {
-      result=await job.result;
-    } finally {
-      await progress.cancel();
-    }
-    // The plugin's never-larger fallback can return the unchanged camera
-    // original. Never upload it: source location tags and non-H.264 codecs
-    // have not been re-encoded or removed in that case.
-    final path=result.outputPath;
-    final output=File(path);
-    try {
-      if(result.usedOriginal || output.path==input.path) {
-        throw const FormatException('A privacy-safe video re-encode is required.');
+    // compress_video's never-larger guarantee may return the source even
+    // when requested options were different. Always use an app-owned fresh
+    // MP4 destination and independently inspect the final sanitized output.
+    final scratch=OrbitCaptureTempFiles();
+    final limit=policy.videoBitrate(lowBandwidth);
+    final sourceRate=initial.videoBitrateBps?.toInt()??limit;
+    final targets=<int>[
+      min(limit,(max(1,sourceRate)*0.80).round()),
+      min((limit*0.65).round(),(max(1,sourceRate)*0.50).round()),
+      min((limit*0.40).round(),(max(1,sourceRate)*0.30).round()),
+    ].map((n)=>max(64000,min(n,limit))).toList();
+    Object? lastFailure;
+    Future<OrbitPreparedVideo> checked(File candidate)async{
+      final output=await scratch.allocate('mp4');
+      try{
+        // Copy media tracks into a clean container, retaining orientation,
+        // never the source metadata. Mute means NO audio track.
+        await OrbitCaptureInspection.sanitizeMp4(candidate,output,muted:stripAudio);
+        if(!await output.exists()||await output.length()<1||
+           await output.length()>OrbitMediaFormat.videoLimit){
+          throw const FormatException('Prepared MP4 exceeds upload limits.');
+        }
+        final duration=await OrbitCaptureInspection.validate(output,kind:'video',
+          policy:policy,muted:stripAudio,saver:lowBandwidth);
+        final info=await _compressor.getMediaInfo(output.path);
+        if(info.widthPx<1||info.heightPx<1||
+           max(info.widthPx,info.heightPx)>policy.videoEdge){
+          throw const FormatException('Prepared MP4 has invalid dimensions.');
+        }
+        final bytes=await _compressor.getThumbnail(output.path,
+          positionMs:min(duration~/2,1500),quality:78,maxDimensionPx:320);
+        final poster=OrbitMediaCrypto.preparePhoto(bytes).thumbnail;
+        return OrbitPreparedVideo(file:output,posterJpeg:poster,
+          durationMs:duration,width:info.widthPx,height:info.heightPx);
+      }catch(_){
+        try{await scratch.deleteCacheFile(output);}catch(_){}
+        rethrow;
       }
-    if(!await output.exists() ||
-       await output.length()<1 ||
-       await output.length()>OrbitMediaFormat.videoLimit) {
-      throw const FormatException('Compressed video exceeds upload limits.');
     }
-    final info=await _compressor.getMediaInfo(output.path);
-    if(stripAudio && info.hasAudio){
-      throw const FormatException('Muted Moment export still contains audio.');
-    }
-    if(info.durationMs<=0 || info.durationMs>policy.videoDuration ||
-        info.widthPx<=0 || info.heightPx<=0 ||
-        max(info.widthPx,info.heightPx)>policy.videoEdge ||
-        (info.frameRateFps != null && info.frameRateFps! > policy.videoFps+0.5) ||
-        (info.videoBitrateBps != null && info.videoBitrateBps! > policy.videoBitrate(lowBandwidth)*1.125) ||
-        (info.videoCodec != null && info.videoCodec != 'unknown' && info.videoCodec != 'h264') ||
-        (policy.enhanced && (info.videoCodec!='h264'||info.frameRateFps==null||info.videoBitrateBps==null))) {
-      throw const FormatException('Compressed video does not meet Orbit policy.');
-    }
-    final duration=await OrbitCaptureInspection.validate(output,kind:'video',policy:policy,muted:stripAudio,saver:lowBandwidth);
-    final bytes=await _compressor.getThumbnail(output.path,
-      positionMs:min(info.durationMs ~/ 2,1500), quality:78,
-      maxDimensionPx:320);
-    final poster=OrbitMediaCrypto.preparePhoto(bytes).thumbnail;
-    return OrbitPreparedVideo(file:output,posterJpeg:poster,
-      durationMs:duration,width:info.widthPx,height:info.heightPx);
-    } catch (_) {
-      // Plugin output is still plaintext until the caller encrypts it. Any
-      // metadata/codec/thumbnail validation error must not leave an unsealed
-      // transcoded clip in the application's temporary storage.
-      if(output.path!=input.path){
-        try {
-          if(await output.exists())await output.delete();
-        } catch (_) { /* Preserve the original validation failure. */ }
+    for(var attempt=0;attempt<targets.length;attempt++){
+      final destination=await scratch.allocate('mp4');
+      File? candidate;
+      try{
+        final edge=attempt<2?policy.videoEdge:min(policy.videoEdge,960);
+        final fps=attempt<2?policy.videoFps:min(policy.videoFps,24);
+        final job=_compressor.compress(input.path,options:CompressOptions(
+          preset:CompressPreset.p720,maxLongSidePx:edge,maxFps:fps,
+          videoBitrateBps:targets[attempt],outputPath:destination.path,
+          codec:VideoCodec.h264,
+          audio:stripAudio?const AudioStrip():const AudioReencode(bitrateBps:96000,channels:2)));
+        final progress=job.progress.listen((value){
+          onProgress?.call((value/100).clamp(0.0,1.0));
+        });
+        late final CompressResult result;
+        try{result=await job.result;}finally{await progress.cancel();}
+        candidate=File(result.outputPath);
+        // Used-original is NOT permission to upload raw bytes. A source
+        // that is already compliant can be safely remuxed and independently
+        // validated. Otherwise try the next lower encode target.
+        final prepared=await checked(candidate);
+        onProgress?.call(1);
+        return prepared;
+      }catch(error){lastFailure=error;}
+      finally{
+        for(final file in [destination,if(candidate!=null)candidate]){
+          if(file.path!=input.path){
+            try{await scratch.deleteCacheFile(file);}catch(_){}
+          }
+        }
       }
-      rethrow;
     }
+    // Some devices report a compressor failure for already compatible
+    // short clips. A clean native remux is allowed only if every original
+    // codec, duration, size, track and bitrate check still passes.
+    try{return await checked(input);}catch(error){lastFailure=error;}
+    // Keep the original capture; the encrypted draft can be retried.
+    throw FormatException('Video export could not meet the current capture policy.',
+      lastFailure?.runtimeType.toString());
   }
+
 }
 
 class OrbitStagedClip {

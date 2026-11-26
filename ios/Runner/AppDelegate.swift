@@ -40,11 +40,24 @@ import workmanager_apple
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "OrbitCaptureInspection") {
       let channel = FlutterMethodChannel(name: "orbit/capture_inspection", binaryMessenger: registrar.messenger())
       channel.setMethodCallHandler { call, result in
-        guard call.method == "inspect" else { result(FlutterMethodNotImplemented); return }
+        guard call.method == "inspect" || call.method == "sanitizeMp4" else { result(FlutterMethodNotImplemented); return }
         guard let args = call.arguments as? [String:Any], let path = args["path"] as? String else {
           result(FlutterError(code: "invalid", message: "Capture unavailable", details: nil)); return
         }
         DispatchQueue.global(qos: .userInitiated).async {
+          if call.method == "sanitizeMp4" {
+            guard let output = args["output"] as? String else {
+              DispatchQueue.main.async { result(FlutterError(code:"invalid",message:"Export unavailable",details:nil)) }
+              return
+            }
+            sanitizeOrbitMp4(path,output,muted:args["muted"] as? Bool ?? false) { success in
+              DispatchQueue.main.async {
+                if success { result(nil) }
+                else { result(FlutterError(code:"invalid",message:"MP4 export unavailable",details:nil)) }
+              }
+            }
+            return
+          }
           let metadata = inspectOrbitCapture(path)
           DispatchQueue.main.async {
             if let metadata = metadata { result(metadata) }
@@ -132,6 +145,47 @@ private final class OrbitRelayDiscovery: NSObject, NetServiceDelegate, NetServic
     resolving.removeValue(forKey: sender.name)
   }
   func netService(_ sender: NetService, didNotResolve errorDict: [String: NSNumber]) { resolving.removeValue(forKey: sender.name) }
+}
+
+// AVMutableComposition copies only video/audio media tracks. No original
+// location, timed metadata, or other source metadata is exported.
+private func sanitizeOrbitMp4(_ path:String,_ output:String,muted:Bool,completion:@escaping (Bool)->Void) {
+  let source=URL(fileURLWithPath:path).resolvingSymlinksInPath()
+  let destination=URL(fileURLWithPath:output).resolvingSymlinksInPath()
+  let cache=URL(fileURLWithPath:NSHomeDirectory()+"/Library/Caches").resolvingSymlinksInPath()
+  let root=cache.appendingPathComponent("orbit-m23-capture-scratch").path
+  let sourceRoots=[NSTemporaryDirectory(),cache.path,NSHomeDirectory()+"/Library/Application Support"]
+    .map { URL(fileURLWithPath:$0).resolvingSymlinksInPath().path }
+  guard sourceRoots.contains(where:{ source.path.hasPrefix($0.hasSuffix("/") ? $0 : $0+"/") }),
+        destination.deletingLastPathComponent().path==root,
+        destination.pathExtension=="mp4",source != destination,
+        !FileManager.default.fileExists(atPath:destination.path),
+        let size=try? source.resourceValues(forKeys:[.fileSizeKey]).fileSize,size>0,size<=524288000 else{
+    completion(false);return
+  }
+  let asset=AVURLAsset(url:source)
+  let composition=AVMutableComposition()
+  let videos=asset.tracks(withMediaType:.video)
+  let audio=muted ? [] : asset.tracks(withMediaType:.audio)
+  guard videos.count==1,audio.count<=1 else{completion(false);return}
+  do{
+    for track in videos+audio {
+      guard let target=composition.addMutableTrack(withMediaType:track.mediaType,preferredTrackID:kCMPersistentTrackID_Invalid) else {
+        completion(false);return
+      }
+      try target.insertTimeRange(track.timeRange,of:track,at:track.timeRange.start)
+      if track.mediaType == .video { target.preferredTransform=track.preferredTransform }
+    }
+  }catch{completion(false);return}
+  guard let export=AVAssetExportSession(asset:composition,presetName:AVAssetExportPresetPassthrough),
+        export.supportedFileTypes.contains(.mp4) else{completion(false);return}
+  export.outputURL=destination;export.outputFileType = .mp4
+  export.metadata=[];export.shouldOptimizeForNetwork=true
+  export.exportAsynchronously {
+    let success=export.status == .completed
+    if !success { try? FileManager.default.removeItem(at:destination) }
+    completion(success)
+  }
 }
 
 private func inspectOrbitCapture(_ path: String) -> [String:Any]? {

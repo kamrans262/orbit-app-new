@@ -20,7 +20,7 @@ class MainActivity : FlutterActivity() {
         relay = RelayDiscovery(this, MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "orbit/relay_discovery"))
         billing = OrbitStoreBilling(this, MethodChannel(flutterEngine.dartExecutor.binaryMessenger,"orbit/billing"))
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger,"orbit/capture_inspection").setMethodCallHandler { call,result ->
-            if(call.method!="inspect"){result.notImplemented();return@setMethodCallHandler}
+            if(call.method!="inspect" && call.method!="sanitizeMp4"){result.notImplemented();return@setMethodCallHandler}
             val path=call.argument<String>("path")
             if(path==null){result.error("invalid","Capture file unavailable",null);return@setMethodCallHandler}
             Thread {
@@ -28,8 +28,16 @@ class MainActivity : FlutterActivity() {
                     val file=File(path).canonicalFile
                     val roots=listOf(cacheDir.canonicalFile,filesDir.canonicalFile)
                     require(roots.any { file.path.startsWith(it.path+File.separator) } && file.isFile && file.length() in 1L..524288000L)
-                    val metadata=inspectCapture(file.path)
-                    runOnUiThread { result.success(metadata) }
+                    if(call.method=="sanitizeMp4"){
+                        val output=File(call.argument<String>("output") ?: error("output")).canonicalFile
+                        val root=File(cacheDir,"orbit-m23-capture-scratch").canonicalFile
+                        require(output.parentFile==root && output.extension=="mp4" && !output.exists() && output!=file)
+                        sanitizeOrbitMp4(file.path,output.path,call.argument<Boolean>("muted")==true)
+                        runOnUiThread { result.success(null) }
+                    }else{
+                        val metadata=inspectCapture(file.path)
+                        runOnUiThread { result.success(metadata) }
+                    }
                 } catch (_:Exception) {
                     runOnUiThread { result.error("invalid","Capture metadata unavailable",null) }
                 }
@@ -136,6 +144,62 @@ private class RelayDiscovery(private val activity: FlutterActivity, channel: Met
         discovery?.let { try { nsd.stopServiceDiscovery(it) } catch (_: Exception) {} }
         registration = null; discovery = null; resolving = false
         pending.clear(); peers.clear(); ownName = ""
+    }
+}
+
+// Rebuild the container from only the selected H.264/AAC tracks. Never
+// transfer location or other container metadata. Orientation is explicit.
+private fun sanitizeOrbitMp4(input:String,output:String,muted:Boolean){
+    val extractor=MediaExtractor()
+    val metadata=MediaMetadataRetriever()
+    var muxer:android.media.MediaMuxer?=null
+    var started=false
+    var completed=false
+    try{
+        extractor.setDataSource(input);metadata.setDataSource(input)
+        val target=android.media.MediaMuxer(output,android.media.MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+        muxer=target
+        val rotation=metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull()?:0
+        if(rotation in listOf(0,90,180,270))target.setOrientationHint(rotation)
+        val tracks=mutableMapOf<Int,Int>()
+        var videos=0;var audios=0
+        for(i in 0 until extractor.trackCount){
+            val format=extractor.getTrackFormat(i)
+            val mime=format.getString(MediaFormat.KEY_MIME)?:continue
+            if(mime.startsWith("video/")){
+                require(mime=="video/avc" && ++videos==1)
+            }else if(mime.startsWith("audio/")){
+                if(muted)continue
+                require(mime=="audio/mp4a-latm" && ++audios==1)
+            }else continue
+            tracks[i]=target.addTrack(format)
+            extractor.selectTrack(i)
+        }
+        require(videos==1)
+        target.start();started=true
+        val buffer=java.nio.ByteBuffer.allocateDirect(16*1024*1024)
+        val info=android.media.MediaCodec.BufferInfo()
+        while(true){
+            val index=extractor.sampleTrackIndex
+            if(index<0)break
+            val out=tracks[index]?:error("track")
+            val time=extractor.sampleTime
+            require(time>=0 && extractor.sampleFlags and MediaExtractor.SAMPLE_FLAG_ENCRYPTED==0)
+            buffer.clear()
+            val size=extractor.readSampleData(buffer,0)
+            require(size in 1..buffer.capacity())
+            buffer.position(0);buffer.limit(size)
+            info.set(0,size,time,if(extractor.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC!=0)
+                android.media.MediaCodec.BUFFER_FLAG_KEY_FRAME else 0)
+            target.writeSampleData(out,buffer,info)
+            if(!extractor.advance())break
+        }
+        target.stop();started=false;completed=true
+    }finally{
+        if(started)try{muxer?.stop()}catch(_:Exception){}
+        try{muxer?.release()}catch(_:Exception){}
+        extractor.release();metadata.release()
+        if(!completed)File(output).delete()
     }
 }
 

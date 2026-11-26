@@ -4,6 +4,11 @@ import 'orbit_camera_policy.dart';
 
 abstract final class OrbitCaptureInspection {
   static const channel=MethodChannel('orbit/capture_inspection');
+  /// Rebuild a private MP4 container without source metadata. This does not
+  /// certify the codec: the result must still pass validate before encryption.
+  static Future<void> sanitizeMp4(File input,File output,{required bool muted})async{
+    await channel.invokeMethod<void>('sanitizeMp4',{'path':input.path,'output':output.path,'muted':muted});
+  }
   static Future<int> validate(File file,{required String kind,
     required OrbitCameraPolicy policy,bool muted=false,bool saver=false}) async{
     final raw=await channel.invokeMapMethod<String,dynamic>('inspect',{'path':file.path});
