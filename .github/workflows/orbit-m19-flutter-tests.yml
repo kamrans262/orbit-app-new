@@ -75,7 +75,7 @@ jobs:
           flutter test test/features/plans/orbit_m15_plans_contract_test.dart test/features/sos/orbit_m16_sos_contract_test.dart
           flutter test test/features/auth/orbit_m3_offline_profile_test.dart test/features/profile/orbit_profile_settings_repository_test.dart test/features/friends/orbit_m4_social_repository_test.dart
           flutter test test/features/circles/orbit_m5_api_contract_test.dart test/features/media/orbit_media_repository_test.dart test/features/home/data/orbit_dashboard_repository_test.dart test/features/presence/orbit_m9_presence_contract_test.dart
-          flutter test test/features/location/orbit_m10_location_contract_test.dart test/features/ping/data/orbit_ping_record_test.dart test/features/messaging/orbit_m13_messaging_safety_test.dart test/features/app_update/orbit_update_runtime_test.dart
+          flutter test test/features/location/orbit_m10_location_contract_test.dart test/features/location/orbit_m10_existing_orbit_screen_test.dart test/features/location/orbit_m10_map_avatar_contract_test.dart test/features/ping/data/orbit_ping_record_test.dart test/features/messaging/orbit_m13_messaging_safety_test.dart test/features/app_update/orbit_update_runtime_test.dart
 
   android-build:
     runs-on: ubuntu-latest

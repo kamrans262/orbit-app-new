@@ -9,7 +9,10 @@ import 'package:orbit_ui/features/orbit/presentation/screens/orbit_screen.dart';
 void main(){
   TestWidgetsFlutterBinding.ensureInitialized();
   final messenger=TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-  tearDown(()=>messenger.setMockMethodCallHandler(OrbitMapProvider.channel,null));
+  tearDown((){
+    messenger.setMockMethodCallHandler(OrbitMapProvider.channel,null);
+    messenger.setMockMethodCallHandler(SystemChannels.platform_views,null);
+  });
 
   test('native map configuration is checked independently of the location API',()async{
     messenger.setMockMethodCallHandler(OrbitMapProvider.channel,(call)async{
@@ -24,6 +27,13 @@ void main(){
 
   testWidgets('empty live Orbits still mounts the actual Google map with no member pins',(tester)async{
     messenger.setMockMethodCallHandler(OrbitMapProvider.channel,(_)async=>true);
+    // Native view allocation is a platform responsibility; the test checks
+    // the actual GoogleMap widget and its privacy-safe empty marker contract.
+    messenger.setMockMethodCallHandler(SystemChannels.platform_views,(call)async{
+      if(call.method=='create')return 1;
+      if(call.method=='resize')return {'width':400.0,'height':600.0};
+      return null;
+    });
     await tester.pumpWidget(MaterialApp(home:OrbitScreen.live()));
     for(var i=0;i<5;i++)await tester.pump();
     final map=find.byType(GoogleMap);
