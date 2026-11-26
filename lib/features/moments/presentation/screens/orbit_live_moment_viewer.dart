@@ -14,6 +14,7 @@ import '../../../../core/widgets/app_primary_button.dart';
 import '../../../../core/widgets/app_screen_header.dart';
 import '../../../../core/popups/orbit_popup_variants.dart';
 import '../../data/orbit_moment_repository.dart';
+import '../../../auth/data/orbit_identity_client.dart';
 import '../widgets/orbit_private_moment_player.dart';
 
 /// Private viewer reuses the existing Orbit detail scaffold, action icons and
@@ -217,13 +218,24 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
       }
       // First display a separately authorized thumbnail; request the
       // original only after another live permission check.
-      final photo=current.mediaKind=='image' || current.mediaKind=='audio'
-        ? await widget.repository.photo(current,variant:'thumbnail')
-        : Uint8List(0);
-      final caption=await widget.repository.caption(current);
-      await widget.repository.view(current);
-      String? viewer;
-      try { viewer=await widget.repository.currentUserId(); } catch (_) {}
+      final viewer=await widget.repository.currentUserId();
+      Uint8List photo=Uint8List(0);
+      if(current.mediaKind=='image'||current.mediaKind=='audio'){
+        try{
+          photo=await widget.repository.photo(current,variant:'thumbnail');
+        }on OrbitIdentityException catch(error){
+          if(current.mediaKind!='image'||error.statusCode!=404||
+             !await widget.repository.remainsAuthorized(current))rethrow;
+          photo=await widget.repository.photo(current,variant:'original');
+        }
+      }
+      String? caption;
+      try{caption=await widget.repository.caption(current);}catch(_){}
+      if(viewer!=await widget.repository.currentUserId()||
+         !await widget.repository.remainsAuthorized(current)){
+        unawaited(MemoryImage(photo).evict());
+        throw StateError('Audience authorization expired');
+      }
       if(mounted && epoch==_loadEpoch && _current.id==current.id){
         setState((){
           _photo=photo;
@@ -237,7 +249,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
           _isOwner=viewer!=null && viewer==current.creatorId;
           _loading=false;
         });
-        widget.onViewed?.call(current.id);
+        unawaited(_recordView(current,epoch));
         if(widget.openComments&&!_openedInitialComments){
           _openedInitialComments=true;unawaited(_commentSheet());
         }else{_paused=false;_schedule();}
@@ -254,6 +266,19 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
         _loading=false;
       });
     }
+  }
+  // Receipt failures must not discard independently authorized media.
+  Future<void> _recordView(OrbitLiveMoment current,int epoch) async{
+    try{
+      await widget.repository.view(current);
+      if(mounted&&epoch==_loadEpoch&&_current.id==current.id){
+        widget.onViewed?.call(current.id);
+      }
+    }on OrbitIdentityException catch(error){
+      if(mounted&&epoch==_loadEpoch&&[401,403,404].contains(error.statusCode)){
+        await _checkAuthorization();
+      }
+    }catch(_){}
   }
   Future<void> _upgradeOriginal(OrbitLiveMoment current,int epoch) async {
     Uint8List? original;
@@ -884,7 +909,10 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
                 : _loading
                 ? const CircularProgressIndicator(color:AppColors.primaryEnd)
                 : _error!=null
-                  ? Text(_error!,textAlign:TextAlign.center,style:AppTypography.bodyMuted)
+                  ? Column(mainAxisSize:MainAxisSize.min,children:[
+                    Text(_error!,textAlign:TextAlign.center,style:AppTypography.bodyMuted),
+                    TextButton(onPressed:()=>unawaited(_load()),child:const AppGradientActionLabel('Try again')),
+                  ])
                   : ClipRRect(borderRadius:BorderRadius.circular(16),
                     child:_current.mediaKind=='image'
                       ? Image.memory(_photo!,fit:BoxFit.contain)

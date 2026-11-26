@@ -68,6 +68,10 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
   String? _loadedOwner;
   bool _initialLoadComplete=false;
   bool _autoRetryInFlight=false;
+  bool _backgroundCleared=false;
+  bool _viewerOpening=false;
+  DateTime? _lastSuccessfulLoad;
+  DateTime? _retryNotBefore;
   final Map<String,DateTime> _cacheLeaseAt={};
   bool _showingOfflinePreviews=false;
   String? _error;
@@ -87,15 +91,16 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
   @override
   void initState(){
     super.initState();
-    _m25Refresh=OrbitRealtimeRefresh(modules:const {'moments','activity','check_in','social','circles'},visible:()=>OrbitRealtimeRefresh.current(this),refresh:()=>_load(),fallback:false)..start();
+    _m25Refresh=OrbitRealtimeRefresh(modules:const {'moments','activity','check_in','social','circles'},visible:()=>OrbitRealtimeRefresh.current(this),refresh:()=>_load(background:true),fallback:false,
+      minimumInterval:const Duration(seconds:10))..start();
 
     WidgetsBinding.instance.addObserver(this);
     _authorizationRefresh=Timer.periodic(const Duration(seconds:25),(_){
       if(!mounted || _busy ||
           WidgetsBinding.instance.lifecycleState!=AppLifecycleState.resumed ||
-          ModalRoute.of(context)?.isCurrent!=true)return;
+          ModalRoute.of(context)?.isCurrent!=true||_viewerOpening)return;
       if(OrbitRealtimeRollout.selected){_m25Refresh?.poll();}else{
-      unawaited(_load());
+      unawaited(_load(background:true));
       }
     });
     unawaited(_load(retryDrafts:true));
@@ -217,7 +222,9 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if(state==AppLifecycleState.paused || state==AppLifecycleState.inactive || state==AppLifecycleState.hidden) {
+    if(state==AppLifecycleState.paused || state==AppLifecycleState.hidden) {
+      if(_backgroundCleared)return;
+      _backgroundCleared=true;
       ++_loadEpoch;
       if(mounted)setState((){
         _evictDecodedMedia();
@@ -230,9 +237,12 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         _bookmarked.clear();
         _seen.clear();
         _busy=true;
+        _initialLoadComplete=false;
+        _lastSuccessfulLoad=null;
       });
-    }else if(state==AppLifecycleState.resumed) {
-      unawaited(_load());
+    }else if(state==AppLifecycleState.resumed && _backgroundCleared) {
+      _backgroundCleared=false;
+      if(mounted&&ModalRoute.of(context)?.isCurrent==true)unawaited(_load());
     }
   }
 
@@ -283,9 +293,16 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
     }catch(_){return false;}
   }
 
-  Future<void> _load({bool incremental=false,bool retryDrafts=false}) async {
+  Future<void> _load({bool incremental=false,bool retryDrafts=false,bool background=false}) async {
     if(!mounted)return;
-    if(_feedRequestInFlight){_feedRefreshQueued=true;return;}
+    if(background){
+      if(_viewerOpening||_backgroundCleared||ModalRoute.of(context)?.isCurrent!=true)return;
+      final retryAt=_retryNotBefore;
+      if(retryAt!=null&&DateTime.now().isBefore(retryAt))return;
+      final last=_lastSuccessfulLoad;
+      if(last!=null&&DateTime.now().difference(last)<const Duration(seconds:10))return;
+    }
+    if(_feedRequestInFlight){if(!background)_feedRefreshQueued=true;return;}
     if(!OrbitM7Rollout.enabled){
       ++_loadEpoch;
       setState((){
@@ -309,10 +326,9 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
     }
     _feedRequestInFlight=true;
     final epoch=++_loadEpoch;
-    setState((){
-      if(!_initialLoadComplete || _items.isEmpty&&_rail.isEmpty&&_error!=null)_busy=true;
-      _error=null;
-    });
+    if(!background&&!_initialLoadComplete){
+      setState((){_busy=true;_error=null;});
+    }
     try {
       // Resume only this account's encrypted outbox while foregrounded.
       // Failures leave the original ciphertext queued without fake success.
@@ -328,10 +344,11 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       String? pendingProblem;
       var waiting=0;
       try{waiting=await _repo.pendingPublishCount();}catch(_){}
-      if(waiting>0 && pendingProblem==null){
+      if(waiting>0){
         try{pendingProblem=await _repo.pendingDraftNotice();}catch(_){}
       }
-      if(mounted && epoch==_loadEpoch)setState((){
+      if(mounted && epoch==_loadEpoch &&
+          (waiting!=_pendingPublishCount||pendingProblem!=_pendingWarning))setState((){
         _pendingPublishCount=waiting;
         _pendingWarning=pendingProblem;
       });
@@ -381,6 +398,27 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         // Never show a previous M18 Activity cache after a failed refresh.
       }
       if(!mounted||epoch!=_loadEpoch)return;
+      bool sameList(List<OrbitLiveMoment> previous,List<OrbitLiveMoment> next)=>
+        previous.length==next.length&&List.generate(next.length,(i)=>i).every((i)=>
+          previous[i].id==next[i].id&&previous[i].contextId==next[i].contextId&&
+          previous[i].mediaId==next[i].mediaId&&
+          previous[i].audienceRevision==next[i].audienceRevision&&
+          previous[i].publishVersion==next[i].publishVersion&&
+          previous[i].myReaction==next[i].myReaction);
+      final sameCheckIns=_activityCheckIns.length==activityCheckIns.length&&
+        List.generate(activityCheckIns.length,(i)=>i).every((i)=>
+          _activityCheckIns[i].activityId==activityCheckIns[i].activityId&&
+          _activityCheckIns[i].record.label==activityCheckIns[i].record.label&&
+          _activityCheckIns[i].record.creatorName==activityCheckIns[i].record.creatorName);
+      // Do not rebuild unchanged, freshly authorized feed content.
+      if(background&&_initialLoadComplete&&!_showingOfflinePreviews&&_error==null&&
+         sameList(_items,moments)&&sameList(_rail,rail)&&sameCheckIns&&
+         prefetch.every((m)=>stable.contains(m.id)&&_previews.containsKey(m.id))&&
+         _seen.length==seen.length&&_seen.containsAll(seen)&&
+         _bookmarked.length==saved.length&&_bookmarked.containsAll(saved)){
+        _lastSuccessfulLoad=DateTime.now();_retryNotBefore=null;
+        return;
+      }
       // Immediately remove revoked/expired entries while new media loads.
       setState((){
         _items=moments;_rail=rail;
@@ -454,12 +492,13 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         }
       }catch(_){}
       if(!mounted || epoch!=_loadEpoch)return;
-      if(!mounted || epoch!=_loadEpoch)return;
       if(await _repo.currentUserId()!=owner)throw OrbitIdentityException('Moment account changed.',401);
       if(!mounted||epoch!=_loadEpoch)return;
       setState((){
         _showingOfflinePreviews=false;
         _initialLoadComplete=true;
+        _lastSuccessfulLoad=DateTime.now();_retryNotBefore=null;
+        _error=null;
         _items=moments;_rail=rail;
         _activityCheckIns=activityCheckIns;
         _hasMore=hasMore && _feedLimit<240;
@@ -476,6 +515,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       unawaited(_refreshSponsored());
       if(retryDrafts&&waiting>0)unawaited(_resumeDraftsOnce());
     }on OrbitIdentityException catch(error){
+      if(error.statusCode==429)_retryNotBefore=DateTime.now().add(error.retryAfter??const Duration(minutes:1));
       if(error.statusCode==null || (error.statusCode!=null &&
           error.statusCode!>=500)){
         if(await _showValidOfflinePreviews(epoch))return;
@@ -492,7 +532,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         _activityCheckIns=const [];
         _clearSponsored();
         _names.clear();_likes.clear();_bookmarked.clear();
-        _showingOfflinePreviews=false;_busy=false;
+        _showingOfflinePreviews=false;_busy=false;_initialLoadComplete=true;
         _error='Unable to verify private Moments. Check your connection.';
       });
     }catch(_){
@@ -503,14 +543,14 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         _clearSponsored();
         _names.clear();
         _likes.clear();
-        _busy=false;
+        _busy=false;_initialLoadComplete=true;
         _error='Unable to load encrypted Moments. Check your connection and try again.';
       });
     }finally{
       _feedRequestInFlight=false;
       if(_feedRefreshQueued){
         _feedRefreshQueued=false;
-        if(mounted&&WidgetsBinding.instance.lifecycleState==AppLifecycleState.resumed)unawaited(_load());
+        if(mounted&&WidgetsBinding.instance.lifecycleState==AppLifecycleState.resumed&&!_viewerOpening&&ModalRoute.of(context)?.isCurrent==true)unawaited(_load());
       }
     }
   }
@@ -596,7 +636,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
 
   Future<void> _openViewer(OrbitLiveMoment item,
       {bool storyGroup=false,bool comments=false}) async {
-    if(!mounted)return;
+    if(!mounted||_viewerOpening)return;
     if(_showingOfflinePreviews){
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content:Text(
@@ -608,17 +648,18 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       m.creatorId==item.creatorId&&m.contextId==item.contextId&&!_seen.contains(m.id)):-1;
     final first=start>=0?start:playlist.indexWhere((m)=>
       m.creatorId==item.creatorId&&m.contextId==item.contextId);
-    await Navigator.of(context).push<void>(MaterialPageRoute(
+    _viewerOpening=true;
+    try{await Navigator.of(context).push<void>(MaterialPageRoute(
       builder:(_)=>OrbitLiveMomentViewer(moment:item,repository:_repo,
         author:_names[item.creatorId]??'Orbit member',
         authorNames:Map<String,String>.from(_names),
         playlist:playlist,initialIndex:first<0?0:first,
         openComments:comments,onViewed:(id){
           if(mounted)setState(()=>_seen.add(id));
-        })));
+        })));}finally{_viewerOpening=false;}
     // Viewer actions may have changed the feed; only reconcile authorized
     // metadata, retaining already decoded, unchanged media and scroll state.
-    if(mounted)unawaited(_load());
+    if(mounted)unawaited(_load(background:true));
   }
   void _openById(String id,{bool storyGroup=false,bool comments=false}){
     for(final moment in [..._rail,..._items]){

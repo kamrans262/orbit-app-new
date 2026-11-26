@@ -717,7 +717,8 @@ class OrbitMomentRepository {
     catch(_){return <String>{};}
   }
   Future<void> view(OrbitLiveMoment item) async {
-    await _api('POST','/moments/'+Uri.encodeComponent(item.id)+'/views',
+    // The view endpoint intentionally returns HTTP 204 without JSON data.
+    await _identity.socialRequest('POST','/moments/'+Uri.encodeComponent(item.id)+'/views',
       body:{'context_id':item.contextId});
     // Store only this viewer's local seen state; never disclose it in a feed.
     try{await _seenVault.markSeen(item.id);}catch(_){}
