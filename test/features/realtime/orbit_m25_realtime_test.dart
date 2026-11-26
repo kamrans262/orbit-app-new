@@ -123,6 +123,37 @@ void main(){
       await runtime.stop();await sub.cancel();await sdk.dispose();
     }
   });
+  test('background and resume reopen a fresh lease without stale listeners',() async{
+    final sdk=FakeSdk(),timers=ManualTimers();
+    var calls=0,disconnects=0;
+    final runtime=OrbitRealtimeRuntime(enabled:true,sdk:sdk,owner:() async=>'a',
+      bootstrap:(_) async{calls++;return response();},
+      disconnect:(_) async{disconnects++;},timer:timers.once);
+    final binding=TestWidgetsFlutterBinding.instance;
+    binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    try{
+      runtime.start();await settle();
+      expect(sdk.opened,1);
+      sdk.online.add(true);sdk.revisions.add({'schema_version':1,'revision':1});
+      await settle();expect(runtime.connected,true);
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await settle();
+      expect(runtime.connected,false);
+      expect(disconnects,1);
+      expect(sdk.revisions.hasListener,false);
+      expect(sdk.online.hasListener,false);
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await settle();
+      expect(calls,2);
+      expect(sdk.opened,2);
+      expect(sdk.revisions.hasListener,true);
+      expect(runtime.connected,false);
+      sdk.online.add(true);sdk.revisions.add({'schema_version':1,'revision':2});
+      await settle();expect(runtime.connected,true);
+    }finally{
+      await runtime.stop();await sdk.dispose();
+    }
+  });
   testWidgets('late bootstrap cannot attach SDK after logout',(tester) async{
     final sdk=FakeSdk();final gate=Completer<Map<String,dynamic>>();
     final runtime=OrbitRealtimeRuntime(enabled:true,sdk:sdk,owner:() async=>'a',bootstrap:(_)=>gate.future);

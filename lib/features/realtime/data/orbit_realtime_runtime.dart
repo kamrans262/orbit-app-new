@@ -221,7 +221,6 @@ abstract class OrbitRealtimeSdk {
 
 class OrbitFirebaseRealtimeSdk implements OrbitRealtimeSdk {
   static const _name='orbit-m25-realtime';
-  FirebaseApp? _app;
   FirebaseAuth? _auth;
   FirebaseDatabase? _database;
   String? _path;
@@ -229,29 +228,57 @@ class OrbitFirebaseRealtimeSdk implements OrbitRealtimeSdk {
   Stream<Object?> get signals=>_database!.ref(_path!).onValue.map((e)=>e.snapshot.value);
   @override
   Stream<bool> get connectivity=>_database!.ref('.info/connected').onValue.map((e)=>e.snapshot.value==true);
+
   @override
   Future<void> open(OrbitRealtimeTicket ticket) async{
     await close();
-    final old=Firebase.apps.where((a)=>a.name==_name).firstOrNull;
-    if(old!=null)await old.delete();
     final options=FirebaseOptions(apiKey:ticket.apiKey,appId:ticket.appId,
       messagingSenderId:ticket.sender,projectId:ticket.project,databaseURL:ticket.url,iosBundleId:ticket.bundle);
-    _app=await Firebase.initializeApp(name:_name,options:options);
-    _auth=FirebaseAuth.instanceFor(app:_app!);
-    _database=FirebaseDatabase.instanceFor(app:_app!,databaseURL:ticket.url);
-    _database!.setPersistenceEnabled(false);
-    await _auth!.signOut();
-    final result=await _auth!.signInWithCustomToken(ticket.token);
-    if(result.user?.uid!=ticket.uid)throw const FormatException('Realtime identity mismatch.');
-    _path=ticket.path;
+    // Firebase Auth's native Android background observer can outlive a
+    // deleted FirebaseApp and crash Activity.onResume. Retain exactly one
+    // named secondary app for the lifetime of the native process instead.
+    final app=Firebase.apps.where((a)=>a.name==_name).firstOrNull??
+      await Firebase.initializeApp(name:_name,options:options);
+    final existing=app.options;
+    if(existing.projectId!=ticket.project||existing.appId!=ticket.appId||
+       existing.apiKey!=ticket.apiKey||existing.messagingSenderId!=ticket.sender||
+       existing.databaseURL!=ticket.url||
+       (ticket.bundle!=null&&existing.iosBundleId!=ticket.bundle)){
+      // Do not switch projects or delete/recreate the live SDK. Authorized
+      // HTTPS polling remains available until a fresh process starts.
+      throw const FormatException('Realtime Firebase configuration changed.');
+    }
+    final auth=FirebaseAuth.instanceFor(app:app);
+    final db=FirebaseDatabase.instanceFor(app:app,databaseURL:ticket.url);
+    _auth=auth;
+    _database=db;
+    try{
+      // Disk persistence is disabled by default; never enable it for this
+      // secondary app. Do not reconfigure an already-used database instance.
+      await db.goOffline();
+      await auth.signOut();
+      final result=await auth.signInWithCustomToken(ticket.token);
+      if(result.user?.uid!=ticket.uid)throw const FormatException('Realtime identity mismatch.');
+      await db.goOnline();
+      _path=ticket.path;
+    }catch(_){
+      await close();
+      rethrow;
+    }
   }
+
   @override
   Future<void> close() async{
-    final db=_database;_database=null;_path=null;
-    try{await db?.goOffline();}catch(_){}
-    final auth=_auth;_auth=null;
-    try{await auth?.signOut();}catch(_){}
-    final app=_app;_app=null;
-    if(app!=null){try{await app.delete();}catch(_){}}
+    // Runtime cancels all listeners and fences epochs before disconnecting.
+    // Closing a lease is not deleting a Firebase SDK application. Leave the
+    // native app alive but offline and signed out, never an active session.
+    final db=_database;
+    final auth=_auth;
+    _path=null;
+    try{await db?.goOffline();}finally{
+      await auth?.signOut();
+    }
+    _database=null;
+    _auth=null;
   }
 }
