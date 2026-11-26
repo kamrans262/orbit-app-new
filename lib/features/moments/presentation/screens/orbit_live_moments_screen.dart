@@ -26,6 +26,7 @@ import '../screens/moment_camera_screen.dart';
 import '../screens/moments_screen.dart';
 import '../screens/orbit_live_moment_viewer.dart';
 import '../widgets/orbit_inline_moment_comments.dart';
+import '../orbit_moment_author_navigation.dart';
 
 /// The authenticated replacement for MomentsScreen.demo. It passes real
 /// server-authorized data to the existing styled MomentsScreen only.
@@ -60,6 +61,8 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
   List<OrbitLiveMoment> _rail=const [];
   final Map<String,Uint8List> _previews={};
   final Map<String,String> _names={};
+  final Map<String,Uint8List> _authorAvatars={};
+  final Map<String,String> _authorAvatarIds={};
   final Map<String,String> _captions={};
   final Map<String,String> _places={};
   final Set<String> _likes={};
@@ -116,6 +119,8 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       unawaited(MemoryImage(bytes).evict());
     }
     _previews.clear();
+    for(final bytes in _authorAvatars.values){unawaited(MemoryImage(bytes).evict());}
+    _authorAvatars.clear();_authorAvatarIds.clear();
     _captions.clear();
     _places.clear();
     _cacheLeaseAt.clear();
@@ -413,6 +418,8 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
           previous[i].audienceRevision==next[i].audienceRevision&&
           previous[i].publishVersion==next[i].publishVersion&&
           previous[i].myReaction==next[i].myReaction&&
+          previous[i].creatorDisplayName==next[i].creatorDisplayName&&
+          previous[i].creatorAvatarMediaId==next[i].creatorAvatarMediaId&&
           previous[i].interactionContext==next[i].interactionContext&&
           previous[i].likeCount==next[i].likeCount&&previous[i].commentCount==next[i].commentCount);
       final sameCheckIns=_activityCheckIns.length==activityCheckIns.length&&
@@ -420,10 +427,16 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
           _activityCheckIns[i].activityId==activityCheckIns[i].activityId&&
           _activityCheckIns[i].record.label==activityCheckIns[i].record.label&&
           _activityCheckIns[i].record.creatorName==activityCheckIns[i].record.creatorName);
+      final authorizedAvatars=<String,String>{};
+      for(final m in prefetch){
+        final avatar=m.creatorAvatarMediaId;
+        if(avatar!=null&&avatar.isNotEmpty)authorizedAvatars[m.creatorId]=avatar;
+      }
       // Do not rebuild unchanged, freshly authorized feed content.
       if(background&&_initialLoadComplete&&!_showingOfflinePreviews&&_error==null&&
          sameList(_items,moments)&&sameList(_rail,rail)&&sameCheckIns&&
          prefetch.every((m)=>stable.contains(m.id)&&_previews.containsKey(m.id))&&
+         authorizedAvatars.entries.every((entry)=>_authorAvatarIds[entry.key]==entry.value&&_authorAvatars.containsKey(entry.key))&&
          _likeOverrides.isEmpty&&_commentOverrides.isEmpty&&
          _seen.length==seen.length&&_seen.containsAll(seen)&&
          _bookmarked.length==saved.length&&_bookmarked.containsAll(saved)){
@@ -438,6 +451,13 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         _likeOverrides.removeWhere((id,_)=>!stable.contains(id));
         _commentOverrides.removeWhere((id,_)=>!stable.contains(id));
         _items=moments;_rail=rail;
+        for(final id in _authorAvatars.keys.toList()){
+          if(authorizedAvatars[id]!=_authorAvatarIds[id]){
+            final bytes=_authorAvatars.remove(id);
+            _authorAvatarIds.remove(id);
+            if(bytes!=null)unawaited(MemoryImage(bytes).evict());
+          }
+        }
         for(final id in _previews.keys.toList()){
           if(!stable.contains(id)){
             final bytes=_previews.remove(id);
@@ -453,8 +473,8 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       previews.addAll(_previews);
       captions.addAll(_captions);places.addAll(_places);
       for(final m in prefetch){
-        final name=_names[m.creatorId];
-        if(name!=null&&!_showingOfflinePreviews)names[m.creatorId]=name;
+        final name=m.creatorDisplayName??_names[m.creatorId];
+        if(name!=null&&!_showingOfflinePreviews)names[m.creatorId]=OrbitMomentRepository.firstName(name);
       }
       // Next-two bounded prefetch: three authorized thumbnail/decrypt requests
       // at most. Avoid serial head-of-line latency and unbounded media memory.
@@ -462,7 +482,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         final batch=prefetch.skip(index).take(3);
         await Future.wait(batch.map((m) async {
           try {
-            names[m.creatorId]??=await _repo.name(m.creatorId);
+            names[m.creatorId]??=OrbitMomentRepository.firstName(await _repo.name(m.creatorId));
           }catch(_){names[m.creatorId]??='Orbit member';}
           try {
             if(stable.contains(m.id)&&previews.containsKey(m.id))return;
@@ -480,6 +500,21 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       if(!mounted || epoch!=_loadEpoch){
         for(final bytes in previews.values){if(!retained.contains(bytes))unawaited(MemoryImage(bytes).evict());}
         return;
+      }
+      // Load each authorized author avatar once, separately from Moment media.
+      // The server's reference is not itself a key grant.
+      final avatars=Map<String,Uint8List>.of(_authorAvatars);
+      final avatarIds=Map<String,String>.of(_authorAvatarIds);
+      final missing=authorizedAvatars.entries.where((entry)=>
+        avatarIds[entry.key]!=entry.value||!avatars.containsKey(entry.key)).toList();
+      for(var index=0;index<missing.length;index+=3){
+        await Future.wait(missing.skip(index).take(3).map((entry)async{
+          try{
+            avatars[entry.key]=await _repo.authorAvatar(entry.value);
+            avatarIds[entry.key]=entry.value;
+          }catch(_){}
+        }));
+        if(!mounted||epoch!=_loadEpoch)return;
       }
       // A new authenticated feed is authoritative: evict any stale audience
       // entries before issuing new short server-bound encrypted preview leases.
@@ -525,6 +560,8 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         _bookmarked..clear()..addAll(saved);
         _previews..clear()..addAll(previews);
         _names..clear()..addAll(names);
+        _authorAvatars..clear()..addAll(avatars);
+        _authorAvatarIds..clear()..addAll(avatarIds);
         _seen..clear()..addAll(seen);
         _captions..clear()..addAll(captions);
         _places..clear()..addAll(places);
@@ -706,6 +743,8 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
     return OrbitInlineMomentComments(
       key:ValueKey('${_loadedOwner}|${moment.id}|${moment.interactionContext}|${moment.audienceRevision}'),
       moment:moment,repository:_repo,
+      authorNames:Map<String,String>.of(_names),
+      authorAvatars:Map<String,Uint8List>.of(_authorAvatars),
       onClose:()=>setState(()=>_expandedComments.remove(item.id)),
       onCountChanged:(count){
         final current=_feedMoment(item.id);
@@ -909,8 +948,8 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
     final stories=<MomentStoryData>[
       const MomentStoryData(id:'add',name:'You',isAddStory:true),
       for(final m in grouped)MomentStoryData(
-        id:m.id,name:_names[m.creatorId]??'Orbit member',
-        imageBytes:_previews[m.id],ageLabel:_relative(m.publishedAt),
+        id:m.id,name:_names[m.creatorId]??OrbitMomentRepository.firstName(m.creatorDisplayName),
+        imageBytes:_authorAvatars[m.creatorId]??_previews[m.id],ageLabel:_relative(m.publishedAt),
         isCircle:m.contextId.startsWith('circle:'),
         isUnseen:groupUnseen[m.contextId+'|'+m.creatorId]??false),
     ];
@@ -918,7 +957,8 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       for(final m in _items)MomentImageFeedItem(
         id:m.id,
         author:MomentAuthorData(id:m.creatorId,
-          name:_names[m.creatorId]??'Orbit member'),
+          name:_names[m.creatorId]??OrbitMomentRepository.firstName(m.creatorDisplayName),
+          imageBytes:_authorAvatars[m.creatorId]),
         timeLabel:_relative(m.publishedAt),
         imagePath:null,imageBytes:_previews[m.id],
         title:_captions[m.id]??'',
@@ -983,6 +1023,12 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       onLikeChanged:(item,liked)=>unawaited(_react(item,liked)),
       onCommentPressed:_toggleComments,
       commentsBuilder:_inlineComments,
+      onAuthorPressed:(item){
+        final moment=_feedMoment(item.id);
+        if(moment!=null&&!_showingOfflinePreviews){
+          unawaited(openMomentAuthor(context,_repo,moment,onAddPressed:widget.onAddPressed));
+        }
+      },
       onBookmarkChanged:(item,value)=>unawaited(_setBookmark(item,value)),
       onSharePressed:(item)=>unawaited(_shareAuthorizedMoment(item)),
       onTextMenuPressed:(item){},

@@ -36,6 +36,7 @@ class MomentProfileAvatar extends StatelessWidget {
           dimension: innerSize,
           child: MomentMediaImage(
             path: author.imagePath,
+            bytes: author.imageBytes,
             fit: BoxFit.cover,
             fallback: ColoredBox(
               color: const Color(0xFFF0ECF8),

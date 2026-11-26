@@ -12,6 +12,7 @@ class AppScreenHeader extends StatelessWidget {
   const AppScreenHeader({
     required this.title,
     this.onBack,
+    this.onTitlePressed,
     this.backButtonKey,
     this.titleKey,
     this.prominent = false,
@@ -24,6 +25,7 @@ class AppScreenHeader extends StatelessWidget {
 
   final String title;
   final VoidCallback? onBack;
+  final VoidCallback? onTitlePressed;
   final Key? backButtonKey;
   final Key? titleKey;
   /// Matches the 44px, 24pt Friends / Find Friends header when enabled.
@@ -55,7 +57,8 @@ class AppScreenHeader extends StatelessWidget {
           ),
           const SizedBox(width: backToTitleGap),
           Expanded(
-            child: Text(
+            child: InkWell(onTap:onTitlePressed,
+              child:Text(
               title,
               key: titleKey,
               maxLines: 1,
@@ -67,7 +70,7 @@ class AppScreenHeader extends StatelessWidget {
                 fontWeight: FontWeight.w600,
                 color: Color(0xFF0F1724),
               ),
-            ),
+            )),
           ),
         ],
       ),

@@ -26,7 +26,8 @@ class OrbitLiveMoment {
     this.placeCiphertext,this.taggedUserIds=const [],
     this.publishVersion=1,this.audienceRevision=1,this.myReaction,
     this.audienceKind='only_me',this.targetIds=const [],
-    this.likeCount,this.commentCount,this.engagementContext});
+    this.likeCount,this.commentCount,this.engagementContext,
+    this.creatorDisplayName,this.creatorAvatarMediaId});
   final String id, creatorId, mediaId, contextId;
   final DateTime publishedAt;
   final String? captionCiphertext;
@@ -40,6 +41,7 @@ class OrbitLiveMoment {
   final List<String> targetIds;
   final int? likeCount,commentCount;
   final String? engagementContext;
+  final String? creatorDisplayName,creatorAvatarMediaId;
   String get interactionContext=>engagementContext??contextId;
   factory OrbitLiveMoment.fromJson(Map<String,dynamic> d) =>
     OrbitLiveMoment(id:d['id'] as String,creatorId:d['creator_id'] as String,
@@ -56,6 +58,8 @@ class OrbitLiveMoment {
       likeCount:(d['like_count'] as num?)?.toInt(),
       commentCount:(d['comment_count'] as num?)?.toInt(),
       engagementContext:d['engagement_context_id'] as String?,
+      creatorDisplayName:d['creator_display_name'] as String?,
+      creatorAvatarMediaId:d['creator_avatar_media_id'] as String?,
       audienceKind:d['audience_kind'] as String? ?? 'only_me',
       targetIds:List<String>.from(d['target_ids'] as List? ?? const []));
 }
@@ -986,8 +990,25 @@ class OrbitMomentRepository {
   Future<void> delete(OrbitLiveMoment item) async {
     await _api('DELETE','/moments/'+Uri.encodeComponent(item.id));
   }
+  static String firstName(String? value){
+    final name=value?.trim()??'';
+    if(name.isEmpty||name=='Orbit member'||name=='Orbit user')return 'Orbit member';
+    return name.split(RegExp(r'\s+')).first;
+  }
+
+  Future<Uint8List> authorAvatar(String mediaId)async{
+    final device=await _identity.trustedMediaDevice();
+    return _media.downloadPhoto(mediaId,deviceId:device.id,
+      privateKey:device.privateKey,publicKey:device.publicKey,
+      maxPlainBytes:1024*1024);
+  }
+
   Future<String> name(String userId) async {
-    if(await _identity.currentLocalSocialOwner()==userId)return 'You';
+    if(await _identity.currentLocalSocialOwner()==userId){
+      final profile=await _identity.profile();
+      return (profile['display_name'] as String?)?.trim().isNotEmpty==true
+        ?profile['display_name'] as String:'Orbit member';
+    }
     final d=await _api('GET','/people/'+Uri.encodeComponent(userId)+'/preview');
     return d['display_name'] as String? ?? 'Orbit member';
   }

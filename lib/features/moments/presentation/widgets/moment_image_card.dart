@@ -17,6 +17,7 @@ class MomentImageCard extends StatelessWidget {
     required this.onBookmarkPressed,
     required this.onSharePressed,
     this.onViewPressed,
+    this.onAuthorPressed,
     this.commentsContent,
     this.privateMode=false,
     this.privateSharing=false,
@@ -32,6 +33,7 @@ class MomentImageCard extends StatelessWidget {
   final VoidCallback onBookmarkPressed;
   final VoidCallback onSharePressed;
   final VoidCallback? onViewPressed;
+  final VoidCallback? onAuthorPressed;
   final Widget? commentsContent;
   final bool privateMode;
   final bool privateSharing;
@@ -78,6 +80,7 @@ class MomentImageCard extends StatelessWidget {
                     right: 12,
                     child: _ImageCardHeader(
                       data: data,
+                      onAuthorPressed:onAuthorPressed,
                       onSharePressed:onSharePressed,
                       showShare:!privateMode || privateSharing,
                     ),
@@ -113,26 +116,25 @@ class MomentImageCard extends StatelessWidget {
 }
 
 class _ImageCardHeader extends StatelessWidget {
-  const _ImageCardHeader({required this.data, required this.onSharePressed,this.showShare=true});
+  const _ImageCardHeader({required this.data, required this.onSharePressed,this.showShare=true,this.onAuthorPressed});
 
   final MomentImageFeedItem data;
   final VoidCallback onSharePressed;
   final bool showShare;
+  final VoidCallback? onAuthorPressed;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: <Widget>[
-        MomentProfileAvatar(
-          author: data.author,
-          size: 32,
-          borderColor: Colors.white,
-          borderWidth: 2,
-        ),
+        InkWell(onTap:onAuthorPressed,borderRadius:BorderRadius.circular(20),
+          child:MomentProfileAvatar(
+            author:data.author,size:32,borderColor:Colors.white,borderWidth:2)),
         const SizedBox(width: 7),
         Expanded(
-          child: Column(
+          child: InkWell(onTap:onAuthorPressed,
+            child:Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
@@ -172,7 +174,7 @@ class _ImageCardHeader extends StatelessWidget {
                 ),
               ),
             ],
-          ),
+          )),
         ),
         const SizedBox(width: 8),
         if(showShare)IconButton(

@@ -7,11 +7,13 @@ class MomentAuthorData {
     required this.id,
     required this.name,
     this.imagePath,
+    this.imageBytes,
   });
 
   final String id;
   final String name;
   final String? imagePath;
+  final Uint8List? imageBytes;
 }
 
 @immutable

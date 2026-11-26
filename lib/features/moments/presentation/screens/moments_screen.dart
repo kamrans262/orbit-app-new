@@ -70,6 +70,7 @@ class MomentsScreen extends StatefulWidget {
     this.privateSharing=false,
     this.onRefresh,
     this.commentsBuilder,
+    this.onAuthorPressed,
     this.pendingCard,
     this.onLoadMore,
     this.hasMore=false,
@@ -179,6 +180,7 @@ class MomentsScreen extends StatefulWidget {
   final bool privateSharing;
   final Future<void> Function()? onRefresh;
   final Widget? Function(MomentImageFeedItem)? commentsBuilder;
+  final ValueChanged<MomentImageFeedItem>? onAuthorPressed;
   final Widget? pendingCard;
   final VoidCallback? onLoadMore;
   final bool hasMore,loadingMore;
@@ -647,6 +649,8 @@ class _MomentsScreenState extends State<MomentsScreen> {
           privateBookmarking:widget.privateBookmarking,
           privateSharing:widget.privateSharing,
           onViewPressed:()=>widget.onFeedItemPressed(imageItem),
+          onAuthorPressed:widget.privateReadOnly||widget.onAuthorPressed==null?null:
+            ()=>widget.onAuthorPressed!(imageItem),
           isLiked: _likedById[imageItem.id] ?? imageItem.isLiked,
           isBookmarked: _bookmarkedById[imageItem.id] ?? imageItem.isBookmarked,
           onLikePressed: () => _toggleLike(imageItem),

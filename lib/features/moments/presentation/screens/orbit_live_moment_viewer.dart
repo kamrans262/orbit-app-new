@@ -16,6 +16,7 @@ import '../../../../core/popups/orbit_popup_variants.dart';
 import '../../data/orbit_moment_repository.dart';
 import '../../../auth/data/orbit_identity_client.dart';
 import '../widgets/orbit_private_moment_player.dart';
+import '../orbit_moment_author_navigation.dart';
 
 /// Private viewer reuses the existing Orbit detail scaffold, action icons and
 /// approved detail components. Shared HTTPS references never grant media access.
@@ -65,7 +66,8 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
   late int _index;
   OrbitLiveMoment get _current => widget.playlist.isEmpty
       ? widget.moment : widget.playlist[_index];
-  String get _name => widget.authorNames[_current.creatorId]??widget.author;
+  String get _name => OrbitMomentRepository.firstName(
+    _current.creatorDisplayName??widget.authorNames[_current.creatorId]??widget.author);
   OrbitRealtimeRefresh? _m25Refresh;
   @override
   void initState(){
@@ -884,7 +886,12 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
           if(widget.playlist.isNotEmpty&&!_allCaughtUp)...[
             _storyProgress(),const SizedBox(height:8),
           ],
-          AppScreenHeader(title:_name,prominent:true),
+          AppScreenHeader(title:_name,prominent:true,
+            onTitlePressed:_loading||_error!=null||_allCaughtUp?null:()async{
+              final wasPaused=_paused;_pause(true);
+              try{await openMomentAuthor(context,widget.repository,_current);}
+              finally{if(mounted)_pause(wasPaused);}
+            }),
           const SizedBox(height:20),
           Expanded(child:LayoutBuilder(builder:(context,limits)=>
             GestureDetector(
