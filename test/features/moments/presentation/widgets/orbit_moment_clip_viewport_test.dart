@@ -3,6 +3,37 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_ui/features/moments/presentation/widgets/orbit_private_moment_player.dart';
 
 void main(){
+  testWidgets('video taps toggle playback and a separate small top-right sound control toggles mute',(tester)async{
+    var playing=true,muted=false,toggles=0,mutes=0;
+    const mediaKey=ValueKey('overlay-video');
+    await tester.pumpWidget(MaterialApp(home:Scaffold(body:Center(
+      child:SizedBox(width:320,height:320,child:StatefulBuilder(builder:(context,update)=>
+        OrbitMomentVideoFrame(aspectRatio:16/9,playing:playing,muted:muted,
+          media:const ColoredBox(key:mediaKey,color:Colors.black),
+          onToggle:()=>update((){playing=!playing;toggles++;}),
+          onMute:()=>update((){muted=!muted;mutes++;})),
+      )),
+    ))));
+    final frame=tester.getRect(find.byKey(mediaKey));
+    final sound=find.byTooltip('Mute encrypted video');
+    final soundRect=tester.getRect(sound);
+    expect(soundRect.width,32);
+    expect(soundRect.top-frame.top,8);
+    expect(frame.right-soundRect.right,8);
+    await tester.tapAt(frame.center);await tester.pumpAndSettle();
+    expect(toggles,1);
+    expect(playing,false);
+    expect(find.byIcon(Icons.play_circle_fill),findsOneWidget);
+    await tester.tap(sound);await tester.pumpAndSettle();
+    expect(mutes,1);expect(toggles,1);
+    expect(find.byTooltip('Unmute encrypted video'),findsOneWidget);
+    await tester.tapAt(frame.center);await tester.pump();
+    expect(playing,true);expect(toggles,2);
+    await tester.pump(const Duration(seconds:1));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(),isNull);
+  });
+
   for(final viewport in const [Size(320,440),Size(320,200),Size(260,100),Size(600,300)]){
     for(final ratio in [9/16,16/9,1.0]){
       testWidgets('clip fits ${viewport.width}x${viewport.height} ratio $ratio',(tester)async{

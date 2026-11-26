@@ -8,19 +8,24 @@ import 'package:video_player/video_player.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../core/widgets/app_circular_icon_button.dart';
 import '../../data/orbit_moment_repository.dart';
+
+enum OrbitMomentClipState { loading, ready, failed }
 
 /// Playback files are decrypted into the sandbox only after a fresh M7
 /// authorization check. No public URI, shared storage or permanent cache.
 class OrbitPrivateMomentPlayer extends StatefulWidget {
   const OrbitPrivateMomentPlayer({
     required this.item,required this.repository,this.onFinished,
-    this.paused=false,this.previewBytes,this.onProgress,super.key,
+    this.paused=false,this.previewBytes,this.onProgress,this.onStateChanged,super.key,
   });
   final OrbitLiveMoment item;
   final OrbitMomentRepository repository;
   final VoidCallback? onFinished;
   final ValueChanged<double>? onProgress;
+  // The enclosing viewer owns the screen-centered loader and action gating.
+  final ValueChanged<OrbitMomentClipState>? onStateChanged;
   final bool paused;
   final Uint8List? previewBytes;
   @override
@@ -39,6 +44,19 @@ class _OrbitPrivateMomentPlayerState extends State<OrbitPrivateMomentPlayer>
   int _epoch=0;
   bool _busy=true, _playing=false, _muted=false;
   String? _error;
+  bool _userPaused=false;
+
+  void _notifyState(OrbitMomentClipState state){
+    final callback=widget.onStateChanged;
+    if(callback==null)return;
+    final epoch=_epoch;
+    WidgetsBinding.instance.addPostFrameCallback((_){
+      if(!mounted||epoch!=_epoch)return;
+      final actual=_busy?OrbitMomentClipState.loading:
+        _error!=null?OrbitMomentClipState.failed:OrbitMomentClipState.ready;
+      if(state==actual)callback(state);
+    });
+  }
 
   @override
   void initState(){
@@ -77,11 +95,13 @@ class _OrbitPrivateMomentPlayerState extends State<OrbitPrivateMomentPlayer>
       _playing=false;
       _error='Your access to this Moment has changed.';
     });
+    _notifyState(OrbitMomentClipState.failed);
   }
 
   Future<void> _load() async {
     final current=++_epoch;
     if(mounted)setState((){_busy=true;_error=null;_playing=false;});
+    _notifyState(OrbitMomentClipState.loading);
     try {
       await _closePlayer();
       final file=await widget.repository.openPrivateClip(widget.item);
@@ -97,7 +117,7 @@ class _OrbitPrivateMomentPlayerState extends State<OrbitPrivateMomentPlayer>
         if(!mounted||current!=_epoch)return;
         await player.setLooping(false);
         await player.setVolume(_muted?0:1);
-        if(!widget.paused)await player.play();
+        if(!widget.paused&&!_userPaused)await player.play();
         _videoEndedPoll=Timer.periodic(const Duration(milliseconds:400),(_){
           if(!mounted || _video!=player || widget.paused)return;
           final total=player.value.duration.inMilliseconds;
@@ -124,18 +144,24 @@ class _OrbitPrivateMomentPlayerState extends State<OrbitPrivateMomentPlayer>
           if(mounted&&_audio==player&&duration>0)widget.onProgress?.call((position.inMilliseconds/duration).clamp(0.0,1.0).toDouble());
         });
         await player.setSource(DeviceFileSource(file.path));
-        if(!widget.paused)await player.resume();
+        if(!widget.paused&&!_userPaused)await player.resume();
       }
-      if(mounted && current==_epoch)setState((){
-        _busy=false;
-        _playing=!widget.paused;
-      });
+      if(mounted && current==_epoch){
+        setState((){
+          _busy=false;
+          _playing=!widget.paused&&!_userPaused;
+        });
+        _notifyState(OrbitMomentClipState.ready);
+      }
     }catch(_){
       await _closePlayer();
-      if(mounted && current==_epoch)setState((){
-        _busy=false;
-        _error='This encrypted clip cannot be played.';
-      });
+      if(mounted && current==_epoch){
+        setState((){
+          _busy=false;
+          _error='This encrypted clip cannot be played.';
+        });
+        _notifyState(OrbitMomentClipState.failed);
+      }
     }
   }
 
@@ -147,7 +173,7 @@ class _OrbitPrivateMomentPlayerState extends State<OrbitPrivateMomentPlayer>
       unawaited(_video?.pause());
       unawaited(_audio?.pause());
       if(mounted)setState(()=>_playing=false);
-    }else if(!_busy && _error==null){
+    }else if(!_busy && _error==null&&!_userPaused){
       if(_video!=null)unawaited(_video!.play());
       if(_audio!=null)unawaited(_audio!.resume());
       if(mounted)setState(()=>_playing=true);
@@ -155,7 +181,7 @@ class _OrbitPrivateMomentPlayerState extends State<OrbitPrivateMomentPlayer>
   }
 
   Future<void> _toggle() async {
-    if(_busy||_error!=null)return;
+    if(_busy||_error!=null||widget.paused)return;
     try{
       if(widget.item.mediaKind=='video'){
         final player=_video;
@@ -166,7 +192,10 @@ class _OrbitPrivateMomentPlayerState extends State<OrbitPrivateMomentPlayer>
         if(player==null)return;
         if(_playing)await player.pause(); else await player.resume();
       }
-      if(mounted)setState(()=>_playing=!_playing);
+      if(mounted)setState((){
+        _playing=!_playing;
+        _userPaused=!_playing;
+      });
     }catch(_){await _check();}
   }
 
@@ -185,6 +214,7 @@ class _OrbitPrivateMomentPlayerState extends State<OrbitPrivateMomentPlayer>
     if(state==AppLifecycleState.inactive || state==AppLifecycleState.paused){
       ++_epoch;
       if(mounted)setState((){_busy=true;_playing=false;});
+      _notifyState(OrbitMomentClipState.loading);
       unawaited(_closePlayer());
     }else if(state==AppLifecycleState.resumed && mounted){
       unawaited(_load());
@@ -202,6 +232,7 @@ class _OrbitPrivateMomentPlayerState extends State<OrbitPrivateMomentPlayer>
 
   @override
   Widget build(BuildContext context){
+    if(_busy&&widget.onStateChanged!=null)return const SizedBox.shrink();
     if(_busy)return Center(heightFactor:1,child:FittedBox(fit:BoxFit.scaleDown,
       child:Column(mainAxisSize:MainAxisSize.min,children:[
         if(widget.previewBytes!=null && widget.previewBytes!.isNotEmpty)
@@ -215,6 +246,12 @@ class _OrbitPrivateMomentPlayerState extends State<OrbitPrivateMomentPlayer>
     final video=_video;
     final isVideo=widget.item.mediaKind=='video';
     final readyVideo=isVideo && video!=null && video.value.isInitialized?video:null;
+    if(readyVideo!=null){
+      return OrbitMomentVideoFrame(
+        aspectRatio:readyVideo.value.aspectRatio,playing:_playing,muted:_muted,
+        onToggle:()=>unawaited(_toggle()),onMute:()=>unawaited(_toggleMute()),
+        media:VideoPlayer(readyVideo));
+    }
     final controls=Row(mainAxisSize:MainAxisSize.min,
       mainAxisAlignment:MainAxisAlignment.center,children:[
         IconButton(
@@ -223,27 +260,70 @@ class _OrbitPrivateMomentPlayerState extends State<OrbitPrivateMomentPlayer>
           tooltip:_playing?'Pause encrypted clip':'Play encrypted clip',
           onPressed:()=>unawaited(_toggle()),
         ),
-        if(isVideo) ...[
-          const SizedBox(width:12),
-          IconButton(
-            icon:Icon(_muted?Icons.volume_off_outlined:Icons.volume_up_outlined,
-              size:28,color:AppColors.primaryEnd),
-            tooltip:_muted?'Unmute encrypted video':'Mute encrypted video',
-            onPressed:()=>unawaited(_toggleMute()),
-          ),
-        ],
       ]);
     return OrbitMomentClipViewport(
-      aspectRatio:readyVideo?.value.aspectRatio,
       controls:controls,
-      media:readyVideo!=null?VideoPlayer(readyVideo):
-        widget.previewBytes!=null && widget.previewBytes!.isNotEmpty
+      media:widget.previewBytes!=null && widget.previewBytes!.isNotEmpty
           ? Image.memory(widget.previewBytes!,fit:BoxFit.contain,height:90,
               errorBuilder:(_,error,stack)=>const Icon(
                 Icons.graphic_eq_rounded,color:AppColors.primaryEnd,size:64))
           : const Icon(Icons.mic_none_outlined,color:AppColors.primaryEnd,size:64),
     );
   }
+}
+
+/// Video playback controls live within the actual video rectangle. They
+/// never reserve another row below the video or change its aspect ratio.
+class OrbitMomentVideoFrame extends StatefulWidget {
+  const OrbitMomentVideoFrame({required this.aspectRatio,required this.media,
+    required this.playing,required this.muted,required this.onToggle,
+    required this.onMute,super.key});
+  final double aspectRatio;
+  final Widget media;
+  final bool playing,muted;
+  final VoidCallback onToggle,onMute;
+  @override
+  State<OrbitMomentVideoFrame> createState()=>_OrbitMomentVideoFrameState();
+}
+class _OrbitMomentVideoFrameState extends State<OrbitMomentVideoFrame>{
+  bool _showFeedback=false;
+  Timer? _feedback;
+  void _tap(){
+    _feedback?.cancel();
+    setState(()=>_showFeedback=true);
+    widget.onToggle();
+    _feedback=Timer(const Duration(milliseconds:700),(){
+      if(mounted)setState(()=>_showFeedback=false);
+    });
+  }
+  @override
+  void dispose(){_feedback?.cancel();super.dispose();}
+  @override
+  Widget build(BuildContext context)=>AspectRatio(
+    aspectRatio:widget.aspectRatio.isFinite&&widget.aspectRatio>0?widget.aspectRatio:1,
+    child:LayoutBuilder(builder:(context,limits){
+      final soundSize=(limits.biggest.shortestSide*0.32).clamp(0.0,32.0).toDouble();
+      final inset=(limits.biggest.shortestSide*0.08).clamp(0.0,8.0).toDouble();
+      final feedbackSize=(limits.biggest.shortestSide*0.5).clamp(0.0,54.0).toDouble();
+      return Stack(fit:StackFit.expand,children:[
+        widget.media,
+        Semantics(button:true,label:widget.playing?'Pause video':'Play video',
+          child:GestureDetector(
+            behavior:HitTestBehavior.opaque,onTap:_tap,
+            child:Center(child:IgnorePointer(
+              child:AnimatedOpacity(duration:const Duration(milliseconds:150),
+                opacity:!widget.playing||_showFeedback?1:0,
+                child:Icon(widget.playing?Icons.pause_circle_filled:Icons.play_circle_fill,
+                  color:Colors.white.withValues(alpha:0.92),size:feedbackSize)))))),
+        if(soundSize>0)Positioned(top:inset,right:inset,
+          child:Tooltip(message:widget.muted?'Unmute encrypted video':'Mute encrypted video',
+            child:AppCircularIconButton(
+              semanticLabel:widget.muted?'Unmute video':'Mute video',
+              onPressed:widget.onMute,size:soundSize,iconSize:soundSize*0.56,
+              icon:widget.muted?Icons.volume_off_outlined:Icons.volume_up_outlined))),
+      ]);
+    }),
+  );
 }
 
 /// Reserve space for the existing controls before fitting a video frame.

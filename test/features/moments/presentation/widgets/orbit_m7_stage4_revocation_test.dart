@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -17,6 +19,13 @@ final class _FakeMoments extends OrbitMomentRepository {
   int sent=0;
   Uint8List? testPhoto;
   String? testCaption='Private Moment caption';
+  Future<Uint8List>? pendingPhoto;
+  Future<File>? pendingClip;
+  @override
+  Future<File> openPrivateClip(OrbitLiveMoment item) async =>
+    await (pendingClip??Future<File>.error(StateError('No clip')));
+  @override
+  Future<void> erasePrivateClip(File? file) async {}
   @override
   Future<List<({String id,String author,String body,String? parent})>> allComments(OrbitLiveMoment item,{int max=150}) async => [];
   @override
@@ -38,7 +47,7 @@ final class _FakeMoments extends OrbitMomentRepository {
 
   @override
   Future<Uint8List> photo(OrbitLiveMoment moment,{String variant='thumbnail'}) async =>
-    Uint8List.fromList(testPhoto??_pixel);
+    variant=='thumbnail'&&pendingPhoto!=null?await pendingPhoto!:Uint8List.fromList(testPhoto??_pixel);
 
   @override
   Future<String?> caption(OrbitLiveMoment moment) async => testCaption;
@@ -48,6 +57,46 @@ final class _FakeMoments extends OrbitMomentRepository {
 }
 
 void main() {
+  testWidgets('photo loading stays at screen center and actions appear only after authorization and loading',(tester)async{
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    final pending=Completer<Uint8List>();
+    final repo=_FakeMoments()..activeUser='owner'..pendingPhoto=pending.future;
+    final item=OrbitLiveMoment(id:'loading-photo',creatorId:'owner',mediaId:'media',
+      contextId:'self',publishedAt:DateTime.now());
+    await tester.pumpWidget(MaterialApp(home:OrbitLiveMomentViewer(
+      moment:item,repository:repo,author:'You')));
+    await tester.pump();
+    final spinner=find.byKey(const ValueKey('moment_viewer_loading'));
+    expect(tester.getCenter(spinner),tester.getCenter(find.byType(Scaffold)));
+    expect(find.byIcon(Icons.favorite_border_rounded),findsNothing);
+    expect(find.byTooltip('Manage Moment'),findsNothing);
+    pending.complete(_FakeMoments._pixel);
+    await tester.pumpAndSettle();
+    expect(spinner,findsNothing);
+    expect(find.byIcon(Icons.favorite_border_rounded),findsOneWidget);
+    expect(find.byTooltip('Manage Moment'),findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+  testWidgets('video download retains centered loader and hides actions on failure',(tester)async{
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    final pending=Completer<File>();
+    final repo=_FakeMoments()..activeUser='owner'..pendingClip=pending.future;
+    final item=OrbitLiveMoment(id:'loading-video',creatorId:'owner',mediaId:'media',
+      contextId:'self',mediaKind:'video',publishedAt:DateTime.now());
+    await tester.pumpWidget(MaterialApp(home:OrbitLiveMomentViewer(
+      moment:item,repository:repo,author:'You')));
+    for(var i=0;i<5;i++)await tester.pump();
+    final spinner=find.byKey(const ValueKey('moment_viewer_loading'));
+    expect(tester.getCenter(spinner),tester.getCenter(find.byType(Scaffold)));
+    expect(find.byIcon(Icons.favorite_border_rounded),findsNothing);
+    expect(find.byTooltip('Manage Moment'),findsNothing);
+    pending.completeError(StateError('Clip unavailable'));
+    await tester.pumpAndSettle();
+    expect(spinner,findsNothing);
+    expect(find.text('This encrypted clip cannot be played.'),findsOneWidget);
+    expect(find.byIcon(Icons.favorite_border_rounded),findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
   testWidgets('small authorized photo expands to the existing viewer width',(tester)async{
     await tester.binding.setSurfaceSize(const Size(360,640));
     addTearDown(()=>tester.binding.setSurfaceSize(null));

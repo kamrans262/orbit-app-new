@@ -47,6 +47,11 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
   Set<String> _ownerTags=<String>{};
   String? _error;
   bool _loading=true, _liked=false, _sending=false, _paused=false;
+  OrbitMomentClipState _clipState=OrbitMomentClipState.loading;
+  bool get _mediaReady=>!_loading&&_error==null&&!_allCaughtUp&&
+    (_current.mediaKind=='image'?(_photo?.isNotEmpty??false):_clipState==OrbitMomentClipState.ready);
+  bool get _mediaLoading=>!_allCaughtUp&&_error==null&&
+    (_loading||(_current.mediaKind!='image'&&_clipState==OrbitMomentClipState.loading));
   bool _allCaughtUp=false;
   bool _isOwner=false;
   bool _reauthorizing=false;
@@ -113,6 +118,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
     if(bytes!=null)unawaited(MemoryImage(bytes).evict());
     _photo=null;
     _photoAspectRatio=1;
+    _clipState=OrbitMomentClipState.loading;
     _caption=null;
     _resetComments();
   }
@@ -267,9 +273,11 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
           _loading=false;
         });
         unawaited(_recordView(current,epoch));
-        if(widget.openComments&&!_openedInitialComments){
-          _openedInitialComments=true;unawaited(_commentSheet());
-        }else{_paused=false;_schedule();}
+        if(current.mediaKind=='image'){
+          _onMediaReady();
+        }else{
+          _paused=false;
+        }
         if(current.mediaKind=='image'){
           unawaited(_upgradeOriginal(current,epoch));
         }
@@ -284,6 +292,28 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
       });
     }
   }
+  void _onMediaReady(){
+    if(!_mediaReady)return;
+    if(widget.openComments&&!_openedInitialComments){
+      _openedInitialComments=true;
+      unawaited(_commentSheet());
+    }else{
+      _paused=false;
+      _schedule();
+    }
+  }
+
+  void _clipStateChanged(OrbitMomentClipState state,int epoch,String id){
+    if(!mounted||epoch!=_loadEpoch||_current.id!=id||_loading||
+       _allCaughtUp||_error!=null||_clipState==state)return;
+    setState(()=>_clipState=state);
+    if(state==OrbitMomentClipState.ready){
+      if(widget.openComments&&!_openedInitialComments)_onMediaReady();
+    }else if(_commentsOpen){
+      setState(_resetComments);
+    }
+  }
+
   // Receipt failures must not discard independently authorized media.
   Future<void> _recordView(OrbitLiveMoment current,int epoch) async{
     try{
@@ -341,7 +371,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
   }
 
   Future<void> _commentSheet() async {
-    if(!mounted||_loading||_error!=null||_allCaughtUp)return;
+    if(!mounted||!_mediaReady)return;
     if(_commentsOpen){
       setState(_resetComments);_pause(false);return;
     }
@@ -893,8 +923,10 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
 
   @override
   Widget build(BuildContext context){
+    final epoch=_loadEpoch,momentId=_current.id;
     return Scaffold(backgroundColor:AppColors.background,
-      body:SafeArea(child:Padding(
+      body:Stack(children:[
+      SafeArea(child:Padding(
         padding:const EdgeInsets.symmetric(horizontal:20,vertical:8),
         child:Column(children:[
           if(widget.playlist.isNotEmpty&&!_allCaughtUp)...[
@@ -910,7 +942,16 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
           Flexible(child:LayoutBuilder(builder:(context,limits)=>
             GestureDetector(
               behavior:HitTestBehavior.opaque,
-              onTapUp:(event)=>_navigationTap(event,limits),
+              onTapUp:(event){
+                if(_mediaReady)_navigationTap(event,limits);
+              },
+              // Video taps now control playback. Retain story navigation
+              // through horizontal swipes and the existing photo taps.
+              onHorizontalDragEnd:widget.playlist.isEmpty?null:(event){
+                if(!_mediaReady)return;
+                final speed=event.primaryVelocity??0;
+                if(speed.abs()>200)_move(speed<0?1:-1);
+              },
               onLongPressStart:(_)=>_pause(true),
               onLongPressEnd:(_){if(!_commentsOpen)_pause(false);},
               onVerticalDragEnd:(details){
@@ -928,7 +969,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
                       onPressed:()=>Navigator.of(context).maybePop()),
                   ])
                 : _loading
-                ? const CircularProgressIndicator(color:AppColors.primaryEnd)
+                ? const SizedBox.shrink()
                 : _error!=null
                   ? Column(mainAxisSize:MainAxisSize.min,children:[
                     Text(_error!,textAlign:TextAlign.center,style:AppTypography.bodyMuted),
@@ -944,10 +985,11 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
                           item:_current,repository:widget.repository,
                           paused:_paused,
                           previewBytes:_photo,
+                          onStateChanged:(state)=>_clipStateChanged(state,epoch,momentId),
                           onProgress:(value){if(mounted)_clipProgress.value=value;},
                           onFinished:()=>_move(1)))),
             ))),
-          if(!_allCaughtUp && _error==null && !_loading && _caption!=null&&_caption!.isNotEmpty &&
+          if(_mediaReady && _caption!=null&&_caption!.isNotEmpty &&
               WidgetsBinding.instance.lifecycleState!=AppLifecycleState.paused &&
               WidgetsBinding.instance.lifecycleState!=AppLifecycleState.inactive &&
               WidgetsBinding.instance.lifecycleState!=AppLifecycleState.hidden)
@@ -956,11 +998,11 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
               child:SingleChildScrollView(
                 padding:const EdgeInsets.symmetric(vertical:8),
                 child:Text(_caption!,style:AppTypography.body))),
-          if(!_allCaughtUp&&_error==null&&!_loading&&(_caption==null||_caption!.isEmpty))
+          if(_mediaReady&&(_caption==null||_caption!.isEmpty))
             const SizedBox(height:8),
-          if(!_allCaughtUp&&_error==null&&!_loading&&_commentsOpen)
+          if(_mediaReady&&_commentsOpen)
             Flexible(flex:1,child:SingleChildScrollView(child:_commentsPanel())),
-          if(!_allCaughtUp&&_error==null&&!_loading)
+          if(_mediaReady)
             Row(children:[
               AppCircularIconButton(
                 semanticLabel:_liked?'Unlike moment':'Like moment',
@@ -995,6 +1037,10 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
             ]),
         ]),
       )),
+      if(_mediaLoading)const Positioned.fill(
+        child:IgnorePointer(child:Center(child:CircularProgressIndicator(
+          key:ValueKey('moment_viewer_loading'),color:AppColors.primaryEnd)))),
+      ]),
     );
   }
 }
