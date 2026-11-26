@@ -94,6 +94,32 @@ void main() {
     expect(find.byType(Image),findsNothing);
   });
 
+  testWidgets('story tap navigation crosses creators and pauses on hold',(tester) async{
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    final repo=_FakeMoments()..activeUser='viewer';
+    final first=OrbitLiveMoment(id:'first',creatorId:'a',mediaId:'a-media',contextId:'friends',publishedAt:DateTime.now());
+    final second=OrbitLiveMoment(id:'second',creatorId:'b',mediaId:'b-media',contextId:'friends',publishedAt:DateTime.now());
+    final seen=<String>[];
+    await tester.pumpWidget(MaterialApp(home:OrbitLiveMomentViewer(moment:first,repository:repo,
+      author:'First',playlist:[first,second],authorNames:const {'a':'First','b':'Second'},onViewed:seen.add)));
+    // Do not settle a running five-second story animation.
+    for(var i=0;i<5;i++)await tester.pump();
+    expect(seen,['first']);
+    expect(find.text('First'),findsOneWidget);
+    final image=find.byType(Image).first;
+    final rect=tester.getRect(image);
+    final touch=await tester.startGesture(rect.center);
+    await tester.pump(const Duration(milliseconds:650));
+    await tester.pump(const Duration(seconds:6));
+    expect(seen,['first']);
+    await touch.up();await tester.pump();
+    await tester.tapAt(Offset(rect.right-2,rect.center.dy));
+    for(var i=0;i<5;i++)await tester.pump();
+    expect(seen,['first','second']);
+    expect(find.text('Second'),findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('comments expand inline and show only a confirmed sent comment',(tester) async {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     final repo=_FakeMoments()..activeUser='viewer';
@@ -103,7 +129,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Moment comments'),findsOneWidget);
     await tester.enterText(find.byType(TextField),'Great moment');
-    await tester.tap(find.byTooltip('Send comment'));
+    await tester.ensureVisible(find.byIcon(Icons.send_rounded));
+    await tester.tap(find.byIcon(Icons.send_rounded));
     await tester.pumpAndSettle();
     expect(repo.sent,1);
     expect(find.text('Great moment'),findsOneWidget);

@@ -26,6 +26,8 @@ class OrbitInviteLinkRuntime extends NavigatorObserver {
   String? _pendingCircle;
   String? _pendingMoment;
   String? _route;
+  Route<dynamic>? _homeRoute;
+  String? _openingMoment;
   bool _opening=false;
 
   void initialize() {
@@ -40,6 +42,7 @@ class OrbitInviteLinkRuntime extends NavigatorObserver {
   void _received(Uri uri) {
     final moment=OrbitMomentLink.parse(uri);
     if(moment!=null){
+      if(moment==_openingMoment)return;
       _pendingMoment=moment;
       _pending=null;
       _pendingCircle=null;
@@ -70,24 +73,36 @@ class OrbitInviteLinkRuntime extends NavigatorObserver {
   @override
   void didPush(Route<dynamic> route,Route<dynamic>? previousRoute) {
     _route=route.settings.name;
-    if(_route==AppRoutes.home)_dispatch();
+    if(_route==AppRoutes.home)_homeRoute=route;
+    if(_route==AppRoutes.home||_pendingMoment!=null)_dispatch();
   }
 
   @override
   void didReplace({Route<dynamic>? newRoute,Route<dynamic>? oldRoute}) {
+    if(identical(_homeRoute,oldRoute))_homeRoute=null;
     _route=newRoute?.settings.name;
-    if(_route==AppRoutes.home)_dispatch();
+    if(_route==AppRoutes.home)_homeRoute=newRoute;
+    if(_route==AppRoutes.home||_pendingMoment!=null)_dispatch();
   }
 
   @override
   void didPop(Route<dynamic> route,Route<dynamic>? previousRoute) {
+    if(identical(_homeRoute,route))_homeRoute=null;
     _route=previousRoute?.settings.name;
-    if(_route==AppRoutes.home)_dispatch();
+    if(_route==AppRoutes.home)_homeRoute=previousRoute;
+    if(_route==AppRoutes.home||_pendingMoment!=null)_dispatch();
+  }
+
+  @override
+  void didRemove(Route<dynamic> route,Route<dynamic>? previousRoute){
+    if(identical(_homeRoute,route))_homeRoute=null;
   }
 
   void _dispatch() {
+    final onHome=_route==AppRoutes.home;
+    final onAuthenticatedStack=_pendingMoment!=null&&_homeRoute?.isActive==true;
     if((_pending==null && _pendingCircle==null && _pendingMoment==null) ||
-        _opening || _route!=AppRoutes.home)return;
+        _opening || (!onHome&&!onAuthenticatedStack))return;
     _opening=true;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       try{
@@ -99,11 +114,14 @@ class OrbitInviteLinkRuntime extends NavigatorObserver {
 
         final momentId=_pendingMoment;
         if(momentId!=null){
+          _openingMoment=momentId;
           final repository=OrbitMomentRepository();
+          final owner=await repository.currentUserId();
+          if(owner==null)return;
           final moment=await repository.authorizedMoment(momentId);
           final author=await repository.name(moment.creatorId);
-          if(!nav.mounted)return;
-          _pendingMoment=null;
+          if(!nav.mounted||await repository.currentUserId()!=owner||_homeRoute?.isActive!=true)return;
+          if(_pendingMoment==momentId)_pendingMoment=null;
           await nav.push<void>(AppFadeSlidePageRoute<void>(
             builder:(_)=>OrbitLiveMomentViewer(
               moment:moment,repository:repository,author:author),
@@ -128,13 +146,18 @@ class OrbitInviteLinkRuntime extends NavigatorObserver {
         // Keep a link only for transient errors. A rejected Moment URL
         // must not be retried forever after revocation, blocking or expiry.
         if(_pendingMoment!=null && error.statusCode!=null &&
-            error.statusCode!>=400 && error.statusCode!<500){
-          _pendingMoment=null;
+            error.statusCode!>=400 && error.statusCode!<500 && error.statusCode!=401 && error.statusCode!=429){
+          if(_pendingMoment==_openingMoment)_pendingMoment=null;
+          final context=navigatorKey.currentContext;
+          if(context!=null)ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+            const SnackBar(content:Text('This Moment is unavailable or you do not have access.')));
         }
       }catch(_){
         // Leave a transient network-error link pending until next Home entry.
       }finally{
-        _opening=false;
+        final completed=_openingMoment;
+        _openingMoment=null;_opening=false;
+        if(completed!=null&&_pendingMoment!=null&&_pendingMoment!=completed)_dispatch();
       }
     });
   }

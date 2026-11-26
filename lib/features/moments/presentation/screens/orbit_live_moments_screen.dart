@@ -67,6 +67,8 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
   bool _busy=true;
   String? _loadedOwner;
   bool _initialLoadComplete=false;
+  bool _autoRetryInFlight=false;
+  final Map<String,DateTime> _cacheLeaseAt={};
   bool _showingOfflinePreviews=false;
   String? _error;
   int _pendingPublishCount=0;
@@ -106,6 +108,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
     _previews.clear();
     _captions.clear();
     _places.clear();
+    _cacheLeaseAt.clear();
   }
 
   void _clearSponsored(){
@@ -323,11 +326,6 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       }
       _loadedOwner=owner;
       String? pendingProblem;
-      try{
-        if(retryDrafts)await _repo.resumePendingPublishes();
-      }catch(_){
-        pendingProblem='Waiting for connection or a secure retry';
-      }
       var waiting=0;
       try{waiting=await _repo.pendingPublishCount();}catch(_){}
       if(waiting>0 && pendingProblem==null){
@@ -394,6 +392,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         }
         _captions.removeWhere((id,_)=>!stable.contains(id));
         _places.removeWhere((id,_)=>!stable.contains(id));
+        _cacheLeaseAt.removeWhere((id,_)=>!stable.contains(id));
         _activityCheckIns=activityCheckIns;
       });
       final retained=Set<Uint8List>.identity()..addAll(_previews.values);
@@ -435,6 +434,8 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
           .map((m)=>'${m.id}|${m.contextId}|${m.audienceRevision}').toSet());
         for(final m in prefetch.take(3)){
           if(!mounted || epoch!=_loadEpoch)break;
+          final lastLease=_cacheLeaseAt[m.id];
+          if(lastLease!=null&&DateTime.now().difference(lastLease)<const Duration(minutes:3))continue;
           final preview=previews[m.id];
           if(preview==null || preview.length>OrbitMomentOfflineCache.maxPreviewBytes)continue;
           try {
@@ -446,6 +447,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
               publishedAt:m.publishedAt,
               issuedAt:lease.issued,expiresAt:lease.expires,
               viewExpiresAt:lease.viewExpires,preview:preview);
+            if(mounted&&epoch==_loadEpoch)_cacheLeaseAt[m.id]=DateTime.now();
           }catch(_){
             // Failure to obtain current server lease disables offline reuse.
           }
@@ -472,6 +474,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       });
       // A missing/disabled M20 backend never blocks or redesigns M7 Moments.
       unawaited(_refreshSponsored());
+      if(retryDrafts&&waiting>0)unawaited(_resumeDraftsOnce());
     }on OrbitIdentityException catch(error){
       if(error.statusCode==null || (error.statusCode!=null &&
           error.statusCode!>=500)){
@@ -523,6 +526,17 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
     }finally{
       if(mounted)setState(()=>_loadingMore=false);
     }
+  }
+
+  Future<void> _resumeDraftsOnce() async{
+    if(!mounted||_autoRetryInFlight||_retrying||_publishingNow)return;
+    _autoRetryInFlight=true;
+    try{
+      final completed=await _repo.resumePendingPublishes();
+      if(mounted&&completed>0)unawaited(_load());
+    }catch(_){
+      if(mounted)setState(()=>_pendingWarning='Waiting for connection or a secure retry');
+    }finally{_autoRetryInFlight=false;}
   }
 
   Future<void> _retryEncryptedDrafts() async {

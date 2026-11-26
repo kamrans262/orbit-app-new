@@ -113,7 +113,9 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
     if(valid&&_commentsOpen&&_commentMoment!=null){
       final scoped=_commentMoment!;
       if(!await widget.repository.remainsAuthorized(scoped)){
-        if(mounted&&epoch==_loadEpoch&&identical(_commentMoment,scoped))setState(_resetComments);
+        if(mounted&&epoch==_loadEpoch&&identical(_commentMoment,scoped)){
+          setState(_resetComments);_pause(false);
+        }
       }
       return;
     }
@@ -130,7 +132,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if(state==AppLifecycleState.inactive || state==AppLifecycleState.paused){
+    if(state==AppLifecycleState.inactive || state==AppLifecycleState.paused || state==AppLifecycleState.hidden){
       _advance?.cancel();_progress.stop();
       ++_loadEpoch;
       if(mounted)setState((){
@@ -153,7 +155,9 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
     _clipProgress.dispose();
     _revalidation?.cancel();
     WidgetsBinding.instance.removeObserver(this);
-    _forgetPhoto();
+    final bytes=_photo;
+    if(bytes!=null)unawaited(MemoryImage(bytes).evict());
+    _photo=null;_caption=null;++_commentEpoch;_comments.clear();_commentNames.clear();
     _commentInput.dispose();
     super.dispose();
   }
@@ -187,9 +191,9 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
     unawaited(_load());
   }
   void _pause(bool value){
-    _paused=value;
+    _paused=value||_commentsOpen;
     if(mounted)setState((){});
-    if(value){_advance?.cancel();_progress.stop();}else _schedule();
+    if(_paused){_advance?.cancel();_progress.stop();}else _schedule();
   }
   void _navigationTap(TapUpDetails tap,BoxConstraints constraints){
     if(widget.playlist.isEmpty||_commentsOpen)return;
@@ -308,7 +312,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
   String _contextLabel(String value){
     if(value=='friends')return 'Friends';
     if(value=='self')return 'Only Me';
-    return 'Circle ${'${_commentContexts.indexOf(value)+1}'}';
+    return 'Circle ${_commentContexts.indexOf(value)+1}';
   }
 
   Future<void> _loadComments({String? contextId}) async{
@@ -377,7 +381,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
             IconButton(tooltip:'Close comments',onPressed:()=>unawaited(_commentSheet()),icon:const Icon(Icons.close_rounded)),
           ]),
           if(_isOwner&&_commentContexts.length>1)DropdownButton<String>(
-            value:_commentContext??_commentContexts.first,
+            value:_commentContexts.contains(_commentContext)?_commentContext:_commentContexts.first,
             isExpanded:true,
             items:[for(final scope in _commentContexts)DropdownMenuItem(value:scope,child:Text(_contextLabel(scope),style:AppTypography.body))],
             onChanged:_commentSending?null:(scope){if(scope!=null)unawaited(_loadComments(contextId:scope));}),
