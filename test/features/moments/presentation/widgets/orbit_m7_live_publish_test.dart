@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_ui/features/auth/data/orbit_identity_client.dart';
 import 'package:orbit_ui/core/widgets/app_primary_button.dart';
 import 'package:orbit_ui/features/moments/domain/models/moment_publish_models.dart';
+import 'package:orbit_ui/features/moments/data/orbit_capture_inspection.dart';
 import 'package:orbit_ui/features/moments/presentation/widgets/moment_publish_sheet.dart';
 
 void main() {
@@ -173,7 +174,8 @@ void main() {
         durationMs:5000,enableNativePreview:false,circles:const [],
         privacyAudience:'Nobody',publisher:(request,progress)async{
           requests.add(request);
-          if(requests.length<3)throw const FormatException('Export interrupted');
+          if(requests.length==1)throw const OrbitVideoPreparationFailure('poster','thumbnail_failed');
+          if(requests.length==2)throw const FormatException('Export interrupted');
           return const MomentPublishReceipt(momentId:'server-confirmed-video');
         }),child:const Text('Open'))))));
     await tester.tap(find.text('Open'));await tester.pumpAndSettle();
@@ -182,6 +184,7 @@ void main() {
     await tester.ensureVisible(mute);await tester.tap(mute);await tester.pumpAndSettle();
     await tester.tap(find.text('Publish Moment'));await tester.pumpAndSettle();
     expect(find.text('Publishing interrupted'),findsOneWidget);
+    expect(find.textContaining('could not create the video preview'),findsOneWidget);
     await tester.tap(find.text('Back to Review'));await tester.pumpAndSettle();
     await tester.ensureVisible(mute);
     expect(tester.widget<SwitchListTile>(find.ancestor(of:mute,matching:find.byType(SwitchListTile))).value,true);

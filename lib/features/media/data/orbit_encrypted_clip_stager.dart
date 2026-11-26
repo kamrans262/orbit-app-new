@@ -79,7 +79,9 @@ class OrbitNativeVideoProcessor implements OrbitVideoProcessor {
       throw const FormatException('Video file exceeds the capture limits.');
     }
     final policy=OrbitCameraPolicy.current;
-    final initial=await _compressor.getMediaInfo(input.path);
+    final initial=await _compressor.getMediaInfo(input.path).catchError((Object error){
+      throw _failure('source',error);
+    });
     if(initial.durationMs<=0 || initial.durationMs>policy.videoDuration) {
       throw const OrbitVideoPreparationFailure('source','duration');
     }

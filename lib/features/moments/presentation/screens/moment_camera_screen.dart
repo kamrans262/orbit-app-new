@@ -1508,6 +1508,11 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       }
       if(!mounted)return;
       setState(()=>_reviewVisible=true);
+      if(widget.enableCamera&&_capturedClip!=null&&_mode==_OrbitCaptureMode.video){
+        await WidgetsBinding.instance.endOfFrame;
+        await OrbitMomentDraftPlayer.waitForNativeVideoDisposal();
+        if(!mounted)return;
+      }
       await showMomentPublishingSheet(
         context,
         photoBytes: editedPhoto,

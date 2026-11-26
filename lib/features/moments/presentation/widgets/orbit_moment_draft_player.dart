@@ -17,6 +17,14 @@ class OrbitMomentDraftPlayer extends StatefulWidget {
   final File file;
   final String kind;
   final bool muted,active;
+  // Review and camera previews are short-lived widgets. Their native decoder
+  // release must finish before another native export takes the same resources.
+  static Future<void> _videoDisposals=Future<void>.value();
+  static Future<void> waitForNativeVideoDisposal()=>_videoDisposals;
+  static Future<void> _trackVideoDisposal(Future<void> disposal){
+    _videoDisposals=Future.wait<void>([_videoDisposals,disposal]).then<void>((_){});
+    return disposal;
+  }
   @override
   State<OrbitMomentDraftPlayer> createState()=>_OrbitMomentDraftPlayerState();
 }
@@ -110,13 +118,24 @@ class _OrbitMomentDraftPlayerState extends State<OrbitMomentDraftPlayer>
     });
     await _init();
   }
+  static Future<void> _disposeVideo(VideoPlayerController video)async{
+    try{await video.pause();}catch(_){}
+    // A failed pause is not permission to leave a decoder allocated.
+    try{await video.dispose();}catch(_){}
+  }
   Future<void> _stop() async {
-    await _ended?.cancel();_ended=null;
+    // Register the release synchronously, before any await. A publisher
+    // waiting after the next frame must see the departing preview.
     final video=_video;_video=null;
+    final audio=_audio;_audio=null;
+    final ended=_ended;_ended=null;
     video?.removeListener(_videoChanged);
-    try{await video?.pause();await video?.dispose();}catch(_){}
-    try{await _audio?.stop();await _audio?.dispose();}catch(_){}
-    _video=null;_audio=null;
+    final release=video==null?null:
+      OrbitMomentDraftPlayer._trackVideoDisposal(_disposeVideo(video));
+    try{await ended?.cancel();}catch(_){}
+    if(release!=null)await release;
+    try{await audio?.stop();}catch(_){}
+    try{await audio?.dispose();}catch(_){}
   }
   @override
   void didChangeAppLifecycleState(AppLifecycleState state){

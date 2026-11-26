@@ -286,7 +286,7 @@ private fun inspectCapture(path:String):Map<String,Any> {
                   else if(csd!=null&&csd.remaining()>0)((csd.get(csd.position()).toInt() and 0xff) shr 3) else -1
                 result["audio_aac_lc"]=mime=="audio/mp4a-latm"&&profile==2
                 result["audio_channels"]=if(format.containsKey(MediaFormat.KEY_CHANNEL_COUNT))format.getInteger(MediaFormat.KEY_CHANNEL_COUNT) else 0
-                val trackDuration=if(format.containsKey(MediaFormat.KEY_DURATION))format.getLong(MediaFormat.KEY_DURATION) else 0L
+                val trackDuration=try{format.getLong(MediaFormat.KEY_DURATION)}catch(_:Exception){0L}
                 val measuredDuration=if(trackDuration>0)minOf(trackDuration,duration*1000L) else duration*1000L
                 result["audio_bps"]=timeline.bitrate(i,measuredDuration)
             }else if(mime.startsWith("video/")){
@@ -294,7 +294,7 @@ private fun inspectCapture(path:String):Map<String,Any> {
                 result["video_h264"]=mime=="video/avc"
                 result["width"]=format.getInteger(MediaFormat.KEY_WIDTH)
                 result["height"]=format.getInteger(MediaFormat.KEY_HEIGHT)
-                val trackDuration=if(format.containsKey(MediaFormat.KEY_DURATION))format.getLong(MediaFormat.KEY_DURATION) else 0L
+                val trackDuration=try{format.getLong(MediaFormat.KEY_DURATION)}catch(_:Exception){0L}
                 val measuredDuration=if(trackDuration>0)minOf(trackDuration,duration*1000L) else duration*1000L
                 val declaredFps=try {format.getInteger(MediaFormat.KEY_FRAME_RATE).toDouble()}
                     catch(_:Exception){try{format.getFloat(MediaFormat.KEY_FRAME_RATE).toDouble()}catch(_:Exception){0.0}}

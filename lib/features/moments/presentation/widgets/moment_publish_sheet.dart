@@ -547,6 +547,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
         // Replacing the review with the existing progress screen releases its
         // video player. Give that frame a chance to dispose before encoding.
         await WidgetsBinding.instance.endOfFrame;
+        await OrbitMomentDraftPlayer.waitForNativeVideoDisposal();
         if(!mounted)return;
       }
       _previewDebounce?.cancel();
