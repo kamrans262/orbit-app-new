@@ -1062,7 +1062,9 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         }
         if(!mounted)return;
         await _saveClipDraft(imported,'video',info.durationMs);
-        try{await _controller?.pausePreview();}catch(_){}
+        // A selected video needs the same exclusive native resources as a
+        // recorded video; do not leave an idle camera codec allocated.
+        await _releaseCamera();
         if(!mounted)return;
         setState((){
           _capturedClip=imported;

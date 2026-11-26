@@ -120,6 +120,9 @@ jobs:
           cargo install cargo-ndk --locked
           bash native/orbit_vodozemac/build_android.sh
       - run: flutter build apk --debug
+      - name: Native MP4 timeline regression
+        working-directory: android
+        run: ./gradlew :app:testDebugUnitTest
       - name: Verify all three native library ABIs in the APK
         run: |
           apk=build/app/outputs/flutter-apk/app-debug.apk

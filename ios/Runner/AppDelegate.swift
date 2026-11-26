@@ -220,6 +220,7 @@ private func inspectOrbitCapture(_ path: String) -> [String:Any]? {
     let dimensions=CMVideoFormatDescriptionGetDimensions(desc)
     out["video_h264"] = CMFormatDescriptionGetMediaSubType(desc) == kCMVideoCodecType_H264
     out["width"]=Int(dimensions.width);out["height"]=Int(dimensions.height)
+    out["rotation_degrees"] = abs(track.preferredTransform.b)>abs(track.preferredTransform.a) ? 90 : 0
     out["fps"]=Double(track.nominalFrameRate);out["video_bps"]=Double(track.estimatedDataRate)
   }
   return out

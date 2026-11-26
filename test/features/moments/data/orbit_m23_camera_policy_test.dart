@@ -51,6 +51,30 @@ void main(){
     expect(OrbitCaptureInspection.validateMetadata(voice,kind:'audio',policy:p),1000);
     expect(()=>OrbitCaptureInspection.validateMetadata({...voice,'audio_channels':2},kind:'audio',policy:p),throwsFormatException);
   });
+  test('video validation keeps strict bounds and declares rotated portrait dimensions',(){
+    final p=OrbitCameraPolicy.fromHints(hints());
+    final meta=<String,dynamic>{'duration_ms':6000,'location_metadata':false,
+      'video_tracks':1,'audio_tracks':1,'audio_aac_lc':true,
+      'video_h264':true,'width':960,'height':540,'rotation_degrees':90,
+      'fps':24.0,'video_bps':900000};
+    final valid=OrbitCaptureInspection.validateVideoMetadata(meta,policy:p,saver:true);
+    expect([valid.width,valid.height,valid.durationMs],[540,960,6000]);
+    for(final entry in <String,Map<String,dynamic>>{
+      'video_bitrate':{'video_bps':1200000},
+      'video_fps':{'fps':25.0},
+      'video_codec':{'video_h264':false},
+      'video_dimensions':{'width':961},
+      'metadata_or_location':{'location_metadata':true},
+      'video_audio_tracks':{'audio_aac_lc':false},
+    }.entries){
+      expect(()=>OrbitCaptureInspection.validateVideoMetadata({...meta,...entry.value},
+        policy:p,saver:true),throwsA(isA<OrbitCapturePolicyFailure>()
+          .having((e)=>e.code,'code',entry.key)));
+    }
+    expect(()=>OrbitCaptureInspection.validateVideoMetadata(meta,policy:p,muted:true),
+      throwsA(isA<OrbitCapturePolicyFailure>()
+        .having((e)=>e.code,'code','video_audio_tracks')));
+  });
   test('photo export and independent portrait thumbnail follow dynamic limits',(){
     final source=Uint8List.fromList(img.encodePng(img.Image(width:600,height:1200)));
     final photo=OrbitMediaCrypto.preparePhoto(source,maxLongSide:720,jpegQuality:70);

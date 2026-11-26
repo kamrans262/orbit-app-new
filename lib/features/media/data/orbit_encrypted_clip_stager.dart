@@ -4,6 +4,8 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:compress_video/compress_video.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
@@ -57,6 +59,18 @@ class OrbitNativeVideoProcessor implements OrbitVideoProcessor {
     _prepare(input,onProgress:onProgress,
       stripAudio:stripAudio,lowBandwidth:lowBandwidth);
 
+  // Only fixed stage/reason codes are reported; never log file paths, bytes,
+  // native exception text, device keys, recipient IDs or user content.
+  static OrbitVideoPreparationFailure _failure(String stage,Object error){
+    if(error is OrbitVideoPreparationFailure)return error;
+    final reason=error is OrbitCapturePolicyFailure?error.code:
+      error is PlatformException&&RegExp(r'^[a-zA-Z0-9_-]{1,64}$').hasMatch(error.code)
+        ?error.code:error.runtimeType.toString();
+    final failure=OrbitVideoPreparationFailure(stage,reason);
+    debugPrint('OrbitVideo stage=${failure.stage} reason=${failure.reason}');
+    return failure;
+  }
+
   Future<OrbitPreparedVideo> _prepare(File input,
       {void Function(double progress)? onProgress,
        required bool stripAudio,bool lowBandwidth=false}) async {
@@ -67,11 +81,8 @@ class OrbitNativeVideoProcessor implements OrbitVideoProcessor {
     final policy=OrbitCameraPolicy.current;
     final initial=await _compressor.getMediaInfo(input.path);
     if(initial.durationMs<=0 || initial.durationMs>policy.videoDuration) {
-      throw const FormatException('Orbit supports video clips up to 60 seconds.');
+      throw const OrbitVideoPreparationFailure('source','duration');
     }
-    // compress_video's never-larger guarantee may return the source even
-    // when requested options were different. Always use an app-owned fresh
-    // MP4 destination and independently inspect the final sanitized output.
     final scratch=OrbitCaptureTempFiles();
     final limit=policy.videoBitrate(lowBandwidth);
     final sourceRate=initial.videoBitrateBps?.toInt()??limit;
@@ -80,34 +91,54 @@ class OrbitNativeVideoProcessor implements OrbitVideoProcessor {
       min((limit*0.65).round(),(max(1,sourceRate)*0.50).round()),
       min((limit*0.40).round(),(max(1,sourceRate)*0.30).round()),
     ].map((n)=>max(64000,min(n,limit))).toList();
-    Object? lastFailure;
     Future<OrbitPreparedVideo> checked(File candidate)async{
       final output=await scratch.allocate('mp4');
+      var stage='sanitize';
       try{
-        // Copy media tracks into a clean container, retaining orientation,
-        // never the source metadata. Mute means NO audio track.
+        // Every source or compressed candidate must pass the same clean
+        // container, track, location, duration, size and bitrate checks.
         await OrbitCaptureInspection.sanitizeMp4(candidate,output,muted:stripAudio);
+        stage='size';
         if(!await output.exists()||await output.length()<1||
            await output.length()>OrbitMediaFormat.videoLimit){
           throw const FormatException('Prepared MP4 exceeds upload limits.');
         }
-        final duration=await OrbitCaptureInspection.validate(output,kind:'video',
-          policy:policy,muted:stripAudio,saver:lowBandwidth);
-        final info=await _compressor.getMediaInfo(output.path);
-        if(info.widthPx<1||info.heightPx<1||
-           max(info.widthPx,info.heightPx)>policy.videoEdge){
-          throw const FormatException('Prepared MP4 has invalid dimensions.');
+        stage='validate';
+        final video=OrbitCaptureInspection.validateVideoMetadata(
+          await OrbitCaptureInspection.inspect(output),policy:policy,
+          muted:stripAudio,saver:lowBandwidth);
+        stage='poster';
+        Uint8List? poster;
+        Object? posterError;
+        // Some native retrievers cannot seek to an arbitrary short-clip
+        // timestamp. Retry at the start, without fabricating a poster.
+        for(final position in <int>{min(video.durationMs~/2,1500),0}){
+          try{
+            final bytes=await _compressor.getThumbnail(output.path,
+              positionMs:position,quality:78,maxDimensionPx:320);
+            poster=OrbitMediaCrypto.preparePhoto(bytes).thumbnail;
+            break;
+          }catch(error){posterError=error;}
         }
-        final bytes=await _compressor.getThumbnail(output.path,
-          positionMs:min(duration~/2,1500),quality:78,maxDimensionPx:320);
-        final poster=OrbitMediaCrypto.preparePhoto(bytes).thumbnail;
+        if(poster==null)throw posterError??StateError('Poster unavailable.');
         return OrbitPreparedVideo(file:output,posterJpeg:poster,
-          durationMs:duration,width:info.widthPx,height:info.heightPx);
-      }catch(_){
+          durationMs:video.durationMs,width:video.width,height:video.height);
+      }catch(error){
         try{await scratch.deleteCacheFile(output);}catch(_){}
-        rethrow;
+        throw _failure(stage,error);
       }
     }
+
+    // Native camera recordings already within the active policy do not need
+    // hardware re-encoding. Remux first, never upload the source verbatim.
+    // Data saver and mute still go through the same independent checks.
+    late OrbitVideoPreparationFailure lastFailure;
+    try{
+      final prepared=await checked(input);
+      onProgress?.call(1);
+      return prepared;
+    }catch(error){lastFailure=_failure('source_remux',error);}
+
     for(var attempt=0;attempt<targets.length;attempt++){
       final destination=await scratch.allocate('mp4');
       File? candidate;
@@ -131,7 +162,7 @@ class OrbitNativeVideoProcessor implements OrbitVideoProcessor {
         final prepared=await checked(candidate);
         onProgress?.call(1);
         return prepared;
-      }catch(error){lastFailure=error;}
+      }catch(error){lastFailure=_failure('encode',error);}
       finally{
         for(final file in [destination,if(candidate!=null)candidate]){
           if(file.path!=input.path){
@@ -140,13 +171,9 @@ class OrbitNativeVideoProcessor implements OrbitVideoProcessor {
         }
       }
     }
-    // Some devices report a compressor failure for already compatible
-    // short clips. A clean native remux is allowed only if every original
-    // codec, duration, size, track and bitrate check still passes.
-    try{return await checked(input);}catch(error){lastFailure=error;}
-    // Keep the original capture; the encrypted draft can be retried.
-    throw FormatException('Video export could not meet the current capture policy.',
-      lastFailure.runtimeType.toString());
+    // Keep the original capture; do not upload an invalid or unsanitized
+    // clip and do not replace the exact failing stage with a generic error.
+    throw lastFailure;
   }
 
 }
@@ -194,10 +221,11 @@ class OrbitEncryptedClipStager {
     final prepared=await (_processor is OrbitNativeVideoProcessor
       ? _processor.prepareForNetwork(original,
           stripAudio:muteAudio,lowBandwidth:lowBandwidth,
-          onProgress:onProgress)
+          onProgress:(p)=>onProgress?.call(0.35*p))
       : (muteAudio||lowBandwidth)
         ? throw StateError('Selected video processor cannot enforce export options.')
-        : _processor.prepare(original,onProgress:onProgress));
+        : _processor.prepare(original,onProgress:(p)=>onProgress?.call(0.35*p)));
+    var stage='seal';
     try {
     final root=Directory((await _temp()).path+'/orbit-m6-transcode');
     await root.create(recursive:true);
@@ -210,6 +238,7 @@ class OrbitEncryptedClipStager {
       destination:File(root.path+'/'+posterId+'.cipher'),
       ownerId:owner,transferId:posterId,purpose:'moment',variant:'poster');
     if(await _identity.currentLocalSocialOwner()!=owner){await video.file.delete();await poster.file.delete();throw StateError('Capture account changed.');}
+    stage='queue';
     final first=await _outbox.enqueue(video,kind:'video',
       mime:'video/mp4',width:prepared.width,height:prepared.height,
       durationMs:prepared.durationMs);
@@ -219,16 +248,19 @@ class OrbitEncryptedClipStager {
     try {
       await video.file.delete();
       await poster.file.delete();
+      stage='upload_original';
       final receipt=await _media.upload(await _outbox.restore(first),
         kind:'video',mime:'video/mp4',width:prepared.width,
         height:prepared.height,durationMs:prepared.durationMs,
         onProgress:(p)=>onProgress?.call(0.35+0.55*p));
       if(!receipt.ready)throw StateError('Video verification pending.');
+      stage='upload_poster';
       second=await _outbox.bindVariantParent(second,receipt.mediaId);
       final frame=await _media.upload(await _outbox.restore(second),
         kind:'image',mime:'image/jpeg',parentMediaId:receipt.mediaId,
         onProgress:(p)=>onProgress?.call(0.90+0.08*p));
       if(!frame.ready)throw StateError('Poster verification pending.');
+      stage='private_grants';
       final grants=await _media.createGrants(receipt.mediaId,
         audience:'only_me',recipients:const [],
         idempotencyKey:videoId,
@@ -241,9 +273,11 @@ class OrbitEncryptedClipStager {
             'wrapped_key_ciphertext':await _crypto.wrapKey(poster,device.publicKey)},
         ]));
       if(grants.isEmpty)throw StateError('Device grants not confirmed.');
+      stage='publish_audience';
       if(onReadyForAudience!=null){
         await onReadyForAudience(video,poster,receipt.mediaId);
       }
+      stage='cleanup';
       await _outbox.discard(first);
       await _outbox.discard(second);
       onProgress?.call(1);
@@ -253,6 +287,9 @@ class OrbitEncryptedClipStager {
       // Ciphertext-only drafts remain in the offline outbox for explicit retry.
       rethrow;
     }
+    } catch(error) {
+      debugPrint('OrbitVideo stage=$stage type=${error.runtimeType}');
+      rethrow;
     } finally {
       // This native transcode is plaintext until its encrypted queue copy is
       // durably saved. Clean it up even when sealing or enqueue fails before

@@ -6,6 +6,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import '../../data/moment_photo_processor.dart';
 import '../../data/orbit_camera_policy.dart';
+import '../../data/orbit_capture_inspection.dart';
 import '../../data/orbit_camera_tool_catalog.dart';
 import '../../../config/data/orbit_public_config_runtime.dart';
 import '../../data/orbit_moment_audience_memory.dart';
@@ -510,6 +511,13 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
       if(reason.contains('account')||reason.contains('sign in'))return 'Sign in to the original capture account and retry.';
     }
     if(error is FileSystemException)return 'The captured media could not be read. Your draft has not been confirmed.';
+    if(error is OrbitVideoPreparationFailure){
+      return switch(error.stage){
+        'poster'=>'Orbit could not create the video preview. Your draft is retained. Retry.',
+        'validate'||'source'=>'The video did not meet the current capture format or size settings. Your draft is retained.',
+        _=>'Orbit could not prepare the video safely. Your draft is retained. Retry.',
+      };
+    }
     if(error is FormatException)return 'Orbit could not prepare or verify the media format.';
     if(error is TimeoutException || error is SocketException)return 'The connection was interrupted. Retry the same draft.';
     return 'Your Moment could not be confirmed. Retry the same draft.';
@@ -535,6 +543,12 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
       _error = null;
     });
     try {
+      if(widget.mediaKind=='video'&&widget.enableNativePreview){
+        // Replacing the review with the existing progress screen releases its
+        // video player. Give that frame a chance to dispose before encoding.
+        await WidgetsBinding.instance.endOfFrame;
+        if(!mounted)return;
+      }
       _previewDebounce?.cancel();
       ++_previewGeneration;
       await _previewWork;

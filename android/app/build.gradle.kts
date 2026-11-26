@@ -36,6 +36,7 @@ val orbitHasSigning = listOf(orbitStore, orbitStorePass, orbitKeyAlias, orbitKey
 
 dependencies {
     implementation("com.android.billingclient:billing:8.0.0")
+    testImplementation("junit:junit:4.13.2")
 }
 
 android {
