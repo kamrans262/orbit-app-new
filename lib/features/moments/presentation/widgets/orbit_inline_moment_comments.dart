@@ -158,7 +158,7 @@ class _OrbitInlineMomentCommentsState extends State<OrbitInlineMomentComments> w
       child:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.stretch,children:[
         Divider(height:1,color:AppColors.primaryEnd.withValues(alpha:0.14)),
         Row(children:[
-          Expanded(child:Text('Comments',style:AppTypography.smallHeading.copyWith(color:AppColors.primaryEnd))),
+          Expanded(child:Text('Comments',style:AppTypography.body.copyWith(fontWeight:FontWeight.w600,color:AppColors.primaryEnd))),
           IconButton(tooltip:'Close comments',onPressed:widget.onClose,icon:const Icon(Icons.close_rounded,color:AppColors.primaryEnd)),
         ]),
         if(widget.moment.targetIds.length>1&&widget.moment.interactionContext.startsWith('circle:'))
@@ -181,7 +181,7 @@ class _OrbitInlineMomentCommentsState extends State<OrbitInlineMomentComments> w
             Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
               Container(width:double.infinity,padding:const EdgeInsets.symmetric(horizontal:12,vertical:9),
                 decoration:BoxDecoration(
-                  color:AppColors.primaryEnd.withValues(alpha:0.055),
+                  color:AppColors.white,
                   borderRadius:BorderRadius.circular(14),
                   border:Border.all(color:AppColors.primaryEnd.withValues(alpha:0.10))),
                 child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
@@ -212,11 +212,13 @@ class _OrbitInlineMomentCommentsState extends State<OrbitInlineMomentComments> w
           Expanded(child:Text('Replying to comment',style:AppTypography.bodyMuted)),
           TextButton(onPressed:()=>setState(()=>_parent=null),child:const AppGradientActionLabel('Cancel')),
         ]),
-        if(_scope!=null)Row(children:[
-          Expanded(child:TextField(controller:_input,maxLength:280,maxLines:2,minLines:1,
+        if(_scope!=null)Row(crossAxisAlignment:CrossAxisAlignment.center,children:[
+          Expanded(child:TextField(controller:_input,maxLength:280,maxLines:1,
+            style:AppTypography.body.copyWith(fontSize:12,height:1.3),
             enabled:!_sending,decoration:InputDecoration(hintText:'Write a comment',counterText:'',
-              filled:true,fillColor:AppColors.primaryEnd.withValues(alpha:0.045),
-              contentPadding:const EdgeInsets.symmetric(horizontal:14,vertical:10),
+              filled:true,fillColor:AppColors.white,isDense:true,
+              hintStyle:AppTypography.bodyMuted.copyWith(fontSize:12,height:1.3),
+              contentPadding:const EdgeInsets.symmetric(horizontal:12,vertical:9),
               enabledBorder:OutlineInputBorder(borderRadius:BorderRadius.circular(24),
                 borderSide:BorderSide(color:AppColors.primaryEnd.withValues(alpha:0.16))),
               focusedBorder:OutlineInputBorder(borderRadius:BorderRadius.circular(24),
@@ -225,7 +227,7 @@ class _OrbitInlineMomentCommentsState extends State<OrbitInlineMomentComments> w
           Semantics(button:true,label:'Send comment',child:Material(color:Colors.transparent,
             child:Ink(decoration:const BoxDecoration(shape:BoxShape.circle,gradient:AppColors.primaryGradient),
               child:InkWell(customBorder:const CircleBorder(),onTap:()=>unawaited(_send()),
-                child:const SizedBox.square(dimension:40,child:Icon(Icons.send_rounded,color:AppColors.white,size:20)))))),
+                child:const SizedBox.square(dimension:36,child:Center(child:Icon(Icons.send_rounded,color:AppColors.white,size:18))))))),
         ]),
       ]));
   }

@@ -19,6 +19,7 @@ import 'package:uuid/uuid.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_primary_button.dart';
+import '../../../../core/widgets/app_secondary_button.dart';
 import '../../domain/models/moment_publish_models.dart';
 
 typedef OrbitPrivatePhotoSaver = Future<void> Function(
@@ -715,7 +716,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
         ClipRRect(
           borderRadius: BorderRadius.circular(22),
           child: SizedBox(
-            height: compact ? 160 : 255,
+            height: widget.mediaKind=='video'?(compact?240:360):(compact?160:255),
             child: widget.mediaKind!='image'
               ? (widget.enableNativePreview
                   ? OrbitMomentDraftPlayer(
@@ -723,7 +724,7 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
                       muted:_muteVideo)
                   : Center(child:Text(
                       widget.mediaKind=='video'
-                        ? 'Video ready to encrypt':'Voice ready to encrypt',
+                        ? 'Video preview':'Voice preview',
                       style:AppTypography.body)))
               : LayoutBuilder(builder:(context,constraints){
                 final photoSize=_photoSize;
@@ -904,24 +905,9 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
     return Padding(
       padding:const EdgeInsets.fromLTRB(20,8,20,8),
       child:Column(mainAxisSize:MainAxisSize.min,children:[
-        if (_canPublish || !_canSavePrivate)
-          OutlinedButton.icon(
-            key:MomentPublishKeys.chooseAudience,
-            onPressed:()=>setState(()=>_step=_PublishStep.audience),
-            icon:const Icon(Icons.people_outline_rounded,size:20),
-            label:Text(_hasAudience?'$_audienceLabel selected':'Choose audience'),
-            style:OutlinedButton.styleFrom(
-              minimumSize:const Size(double.infinity,48),
-              foregroundColor:AppColors.primaryEnd,
-              side:const BorderSide(color:AppColors.primaryEnd),
-              shape:RoundedRectangleBorder(
-                borderRadius:BorderRadius.circular(24)),
-            ),
-          ),
         if(!_canPublish && !_canSavePrivate)
           Text('UI preview only. No upload or notification is sent.',
             key:MomentPublishKeys.unavailable,style:AppTypography.bodyMuted),
-        const SizedBox(height:8),
         AppPrimaryButton(
           label:_canPublish?'Publish Moment':
             (_canSavePrivate?'Save privately':'Preview publishing flow'),
@@ -930,13 +916,26 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
             privateOnly:!_canPublish&&_canSavePrivate,
             previewOnly:!_canPublish&&!_canSavePrivate)),
         ),
-        if(_canPublish && _canSavePrivate && widget.mediaKind=='image')
-          TextButton(
-            onPressed:()=>unawaited(_submit(privateOnly:true)),
-            child:const AppGradientActionLabel('Save privately without publishing'),
+        if (_canPublish || !_canSavePrivate)...[
+          const SizedBox(height:10),
+          OutlinedButton.icon(
+            key:MomentPublishKeys.chooseAudience,
+            onPressed:()=>setState(()=>_step=_PublishStep.audience),
+            icon:const Icon(Icons.people_outline_rounded,size:20),
+            label:Text(_hasAudience?'$_audienceLabel selected':'Choose audience'),
+            style:OutlinedButton.styleFrom(
+              minimumSize:Size(double.infinity,AppPrimaryButton.heightFor(context)),
+              foregroundColor:AppColors.primaryEnd,
+              side:const BorderSide(color:AppColors.primaryEnd),
+              shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(AppPrimaryButton.radius)),
+            ),
           ),
-        TextButton(onPressed:_back,
-          child:const AppGradientActionLabel('Retake / Back to Camera')),
+        ],
+        if(_canPublish && _canSavePrivate && widget.mediaKind=='image')
+          TextButton(onPressed:()=>unawaited(_submit(privateOnly:true)),
+            child:const AppGradientActionLabel('Save privately without publishing')),
+        const SizedBox(height:10),
+        AppPrimaryButton(label:'Retake / Back to Camera',onPressed:_back),
       ]),
     );
   }
@@ -1111,8 +1110,10 @@ class _MomentPublishSheetState extends State<MomentPublishSheet> {
               label: 'Done',
               onPressed: () => Navigator.of(context).pop(),
             ),
-          if (failed)
-            TextButton(onPressed: _back, child: const AppGradientActionLabel('Back to review')),
+          if (failed)...[
+            const SizedBox(height:10),
+            AppSecondaryButton(label:'Back to Review',onPressed:_back),
+          ],
           if (!finished && _simulated)
             Text(
               'Demo only — no upload or notification is sent.',

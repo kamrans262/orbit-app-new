@@ -28,6 +28,8 @@ import '../../data/orbit_capture_inspection.dart';
 import '../../../media/data/orbit_bounded_image.dart';
 import 'package:flutter/foundation.dart' show compute;
 import '../widgets/moment_publish_sheet.dart';
+import '../widgets/orbit_moment_draft_player.dart';
+import '../../../connectivity/presentation/orbit_connectivity_runtime.dart';
 import '../../../../core/widgets/app_bottom_navigation_bar.dart';
 import '../../../../core/popups/orbit_popup_variants.dart';
 import '../../../../core/popups/orbit_popup_modal.dart';
@@ -135,6 +137,8 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     with WidgetsBindingObserver {
   CameraController? _controller;
   Future<void>? _cameraDisposalInFlight;
+  bool _cameraBackgrounded=false;
+  bool _cameraWasOpened=false;
   CameraDescription? _activeCamera;
   List<CameraDescription> _cameras = const <CameraDescription>[];
 
@@ -218,6 +222,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
 
     _routeOwner=widget.enableCamera?(widget.captureOwner!=null?Future.value(widget.captureOwner):OrbitIdentityClient.instance.currentLocalSocialOwner()):Future.value(null);
     if (widget.enableCamera) {
+      OrbitConnectivityNavigatorObserver.enterLocalCapture();
       unawaited(_initializeCamera());
       unawaited(_checkSavedDraft());
     } else {
@@ -339,6 +344,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
 
   @override
   void dispose() {
+    if(widget.enableCamera)OrbitConnectivityNavigatorObserver.leaveLocalCapture();
     OrbitPublicConfigRuntime.instance.removeListener(_onToolPolicyChanged);
     WidgetsBinding.instance.removeObserver(this);
     _recordLimit?.cancel();
@@ -357,49 +363,34 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (!widget.enableCamera) {
-      return;
-    }
-
-    if (state == AppLifecycleState.inactive || state==AppLifecycleState.paused) {
-      _captureEpoch++;
+    if(!widget.enableCamera)return;
+    // Inactive can be a permission dialog or transient system overlay.
+    if(state==AppLifecycleState.hidden||state==AppLifecycleState.paused){
+      if(_cameraBackgrounded)return;
+      _cameraBackgrounded=true;++_captureEpoch;
       if(_recordStarting){_stopWhenStarted=true;return;}
       if(_recording){unawaited(_finishRecording());return;}
-      if(_recordStopping)return;
-      // Android's runtime permission UI temporarily moves the activity to an
-      // inactive state while CameraController.initialize() is still waiting
-      // for the permission result. Disposing/restarting here creates two
-      // competing camera initializations and causes the false error popup.
-      if (_cameraInitializationInProgress) {
-        return;
-      }
-
-      final controller = _controller;
-      _controller = null;
-      if (controller != null) {
-        // Wait for the native camera resource to finish releasing before any
-        // subsequent initialization. Android otherwise reports camera-in-use.
-        final closing = controller.dispose();
-        _cameraDisposalInFlight = closing;
-        unawaited(closing.catchError((_){ }));
-      }
-      return;
+      if(_recordStopping||_cameraInitializationInProgress||_isCapturing)return;
+      unawaited(_releaseCamera());
+    }else if(state==AppLifecycleState.resumed){
+      _cameraBackgrounded=false;
+      _restoreCameraIfNeeded();
     }
+  }
 
-    if (state == AppLifecycleState.resumed &&
-        _capturedBytes == null && _capturedClip == null &&
-        !_isCapturing && !_recording) {
-      // If the permission dialog resumed the app while the original
-      // initialization is still running, let that one finish. Never start a
-      // second CameraController concurrently.
-      if (_cameraInitializationInProgress) {
-        return;
-      }
+  Future<void> _releaseCamera()async{
+    final old=_controller;_controller=null;
+    if(old==null)return;
+    final closing=old.dispose();_cameraDisposalInFlight=closing;
+    try{await closing;}catch(_){}
+  }
 
-      final controller = _controller;
-      if (controller == null || !controller.value.isInitialized) {
-        unawaited(_initializeCamera(preferredCamera: _activeCamera));
-      }
+  void _restoreCameraIfNeeded(){
+    if(!mounted||_cameraBackgrounded||_cameraInitializationInProgress||
+       _recordStarting||_recordStopping||_recording||_isCapturing||
+       _capturedBytes!=null||_capturedClip!=null||_publishSheetOpen)return;
+    if(_controller==null||!_controller!.value.isInitialized){
+      unawaited(_initializeCamera(preferredCamera:_activeCamera));
     }
   }
 
@@ -452,14 +443,15 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   }
 
   Future<void> _initializeCamera({CameraDescription? preferredCamera}) async {
-    if (!widget.enableCamera || !mounted || _cameraInitializationInProgress) {
+    if (!widget.enableCamera || !mounted || _cameraBackgrounded || _cameraInitializationInProgress) {
       return;
     }
 
     _cameraInitializationInProgress = true;
     // An Orbit permission/loading popup is useful on first entry, but opening
     // it for every camera flip or Photo/Video switch blocks live camera tools.
-    final firstOpen = _controller == null;
+    final firstOpen = !_cameraWasOpened;
+    CameraController? initializing;
 
     try {
       if (mounted) {
@@ -503,6 +495,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         enableAudio: _mode==_OrbitCaptureMode.video,
       );
 
+      initializing=controller;
       await controller.initialize();
       try{
         _minZoom=await controller.getMinZoomLevel();
@@ -512,13 +505,13 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         _minZoom=1;_maxZoom=1;_currentZoom=1;
       }
 
-      if (!mounted) {
-        await controller.dispose();
+      if (!mounted||_cameraBackgrounded) {
+        await controller.dispose();initializing=null;
         return;
       }
 
       _activeCamera = camera;
-      _controller = controller;
+      _controller = controller;initializing=null;_cameraWasOpened=true;
       _flashMode = FlashMode.off;
 
       unawaited(OrbitCameraPermissionMemory.markCameraAccessConfirmed());
@@ -555,7 +548,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         _cameraError = _friendlyCameraError(error);
       });
 
-      _showOrbitMomentErrorPopup();
+      if(!_cameraBackgrounded&&WidgetsBinding.instance.lifecycleState==AppLifecycleState.resumed)_showOrbitMomentErrorPopup();
     } catch (_) {
       if (!mounted) {
         return;
@@ -574,7 +567,10 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
 
       _showOrbitMomentErrorPopup();
     } finally {
+      if(initializing!=null){try{await initializing.dispose();}catch(_){}}
       _cameraInitializationInProgress = false;
+      if(_cameraBackgrounded)await _releaseCamera();
+      if(mounted&&_cameraBackgrounded)await _dismissOrbitCameraLoadingPopup();
     }
   }
 
@@ -922,6 +918,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
 
   Future<void> _beginRecording() async {
     if(_isCapturing || _recording || _recordStarting || _recordStopping || _capturedClip!=null || !mounted)return;
+    if(_cameraBackgrounded)return;
     _recordStarting=true;
     try {
       if(_mode==_OrbitCaptureMode.video){
@@ -972,7 +969,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         return;
       }
       _recordLimit?.cancel();
-      _recordLimit=Timer(Duration(milliseconds:_recordMaxMs),(){
+      _recordLimit=Timer(Duration(milliseconds:math.max(1,_recordMaxMs-350)),(){
         if(mounted && _recording)unawaited(_finishRecording());
       });
     }catch(_){
@@ -984,7 +981,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       }
       if(mounted)ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content:Text('Unable to start recording. Check camera and microphone permissions.')));
-    }finally{_recordStarting=false;}
+    }finally{_recordStarting=false;if(mounted&&!_recording&&!_recordStopping)_restoreCameraIfNeeded();}
   }
 
   Future<void> _finishRecording() async {
@@ -994,7 +991,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     _recordTicker?.cancel();
     await _amplitudeSubscription?.cancel();
     _amplitudeSubscription=null;
-    _recording=false;
+    if(mounted)setState(()=>_recording=false);else _recording=false;
     File? clip;
     try{
       if(_mode==_OrbitCaptureMode.video){
@@ -1004,6 +1001,8 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
         final original=File(recorded.path);
         try{clip=await _tempFiles.copyClip(original,extension:'mp4',maxBytes:250*1024*1024);}
         finally{await _deleteClip(original);}
+        // Release the camera encoder before starting the local video decoder.
+        await _releaseCamera();
       }else{
         final path=await _audioRecorder.stop();
         clip=path==null?null:File(path);
@@ -1032,10 +1031,8 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     }finally{
       _stopWhenStarted=false;_recordStopping=false;
       if(mounted)setState(()=>_recording=false);
-      if(WidgetsBinding.instance.lifecycleState!=AppLifecycleState.resumed){
-        final old=_controller;_controller=null;
-        if(old!=null){final closing=old.dispose();_cameraDisposalInFlight=closing;try{await closing;}catch(_){}}
-      }
+      if(_cameraBackgrounded){await _releaseCamera();}
+      else{_restoreCameraIfNeeded();}
     }
   }
 
@@ -1185,6 +1182,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
           _isCapturing = false;
           _countdownValue = null;
         });
+        if(_cameraBackgrounded){await _releaseCamera();}else{_restoreCameraIfNeeded();}
       }
     }
   }
@@ -1467,7 +1465,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     }
     if (_publishSheetOpen || _exportingPhoto || !mounted) return;
     if(captured!=null&&!_cameraToolsAllowed){_showToolHint('Choose an available filter or remove unavailable stickers before continuing.');return;}
-    _publishSheetOpen=true;
+    setState(()=>_publishSheetOpen=true);
     if(widget.enableCamera&&await _checkedOwner()==null){_publishSheetOpen=false;if(mounted)_showToolHint('Sign in again before using this capture.');return;}
     if(!mounted)return;
     _endInk();_saveCameraEdits();
@@ -1497,6 +1495,8 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     _publishSheetOpen = true;
     try {
       final loadAudience=widget.audienceLoader;
+      // The camera preview is local; fetching live recipients is the first
+      // network-dependent step. A failed request keeps the encrypted draft.
       final options=loadAudience==null?null:await loadAudience();
       if(!mounted)return;
       if(widget.enableCamera&&await _checkedOwner()==null){
@@ -1537,7 +1537,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     } catch (_) {
       if(mounted)_showToolHint('Unable to prepare your Moment. Try again.');
     } finally {
-      _publishSheetOpen = false;
+      if(mounted)setState(()=>_publishSheetOpen=false);
     }
   }
 
@@ -1758,16 +1758,12 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
 
   Widget _buildCameraBackground() {
     final captured = _capturedBytes;
-    if(_capturedClip!=null){
+    if(_capturedClip!=null&&!_recording&&!_recordStarting){
       return ColoredBox(color:Colors.black,
-        child:Center(child:Column(mainAxisSize:MainAxisSize.min,children:[
-          Icon(_mode==_OrbitCaptureMode.video
-            ? Icons.videocam_outlined:Icons.mic_none_outlined,
-            color:Colors.white,size:62),
-          const SizedBox(height:12),
-          Text(_mode==_OrbitCaptureMode.video?'Video ready':'Voice ready',
-            style:AppTypography.body.copyWith(color:Colors.white)),
-        ])));
+        child:OrbitMomentDraftPlayer(
+          key:ValueKey(_capturedClip!.path),
+          file:_capturedClip!,kind:_mode==_OrbitCaptureMode.video?'video':'audio',
+          muted:false,active:!_publishSheetOpen));
     }
     if (captured != null) {
       return RepaintBoundary(
@@ -2095,7 +2091,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
           alignment: Alignment.center,
           child: _CaptureButton(
             key: MomentCameraKeys.captureButton,
-            isBusy: _isCapturing,
+            isBusy: _isCapturing||_recordStarting||_recordStopping,
             onTap: _handleCapturePressed,
             recordMode:_mode!=_OrbitCaptureMode.photo,
             isRecording:_recording,
@@ -2366,7 +2362,7 @@ class _CaptureButton extends StatelessWidget {
     return Semantics(
       button: true,
       label: retake ? 'Retake Moment' :
-        isBusy?'Capturing moment':(isRecording?'Recording moment':
+        isBusy?'Capturing moment':(isRecording?'Stop recording':
         (recordMode?'Hold to record moment':'Capture moment')),
       child: InkResponse(
         onTap: isBusy ? null : onTap,
@@ -2383,14 +2379,14 @@ class _CaptureButton extends StatelessWidget {
             border: Border.all(color: Colors.white, width: 4),
           ),
           child: DecoratedBox(
-            decoration:const BoxDecoration(
+            decoration:BoxDecoration(
               shape: BoxShape.circle,
-              color: Colors.white,
+              color: isRecording?Colors.red:Colors.white,
             ),
             child:retake
               ? const Icon(Icons.refresh_rounded,
                   color:Color(0xFF7C3AED),size:36)
-              : null,
+              : isRecording?const Icon(Icons.stop_rounded,color:Colors.white,size:30):null,
           ),
         ),
       ),

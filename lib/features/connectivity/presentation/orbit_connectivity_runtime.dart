@@ -32,6 +32,20 @@ class OrbitConnectivityNavigatorObserver extends NavigatorObserver
   bool _dismissedForCurrentOfflineEpisode = false;
   bool _startupGraceComplete = false;
   int _consecutiveFailures = 0;
+  int _probeEpoch = 0;
+  int _localCaptureRoutes = 0;
+  bool get _foreground => WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+  static void enterLocalCapture() {
+    instance._localCaptureRoutes++;
+    instance._probeEpoch++;
+    instance._consecutiveFailures=0;
+  }
+  static void leaveLocalCapture() {
+    if(instance._localCaptureRoutes>0)instance._localCaptureRoutes--;
+    instance._probeEpoch++;
+    instance._consecutiveFailures=0;
+    instance._scheduleCheck(delay:const Duration(seconds:3));
+  }
 
   /// Called once the splash has completed. Monitoring starts quietly and does
   /// not show a popup during the initial startup grace period.
@@ -60,8 +74,10 @@ class OrbitConnectivityNavigatorObserver extends NavigatorObserver
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    _probeEpoch++;
+    _consecutiveFailures=0;
     if (state == AppLifecycleState.resumed && _startupGraceComplete) {
-      _scheduleCheck(delay: const Duration(milliseconds: 750));
+      _scheduleCheck(delay: const Duration(seconds:3));
     }
   }
 
@@ -124,6 +140,7 @@ class OrbitConnectivityNavigatorObserver extends NavigatorObserver
     if (!autoMonitorEnabled ||
         !_startupGraceComplete ||
         _checkInFlight ||
+        !_foreground || _localCaptureRoutes>0 ||
         _popupVisible) {
       return;
     }
@@ -134,6 +151,7 @@ class OrbitConnectivityNavigatorObserver extends NavigatorObserver
     }
 
     _checkInFlight = true;
+    final epoch=_probeEpoch;
     bool isOnline;
     try {
       isOnline = await OrbitConnectionProbe.check();
@@ -143,6 +161,7 @@ class OrbitConnectivityNavigatorObserver extends NavigatorObserver
       _checkInFlight = false;
     }
 
+    if(epoch!=_probeEpoch||!_foreground||_localCaptureRoutes>0)return;
     if (isOnline) {
       _consecutiveFailures = 0;
       _dismissedForCurrentOfflineEpisode = false;
@@ -170,6 +189,7 @@ class OrbitConnectivityNavigatorObserver extends NavigatorObserver
       return;
     }
 
+    if(!_foreground||_localCaptureRoutes>0||epoch!=_probeEpoch)return;
     _popupVisible = true;
     final result = await showOrbitOfflinePopup(
       currentNavigator.context,
@@ -186,6 +206,7 @@ class OrbitConnectivityNavigatorObserver extends NavigatorObserver
   }
 
   void resetSessionState() {
+    ++_probeEpoch;
     _timer?.cancel();
     _startupTimer?.cancel();
     _timer = null;

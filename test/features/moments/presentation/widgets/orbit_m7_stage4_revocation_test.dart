@@ -113,7 +113,10 @@ void main() {
     await tester.pump(const Duration(seconds:6));
     expect(seen,['first']);
     await touch.up();await tester.pump();
-    await tester.tapAt(Offset(rect.right-2,rect.center.dy));
+    // A contained portrait/landscape image may be centered in a wider
+    // gesture region. Tap the right half of the actual viewer viewport.
+    final viewport=tester.getRect(find.byType(Scaffold).first);
+    await tester.tapAt(Offset(viewport.right-28,rect.center.dy));
     for(var i=0;i<5;i++)await tester.pump();
     expect(seen,['first','second']);
     expect(find.text('Second'),findsOneWidget);
