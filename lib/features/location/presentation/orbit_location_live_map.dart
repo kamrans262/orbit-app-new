@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart' as gl;
@@ -26,6 +27,19 @@ import '../data/orbit_m10_rollout.dart';
 import 'orbit_location_share_sheet.dart';
 import '../../realtime/presentation/orbit_realtime_refresh.dart';
 import '../../realtime/data/orbit_realtime_contract.dart';
+
+/// Public basemap readiness is independent of private location sharing.
+/// The native check detects missing local configuration, not provider billing
+/// or remote API-key restrictions. No credential is exposed to Dart.
+abstract final class OrbitMapProvider {
+  static const channel=MethodChannel('orbit/map_provider');
+  static Future<bool> configured() async {
+    if(!OrbitM10Rollout.mapConfigured)return false;
+    try{return await channel.invokeMethod<bool>('configured')==true;}
+    on PlatformException{return false;}
+    on MissingPluginException{return false;}
+  }
+}
 
 /// Placed inside the EXISTING Orbits screen, behind its existing draggable panel.
 /// Markers are ONLY the M10 server's viewer-authorized projection, never demos.
@@ -62,6 +76,7 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
   OrbitRealtimeRefresh? _firebaseRefresh;
   bool _styleReady=false,_loading=false,_sending=false,_foreground=true,_didZoom=false;
   bool _centeringOnDevice=false;
+  bool? _providerConfigured;
   DateTime? _lastSent;
   String? _accountOwner;
   int _epoch=0;
@@ -71,6 +86,7 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
   void initState(){
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    unawaited(_checkProvider());
     if(OrbitM10Rollout.enabled) {
       _firebaseRefresh=OrbitRealtimeRefresh(modules:const {'location','circles','social'},
         visible:()=>OrbitRealtimeRefresh.current(this)&&_foreground,
@@ -89,6 +105,11 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
         }
       });
     }
+  }
+
+  Future<void> _checkProvider() async {
+    final configured=await OrbitMapProvider.configured();
+    if(mounted)setState(()=>_providerConfigured=configured);
   }
 
   @override
@@ -119,6 +140,7 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
       if(mounted){widget.onMarkersChanged?.call(const []);setState(() {});}
     } else {
       if(mounted)setState(()=>_foreground=true);
+      unawaited(_checkProvider());
       unawaited(_refresh());
     }
   }
@@ -400,7 +422,8 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
         return;
       }
       final position=await _gps.current();
-      if(!mounted||!_foreground||epoch!=_epoch||map!=_map)return;
+      if(!mounted||!_foreground||map!=_map||(requestPermission&&epoch!=_epoch))return;
+      if(!requestPermission&&(_snapshot?.markers.isNotEmpty??false))return;
       if(!position.latitude.isFinite||!position.longitude.isFinite||
          position.latitude < -90||position.latitude > 90||
          position.longitude < -180||position.longitude > 180) {
@@ -474,21 +497,24 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
 
   @override
   Widget build(BuildContext context){
-    final configured=OrbitM10Rollout.mapConfigured;
+    final configured=_providerConfigured==true;
     final markers=_snapshot?.markers??const <OrbitLocationMarker>[];
-    final subtitle= !OrbitM10Rollout.enabled?'Location is not enabled for this build.'
-      :_message??(!configured?'Map tiles awaiting provider configuration.'
-      :_cap==null?'Checking secure map access…'
-      :markers.isEmpty?'No locations shared with you yet. The map is ready to explore.'
+    final subtitle= _providerConfigured==null?'Preparing map…'
+      :!configured?'Map provider configuration is required.'
+      :_message??(!OrbitM10Rollout.enabled?'Location sharing is disabled. Browse the map.'
+      :_cap==null?'Checking shared locations…'
+      :markers.isEmpty?'No locations shared with you yet.'
       :'Last confirmed locations · not live');
     return Stack(children:[
       Positioned.fill(child:!_foreground
         ?const ColoredBox(color:AppColors.background)
-        :configured&&OrbitM10Rollout.enabled
+        // Do not gate public map tiles on private data, permission, Ghost
+        // Mode, consent, active shares, server capabilities or rollout.
+        :configured
         ?gl.GoogleMap(
           key:const Key('orbit_map'),
           initialCameraPosition:const gl.CameraPosition(
-            target:gl.LatLng(0,0),zoom:1.7),
+            target:gl.LatLng(20,0),zoom:2),
           mapType:gl.MapType.normal,
           myLocationEnabled:false,
           myLocationButtonEnabled:false,
@@ -499,7 +525,10 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
             _onMapCreated(controller);
             if(mounted)setState(()=>_styleReady=true);
             unawaited(_syncAnnotations());
-            unawaited(_centerOnMyDevice(requestPermission:false));
+            // Browse a neutral world view if GPS is denied. Only use
+            // already-granted local GPS when there are no authorized pins.
+            if((_snapshot?.markers.isEmpty??true))
+              unawaited(_centerOnMyDevice(requestPermission:false));
           },
           onCameraMoveStarted:(){
             ++_projectSerial;
@@ -544,7 +573,10 @@ class _OrbitLocationLiveMapState extends State<OrbitLocationLiveMap>
         const SizedBox(width:8),
         AppCircularIconButton(icon:Icons.refresh_rounded,
           iconGradient:AppColors.primaryGradient,semanticLabel:'Refresh authorized map',
-          onPressed:()=>unawaited(_refresh())),
+          onPressed:(){
+            unawaited(_checkProvider());
+            unawaited(_refresh());
+          }),
         const SizedBox(width:8),
         AppCircularIconButton(icon:Icons.privacy_tip_outlined,
           iconGradient:AppColors.primaryGradient,semanticLabel:'Location privacy settings',

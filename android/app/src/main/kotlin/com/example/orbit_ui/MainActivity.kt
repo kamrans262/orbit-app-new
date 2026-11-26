@@ -17,6 +17,20 @@ class MainActivity : FlutterActivity() {
     private var billing: OrbitStoreBilling? = null
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        // Only expose the presence of a bundled Maps SDK key. Never return
+        // the credential itself to Flutter, logs or the Orbit backend.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger,"orbit/map_provider")
+            .setMethodCallHandler { call,result ->
+                if(call.method!="configured"){result.notImplemented();return@setMethodCallHandler}
+                val key=try {
+                    @Suppress("DEPRECATION")
+                    packageManager.getApplicationInfo(packageName,
+                        android.content.pm.PackageManager.GET_META_DATA)
+                        .metaData?.getString("com.google.android.geo.API_KEY")?.trim()
+                }catch(_:Exception){null}
+                result.success(!key.isNullOrEmpty() && key!="NO_GOOGLE_MAPS_ANDROID_KEY_CONFIGURED" &&
+                    !key.contains("\${"))
+            }
         relay = RelayDiscovery(this, MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "orbit/relay_discovery"))
         billing = OrbitStoreBilling(this, MethodChannel(flutterEngine.dartExecutor.binaryMessenger,"orbit/billing"))
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger,"orbit/capture_inspection").setMethodCallHandler { call,result ->

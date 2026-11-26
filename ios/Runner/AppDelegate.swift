@@ -11,6 +11,7 @@ import workmanager_apple
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private var relayDiscovery: OrbitRelayDiscovery?
   private var billing: OrbitStoreBilling?
+  private var mapsKeyConfigured=false
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
@@ -21,6 +22,7 @@ import workmanager_apple
        !key.isEmpty, !key.contains("$("),
        key != "NO_GOOGLE_MAPS_IOS_KEY_CONFIGURED" {
       GMSServices.provideAPIKey(key)
+      mapsKeyConfigured=true
     }
     WorkmanagerPlugin.registerLaunchHandlers()
     WorkmanagerPlugin.setPluginRegistrantCallback { registry in
@@ -36,6 +38,13 @@ import workmanager_apple
     }
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "OrbitStoreBilling") {
       billing = OrbitStoreBilling(messenger: registrar.messenger())
+    }
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "OrbitMapProvider") {
+      let channel=FlutterMethodChannel(name:"orbit/map_provider",binaryMessenger:registrar.messenger())
+      channel.setMethodCallHandler { [weak self] call,result in
+        if call.method == "configured" { result(self?.mapsKeyConfigured ?? false) }
+        else { result(FlutterMethodNotImplemented) }
+      }
     }
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "OrbitCaptureInspection") {
       let channel = FlutterMethodChannel(name: "orbit/capture_inspection", binaryMessenger: registrar.messenger())
