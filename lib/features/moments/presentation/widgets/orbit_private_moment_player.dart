@@ -202,36 +202,28 @@ class _OrbitPrivateMomentPlayerState extends State<OrbitPrivateMomentPlayer>
 
   @override
   Widget build(BuildContext context){
-    if(_busy)return Center(child:Column(
-      mainAxisSize:MainAxisSize.min,children:[
+    if(_busy)return Center(child:FittedBox(fit:BoxFit.scaleDown,
+      child:Column(mainAxisSize:MainAxisSize.min,children:[
         if(widget.previewBytes!=null && widget.previewBytes!.isNotEmpty)
-          Image.memory(widget.previewBytes!,fit:BoxFit.contain,height:120,
+          Image.memory(widget.previewBytes!,fit:BoxFit.contain,height:120,width:240,
             errorBuilder:(_,error,stack)=>const SizedBox.shrink()),
         const SizedBox(height:12),
         const CircularProgressIndicator(color:AppColors.primaryEnd),
-      ]));
+      ])));
     if(_error!=null)return Center(child:Text(_error!,
       textAlign:TextAlign.center,style:AppTypography.bodyMuted));
     final video=_video;
-    return Center(child:Column(mainAxisSize:MainAxisSize.min,children:[
-      if(widget.item.mediaKind=='video' && video!=null && video.value.isInitialized)
-        AspectRatio(aspectRatio:video.value.aspectRatio,
-          child:VideoPlayer(video))
-      else if(widget.previewBytes!=null && widget.previewBytes!.isNotEmpty)
-        Image.memory(widget.previewBytes!,fit:BoxFit.contain,height:90,
-          errorBuilder:(_,error,stack)=>const Icon(
-            Icons.graphic_eq_rounded,color:AppColors.primaryEnd,size:64))
-      else
-        const Icon(Icons.mic_none_outlined,color:AppColors.primaryEnd,size:64),
-      const SizedBox(height:16),
-      Row(mainAxisAlignment:MainAxisAlignment.center,children:[
+    final isVideo=widget.item.mediaKind=='video';
+    final readyVideo=isVideo && video!=null && video.value.isInitialized?video:null;
+    final controls=Row(mainAxisSize:MainAxisSize.min,
+      mainAxisAlignment:MainAxisAlignment.center,children:[
         IconButton(
           icon:Icon(_playing?Icons.pause_circle_filled:Icons.play_circle_fill,
             size:54,color:AppColors.primaryEnd),
           tooltip:_playing?'Pause encrypted clip':'Play encrypted clip',
           onPressed:()=>unawaited(_toggle()),
         ),
-        if(widget.item.mediaKind=='video') ...[
+        if(isVideo) ...[
           const SizedBox(width:12),
           IconButton(
             icon:Icon(_muted?Icons.volume_off_outlined:Icons.volume_up_outlined,
@@ -240,7 +232,57 @@ class _OrbitPrivateMomentPlayerState extends State<OrbitPrivateMomentPlayer>
             onPressed:()=>unawaited(_toggleMute()),
           ),
         ],
-      ]),
-    ]));
+      ]);
+    return OrbitMomentClipViewport(
+      aspectRatio:readyVideo?.value.aspectRatio,
+      controls:controls,
+      media:readyVideo!=null?VideoPlayer(readyVideo):
+        widget.previewBytes!=null && widget.previewBytes!.isNotEmpty
+          ? Image.memory(widget.previewBytes!,fit:BoxFit.contain,height:90,
+              errorBuilder:(_,error,stack)=>const Icon(
+                Icons.graphic_eq_rounded,color:AppColors.primaryEnd,size:64))
+          : const Icon(Icons.mic_none_outlined,color:AppColors.primaryEnd,size:64),
+    );
   }
+}
+
+/// Reserve space for the existing controls before fitting a video frame.
+/// Portrait clips must not consume the controls' vertical space.
+class OrbitMomentClipViewport extends StatelessWidget {
+  const OrbitMomentClipViewport({required this.media,required this.controls,
+    this.aspectRatio,super.key});
+  final Widget media,controls;
+  final double? aspectRatio;
+
+  @override
+  Widget build(BuildContext context)=>LayoutBuilder(builder:(context,limits){
+    final ratio=aspectRatio;
+    if(!limits.hasBoundedHeight||!limits.hasBoundedWidth){
+      // A reused player in a scrollable surface still has a finite frame.
+      return Column(mainAxisSize:MainAxisSize.min,children:[
+        if(ratio!=null&&ratio.isFinite&&ratio>0&&limits.hasBoundedWidth)
+          AspectRatio(aspectRatio:ratio,child:media)
+        else if(ratio==null)media
+        else SizedBox(width:240,height:160,child:media),
+        const SizedBox(height:16),controls,
+      ]);
+    }
+    final controlHeight=(limits.maxHeight*0.4).clamp(0.0,70.0).toDouble();
+    final gap=(limits.maxHeight*0.08).clamp(0.0,16.0).toDouble();
+    final controlRow=SizedBox(height:controlHeight,width:limits.maxWidth,
+      child:Center(child:FittedBox(fit:BoxFit.scaleDown,child:controls)));
+    if(ratio!=null&&ratio.isFinite&&ratio>0){
+      return SizedBox.expand(child:Column(children:[
+        Expanded(child:Center(child:AspectRatio(aspectRatio:ratio,child:media))),
+        SizedBox(height:gap),
+        controlRow,
+      ]));
+    }
+    // Voice/waveform retains its compact centered layout.
+    return Center(child:Column(mainAxisSize:MainAxisSize.min,children:[
+      Flexible(child:Center(widthFactor:1,heightFactor:1,
+        child:FittedBox(fit:BoxFit.scaleDown,child:media))),
+      SizedBox(height:gap),controlRow,
+    ]));
+  });
 }

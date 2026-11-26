@@ -922,7 +922,10 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
                   ])
                   : ClipRRect(borderRadius:BorderRadius.circular(16),
                     child:_current.mediaKind=='image'
-                      ? Image.memory(_photo!,fit:BoxFit.contain)
+                      ? SizedBox(
+                          width:limits.maxWidth,height:limits.maxHeight,
+                          child:Image.memory(_photo!,fit:BoxFit.contain,
+                            filterQuality:FilterQuality.high))
                       : OrbitPrivateMomentPlayer(
                           key:ValueKey<String>('m7_clip_${_current.id}'),
                           item:_current,repository:widget.repository,
@@ -935,8 +938,11 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
               WidgetsBinding.instance.lifecycleState!=AppLifecycleState.paused &&
               WidgetsBinding.instance.lifecycleState!=AppLifecycleState.inactive &&
               WidgetsBinding.instance.lifecycleState!=AppLifecycleState.hidden)
-            Padding(padding:const EdgeInsets.symmetric(vertical:12),
-              child:Text(_caption!,style:AppTypography.body)),
+            ConstrainedBox(
+              constraints:BoxConstraints(maxHeight:MediaQuery.sizeOf(context).height*0.16),
+              child:SingleChildScrollView(
+                padding:const EdgeInsets.symmetric(vertical:12),
+                child:Text(_caption!,style:AppTypography.body))),
           if(!_allCaughtUp&&_error==null&&!_loading&&_commentsOpen)
             Flexible(flex:1,child:SingleChildScrollView(child:_commentsPanel())),
           if(!_allCaughtUp&&_error==null&&!_loading)

@@ -42,6 +42,25 @@ final class _FakeMoments extends OrbitMomentRepository {
 }
 
 void main() {
+  testWidgets('small authorized photo expands to the existing viewer width',(tester)async{
+    await tester.binding.setSurfaceSize(const Size(360,640));
+    addTearDown(()=>tester.binding.setSurfaceSize(null));
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    final repo=_FakeMoments()..activeUser='viewer';
+    final item=OrbitLiveMoment(id:'small-photo',creatorId:'owner',mediaId:'media',
+      contextId:'friends',publishedAt:DateTime.now());
+    await tester.pumpWidget(MaterialApp(home:OrbitLiveMomentViewer(
+      moment:item,repository:repo,author:'Friend')));
+    await tester.pumpAndSettle();
+    final photo=find.byType(Image);
+    expect(photo,findsOneWidget);
+    expect(tester.getSize(photo).width,320);
+    expect(tester.getSize(photo).height,greaterThan(250));
+    expect(tester.widget<Image>(photo).fit,BoxFit.contain);
+    expect(tester.takeException(),isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('M7 shows owner-only deletion and never offers self-account report',
       (tester) async {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
