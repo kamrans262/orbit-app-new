@@ -747,14 +747,17 @@ class OrbitMomentRepository {
     }
     return values;
   }
-  Future<void> comment(OrbitLiveMoment item,String text,{String? parent}) async {
-    await _api('POST','/moments/'+Uri.encodeComponent(item.id)+'/comments',
+  Future<String> comment(OrbitLiveMoment item,String text,{String? parent}) async {
+    final result=await _api('POST','/moments/'+Uri.encodeComponent(item.id)+'/comments',
       key:_uuid.v4(),body:{
         'context_id':item.contextId,
         'body_ciphertext':await _sealText(text,await _key(item.mediaId),
           item.mediaId,'comment',item.contextId),
         'key_version':'v1',if(parent!=null)'parent_id':parent,
       });
+    final id=result['comment_id'];
+    if(id is! String||id.isEmpty)throw const FormatException('Comment not confirmed.');
+    return id;
   }
   Future<void> deleteComment(OrbitLiveMoment item,String commentId) async {
     await _identity.socialRequest('DELETE',

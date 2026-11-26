@@ -525,6 +525,7 @@ class _MomentsScreenState extends State<MomentsScreen> {
           ),
         ];
       case MomentsViewState.empty:
+        if(widget.privateMode)return _buildPopulatedSlivers();
         return const <Widget>[
           SliverFillRemaining(
             hasScrollBody: false,
@@ -588,7 +589,10 @@ class _MomentsScreenState extends State<MomentsScreen> {
               key: MomentsKeys.feedItem(item.id),
               child: _buildFeedItem(item),
             );
-          }, childCount: childCount),
+          }, childCount: childCount,findChildIndexCallback:(key){
+            final index=feedItems.indexWhere((item)=>MomentsKeys.feedItem(item.id)==key);
+            return index<0?null:index*2;
+          }),
         ),
       ),
     );

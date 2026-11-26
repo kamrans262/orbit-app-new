@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../app/theme/app_colors.dart';
+import '../../../../core/navigation/orbit_moment_link.dart';
 import '../../../../core/popups/orbit_popup_variants.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_primary_button.dart';
@@ -64,6 +65,8 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
   final Set<String> _bookmarked={};
   final Set<String> _seen={};
   bool _busy=true;
+  String? _loadedOwner;
+  bool _initialLoadComplete=false;
   bool _showingOfflinePreviews=false;
   String? _error;
   int _pendingPublishCount=0;
@@ -93,7 +96,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       unawaited(_load());
       }
     });
-    unawaited(_load());
+    unawaited(_load(retryDrafts:true));
   }
 
   void _evictDecodedMedia() {
@@ -277,7 +280,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
     }catch(_){return false;}
   }
 
-  Future<void> _load({bool incremental=false}) async {
+  Future<void> _load({bool incremental=false,bool retryDrafts=false}) async {
     if(!mounted)return;
     if(_feedRequestInFlight){_feedRefreshQueued=true;return;}
     if(!OrbitM7Rollout.enabled){
@@ -304,18 +307,24 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
     _feedRequestInFlight=true;
     final epoch=++_loadEpoch;
     setState((){
-      if(!incremental)_busy=true;
-      // M18 source previews must never remain while a fresh ACL is checked.
-      _activityCheckIns=const [];
+      if(!_initialLoadComplete || _items.isEmpty&&_rail.isEmpty&&_error!=null)_busy=true;
       _error=null;
     });
     try {
       // Resume only this account's encrypted outbox while foregrounded.
       // Failures leave the original ciphertext queued without fake success.
 
+      final owner=await _repo.currentUserId();
+      if(owner==null)throw OrbitIdentityException('Sign in to view Moments.',401);
+      if(!mounted||epoch!=_loadEpoch)return;
+      if(_loadedOwner!=null&&_loadedOwner!=owner){
+        setState((){_evictDecodedMedia();_items=const [];_rail=const [];
+          _activityCheckIns=const [];_names.clear();_seen.clear();_clearSponsored();_busy=true;});
+      }
+      _loadedOwner=owner;
       String? pendingProblem;
       try{
-        await _repo.resumePendingPublishes();
+        if(retryDrafts)await _repo.resumePendingPublishes();
       }catch(_){
         pendingProblem='Waiting for connection or a secure retry';
       }
@@ -351,6 +360,38 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         for(final m in [...rail,...moments])
           if(unique.add(m.id))m,
       ];
+      // A fresh server feed is authoritative. Keep decrypted bytes only
+      // when the same account, media, context and audience revision match.
+      final previous={for(final m in [..._rail,..._items])m.id:m};
+      final stable=<String>{};
+      for(final m in prefetch){
+        final prior=previous[m.id];
+        if(!_showingOfflinePreviews&&prior!=null&&prior.mediaId==m.mediaId&&
+           prior.contextId==m.contextId&&prior.audienceRevision==m.audienceRevision&&
+           prior.publishVersion==m.publishVersion)stable.add(m.id);
+      }
+      if(await _repo.currentUserId()!=owner)throw OrbitIdentityException('Moment account changed.',401);
+      if(!mounted||epoch!=_loadEpoch)return;
+      // Immediately remove revoked/expired entries while new media loads.
+      setState((){
+        _items=moments;_rail=rail;
+        for(final id in _previews.keys.toList()){
+          if(!stable.contains(id)){
+            final bytes=_previews.remove(id);
+            if(bytes!=null)unawaited(MemoryImage(bytes).evict());
+          }
+        }
+        _captions.removeWhere((id,_)=>!stable.contains(id));
+        _places.removeWhere((id,_)=>!stable.contains(id));
+        _activityCheckIns=const [];
+      });
+      final retained=Set<Uint8List>.identity()..addAll(_previews.values);
+      previews.addAll(_previews);
+      captions.addAll(_captions);places.addAll(_places);
+      for(final m in prefetch){
+        final name=_names[m.creatorId];
+        if(name!=null&&!_showingOfflinePreviews)names[m.creatorId]=name;
+      }
       // Next-two bounded prefetch: three authorized thumbnail/decrypt requests
       // at most. Avoid serial head-of-line latency and unbounded media memory.
       for(var index=0;index<prefetch.length;index+=3){
@@ -360,6 +401,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
             names[m.creatorId]??=await _repo.name(m.creatorId);
           }catch(_){names[m.creatorId]??='Orbit member';}
           try {
+            if(stable.contains(m.id)&&previews.containsKey(m.id))return;
             previews[m.id]=await _repo.photo(m);
             final text=await _repo.caption(m);
             if(text!=null)captions[m.id]=text;
@@ -372,7 +414,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         if(!mounted || epoch!=_loadEpoch)break;
       }
       if(!mounted || epoch!=_loadEpoch){
-        for(final bytes in previews.values)unawaited(MemoryImage(bytes).evict());
+        for(final bytes in previews.values){if(!retained.contains(bytes))unawaited(MemoryImage(bytes).evict());}
         return;
       }
       // A new authenticated feed is authoritative: evict any stale audience
@@ -410,9 +452,11 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         // Never show a previous M18 Activity cache after a failed refresh.
       }
       if(!mounted || epoch!=_loadEpoch)return;
+      if(await _repo.currentUserId()!=owner)throw OrbitIdentityException('Moment account changed.',401);
+      if(!mounted||epoch!=_loadEpoch)return;
       setState((){
         _showingOfflinePreviews=false;
-        _evictDecodedMedia();
+        _initialLoadComplete=true;
         _items=moments;_rail=rail;
         _activityCheckIns=activityCheckIns;
         _hasMore=hasMore && _feedLimit<240;
@@ -516,8 +560,27 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
     if(d.inDays<1)return d.inHours.toString()+'h ago';
     return d.inDays.toString()+'d ago';
   }
+  List<OrbitLiveMoment> _storyGroups(){
+    final groups=<String,List<OrbitLiveMoment>>{};
+    final newest=<String,DateTime>{};
+    for(final m in _rail){
+      groups.putIfAbsent('${m.contextId}|${m.creatorId}',()=>[]).add(m);
+      if(newest[m.contextId]==null||m.publishedAt.isAfter(newest[m.contextId]!)){
+        newest[m.contextId]=m.publishedAt;
+      }
+    }
+    final entries=groups.values.toList()..sort((a,b){
+      final byContext=newest[b.first.contextId]!.compareTo(newest[a.first.contextId]!);
+      if(byContext!=0)return byContext;
+      final byCircle=a.first.contextId.compareTo(b.first.contextId);
+      if(byCircle!=0)return byCircle;
+      return b.first.publishedAt.compareTo(a.first.publishedAt);
+    });
+    return [for(final group in entries) ...group.reversed];
+  }
+
   Future<void> _openViewer(OrbitLiveMoment item,
-      {bool storyGroup=false}) async {
+      {bool storyGroup=false,bool comments=false}) async {
     if(!mounted)return;
     if(_showingOfflinePreviews){
       ScaffoldMessenger.of(context).showSnackBar(
@@ -525,26 +588,27 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
           'Offline previews are read-only. Reconnect to verify this Moment.')));
       return;
     }
-    final source=storyGroup
-      ? <OrbitLiveMoment>[..._rail,..._items] : _items;
-    final found=<String>{};
-    final playlist=(storyGroup
-      ? source.where((m)=>m.creatorId==item.creatorId &&
-          m.contextId==item.contextId)
-      : source).where((m)=>found.add(m.id)).toList();
-    if(!playlist.any((m)=>m.id==item.id))playlist.insert(0,item);
+    final playlist=storyGroup?_storyGroups():<OrbitLiveMoment>[];
+    final start=storyGroup?playlist.indexWhere((m)=>
+      m.creatorId==item.creatorId&&m.contextId==item.contextId&&!_seen.contains(m.id)):-1;
+    final first=start>=0?start:playlist.indexWhere((m)=>
+      m.creatorId==item.creatorId&&m.contextId==item.contextId);
     await Navigator.of(context).push<void>(MaterialPageRoute(
       builder:(_)=>OrbitLiveMomentViewer(moment:item,repository:_repo,
         author:_names[item.creatorId]??'Orbit member',
         authorNames:Map<String,String>.from(_names),
-        playlist:playlist,
-        initialIndex:playlist.indexWhere((m)=>m.id==item.id))));
+        playlist:playlist,initialIndex:first<0?0:first,
+        openComments:comments,onViewed:(id){
+          if(mounted)setState(()=>_seen.add(id));
+        })));
+    // Viewer actions may have changed the feed; only reconcile authorized
+    // metadata, retaining already decoded, unchanged media and scroll state.
     if(mounted)unawaited(_load());
   }
-  void _openById(String id,{bool storyGroup=false}){
+  void _openById(String id,{bool storyGroup=false,bool comments=false}){
     for(final moment in [..._rail,..._items]){
       if(moment.id==id){
-        unawaited(_openViewer(moment,storyGroup:storyGroup));return;
+        unawaited(_openViewer(moment,storyGroup:storyGroup,comments:comments));return;
       }
     }
   }
@@ -570,8 +634,8 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       // The receiving installation must authenticate and pass current ACLs.
       final current=await _repo.authorizedMoment(selected.id);
       if(!mounted || current.id!=selected.id)return;
-      await Share.share('View this private Moment in Orbit if you have access:\n'
-        'orbit://moment/${Uri.encodeComponent(current.id)}');
+      await Share.share('View this private Moment in Orbit if you have access:\n'+
+        OrbitMomentLink.create(current.id).toString());
     }catch(_){
       if(mounted)ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content:Text('This private Moment is no longer shareable.')));
@@ -796,12 +860,12 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         _showingOfflinePreviews && feed.isEmpty?MomentsViewState.error:
         feed.isEmpty?MomentsViewState.empty:MomentsViewState.populated,
       errorMessage:_error??'Moments unavailable.',
-      onRefresh:_load,
+      onRefresh:()=>_load(retryDrafts:true),
       onSearchPressed:(){},onFilterPressed:()=>unawaited(_load()),
       onMessagesPressed:(){},
       onStoryPressed:(story)=>_openById(story.id,storyGroup:true),
       onLikeChanged:(item,liked)=>unawaited(_react(item,liked)),
-      onCommentPressed:(item)=>_openById(item.id),
+      onCommentPressed:(item)=>_openById(item.id,comments:true),
       onBookmarkChanged:(item,value)=>unawaited(_setBookmark(item,value)),
       onSharePressed:(item)=>unawaited(_shareAuthorizedMoment(item)),
       onTextMenuPressed:(item){},

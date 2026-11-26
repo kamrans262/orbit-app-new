@@ -45,6 +45,9 @@
                 <data android:scheme="https"
                       android:host="indigo-caribou-178970.hostingersite.com"
                       android:pathPrefix="/invite/circle/"/>
+                <data android:scheme="https"
+                      android:host="indigo-caribou-178970.hostingersite.com"
+                      android:pathPrefix="/moment/"/>
             </intent-filter>
             <!-- Private Moment references contain no authorization material. -->
             <intent-filter>

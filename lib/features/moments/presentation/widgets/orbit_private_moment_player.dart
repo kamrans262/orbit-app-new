@@ -15,11 +15,12 @@ import '../../data/orbit_moment_repository.dart';
 class OrbitPrivateMomentPlayer extends StatefulWidget {
   const OrbitPrivateMomentPlayer({
     required this.item,required this.repository,this.onFinished,
-    this.paused=false,this.previewBytes,super.key,
+    this.paused=false,this.previewBytes,this.onProgress,super.key,
   });
   final OrbitLiveMoment item;
   final OrbitMomentRepository repository;
   final VoidCallback? onFinished;
+  final ValueChanged<double>? onProgress;
   final bool paused;
   final Uint8List? previewBytes;
   @override
@@ -32,6 +33,7 @@ class _OrbitPrivateMomentPlayerState extends State<OrbitPrivateMomentPlayer>
   VideoPlayerController? _video;
   AudioPlayer? _audio;
   StreamSubscription<void>? _audioEnd;
+  StreamSubscription<Duration>? _audioPosition;
   Timer? _videoEndedPoll;
   Timer? _revalidate;
   int _epoch=0;
@@ -56,6 +58,8 @@ class _OrbitPrivateMomentPlayerState extends State<OrbitPrivateMomentPlayer>
     final audio=_audio;_audio=null;
     _videoEndedPoll?.cancel();_videoEndedPoll=null;
     final sub=_audioEnd;_audioEnd=null;
+    final pos=_audioPosition;_audioPosition=null;
+    try{await pos?.cancel();}catch(_){}
     final temp=_temporary;_temporary=null;
     try{await sub?.cancel();}catch(_){}
     try{await video?.pause();await video?.dispose();}catch(_){}
@@ -96,6 +100,8 @@ class _OrbitPrivateMomentPlayerState extends State<OrbitPrivateMomentPlayer>
         if(!widget.paused)await player.play();
         _videoEndedPoll=Timer.periodic(const Duration(milliseconds:400),(_){
           if(!mounted || _video!=player || widget.paused)return;
+          final total=player.value.duration.inMilliseconds;
+          if(total>0)widget.onProgress?.call((player.value.position.inMilliseconds/total).clamp(0.0,1.0).toDouble());
           if(player.value.isInitialized &&
              !player.value.isPlaying &&
              player.value.position>=player.value.duration &&
@@ -112,6 +118,10 @@ class _OrbitPrivateMomentPlayerState extends State<OrbitPrivateMomentPlayer>
             setState(()=>_playing=false);
             widget.onFinished?.call();
           }
+        });
+        _audioPosition=player.onPositionChanged.listen((position){
+          final duration=widget.item.durationMs??0;
+          if(mounted&&_audio==player&&duration>0)widget.onProgress?.call((position.inMilliseconds/duration).clamp(0.0,1.0).toDouble());
         });
         await player.setSource(DeviceFileSource(file.path));
         if(!widget.paused)await player.resume();

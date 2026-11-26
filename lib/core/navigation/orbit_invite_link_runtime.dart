@@ -12,6 +12,7 @@ import '../../features/moments/data/orbit_moment_repository.dart';
 import '../../features/moments/presentation/screens/orbit_live_moment_viewer.dart';
 import '../../features/friends/presentation/screens/orbit_discover_friends_screen.dart';
 import 'app_fade_slide_page_route.dart';
+import 'orbit_moment_link.dart';
 
 /// M4/M5 invitations and M7 references share one authenticated link router.
 /// A Moment URL is not a bearer token: current Laravel ACLs must authorize it.
@@ -37,13 +38,9 @@ class OrbitInviteLinkRuntime extends NavigatorObserver {
   }
 
   void _received(Uri uri) {
-    final isMoment=uri.scheme=='orbit' && uri.host=='moment' &&
-      uri.pathSegments.length==1 && uri.query.isEmpty &&
-      uri.userInfo.isEmpty && !uri.hasPort && uri.fragment.isEmpty &&
-      RegExp(r'^[a-fA-F0-9]{8}(?:-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}$')
-        .hasMatch(uri.pathSegments.single);
-    if(isMoment){
-      _pendingMoment=uri.pathSegments.single;
+    final moment=OrbitMomentLink.parse(uri);
+    if(moment!=null){
+      _pendingMoment=moment;
       _pending=null;
       _pendingCircle=null;
       _dispatch();

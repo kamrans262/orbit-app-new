@@ -3,6 +3,8 @@ import '../../../realtime/presentation/orbit_realtime_refresh.dart';
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
+import '../../../../core/navigation/orbit_moment_link.dart';
 import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 import 'package:image/image.dart' as img;
 import '../../../../app/theme/app_colors.dart';
@@ -19,18 +21,20 @@ import '../widgets/orbit_private_moment_player.dart';
 class OrbitLiveMomentViewer extends StatefulWidget {
   const OrbitLiveMomentViewer({required this.moment,required this.repository,
     required this.author,this.playlist=const [],this.initialIndex=0,
-    this.authorNames=const {},super.key});
+    this.authorNames=const {},this.openComments=false,this.onViewed,super.key});
   final OrbitLiveMoment moment;
   final OrbitMomentRepository repository;
   final String author;
   final List<OrbitLiveMoment> playlist;
   final int initialIndex;
   final Map<String,String> authorNames;
+  final bool openComments;
+  final ValueChanged<String>? onViewed;
   @override
   State<OrbitLiveMomentViewer> createState()=>_OrbitLiveMomentViewerState();
 }
 
-class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with WidgetsBindingObserver {
+class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with WidgetsBindingObserver,SingleTickerProviderStateMixin {
   Uint8List? _photo;
   String? _caption;
   int? _ownerPublishVersion,_ownerAudienceRevision;
@@ -43,6 +47,15 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
   bool _isOwner=false;
   bool _reauthorizing=false;
   Timer? _advance;
+  late final AnimationController _progress;
+  final ValueNotifier<double> _clipProgress=ValueNotifier(0);
+  bool _commentsOpen=false,_commentsLoading=false,_commentSending=false;
+  final _commentInput=TextEditingController();
+  List<({String id,String author,String body,String? parent})> _comments=[];
+  final Map<String,String> _commentNames={};
+  String? _commentError,_replyingTo;
+  String? _commentViewer;
+  int _commentEpoch=0;
   Timer? _revalidation;
   int _loadEpoch=0;
   late int _index;
@@ -53,6 +66,12 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
   @override
   void initState(){
     super.initState();
+    _progress=AnimationController(vsync:this,duration:const Duration(seconds:5))
+      ..addStatusListener((status){
+        if(status==AnimationStatus.completed&&mounted&&!_paused&&!_loading&&_error==null){
+          _move(1);
+        }
+      });
     _m25Refresh=OrbitRealtimeRefresh(modules:const {'moments','circles','social'},visible:()=>OrbitRealtimeRefresh.current(this),refresh:()=>_checkAuthorization(),fallback:false)..start();
 
     WidgetsBinding.instance.addObserver(this);
@@ -75,6 +94,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
     if(bytes!=null)unawaited(MemoryImage(bytes).evict());
     _photo=null;
     _caption=null;
+    _resetComments();
   }
   Future<void> _checkAuthorization() async {
     if(!mounted || _loading || _reauthorizing || _allCaughtUp)return;
@@ -88,7 +108,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
     _reauthorizing=false;
     if(!mounted || epoch!=_loadEpoch || _current.id!=moment.id)return;
     if(!valid){
-      _advance?.cancel();
+      _advance?.cancel();_progress.stop();
       setState((){
         ++_loadEpoch;
         _forgetPhoto();
@@ -101,7 +121,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if(state==AppLifecycleState.inactive || state==AppLifecycleState.paused){
-      _advance?.cancel();
+      _advance?.cancel();_progress.stop();
       ++_loadEpoch;
       if(mounted)setState((){
         _forgetPhoto();
@@ -119,9 +139,12 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
 
     ++_loadEpoch;
     _advance?.cancel();
+    _progress.dispose();
+    _clipProgress.dispose();
     _revalidation?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _forgetPhoto();
+    _commentInput.dispose();
     super.dispose();
   }
   void _schedule(){
@@ -129,16 +152,14 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
     if(widget.playlist.isEmpty||_paused||_loading||_error!=null ||
         _allCaughtUp ||
         (MediaQuery.maybeOf(context)?.disableAnimations??false))return;
-    if(_current.mediaKind=='image'){
-      _advance=Timer(const Duration(seconds:5),()=>_move(1));
-    }
+    if(_current.mediaKind=='image')_progress.forward();
   }
   void _move(int amount){
     if(!mounted || widget.playlist.isEmpty)return;
     final to=_index+amount;
     if(to<0)return;
     if(to>=widget.playlist.length){
-      _advance?.cancel();
+      _advance?.cancel();_progress.stop();
       setState((){
         _forgetPhoto();
         _allCaughtUp=true;
@@ -146,6 +167,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
       return;
     }
     _advance?.cancel();
+    _progress.reset();_clipProgress.value=0;_paused=false;
     setState(() {
       _forgetPhoto();
       _index=to;_loading=true;_liked=false;
@@ -157,10 +179,10 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
   void _pause(bool value){
     _paused=value;
     if(mounted)setState((){});
-    if(value)_advance?.cancel();else _schedule();
+    if(value){_advance?.cancel();_progress.stop();}else _schedule();
   }
   void _navigationTap(TapUpDetails tap,BoxConstraints constraints){
-    if(widget.playlist.isEmpty)return;
+    if(widget.playlist.isEmpty||_commentsOpen)return;
     _move(tap.localPosition.dx<constraints.maxWidth/2?-1:1);
   }
   Future<void> _load() async {
@@ -168,6 +190,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
     if(!mounted)return;
     setState((){
       _advance?.cancel();
+      _progress.reset();_clipProgress.value=0;
       _forgetPhoto();
       _loading=true;
       _error=null;
@@ -200,7 +223,8 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
           _isOwner=viewer!=null && viewer==current.creatorId;
           _loading=false;
         });
-        _schedule();
+        widget.onViewed?.call(current.id);
+        if(widget.openComments&&!_commentsOpen){unawaited(_commentSheet());}else{_schedule();}
         if(current.mediaKind=='image'){
           unawaited(_upgradeOriginal(current,epoch));
         }
@@ -247,113 +271,150 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
   void _notice(String message) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(message)));
   }
+  void _resetComments(){
+    ++_commentEpoch;
+    _commentsOpen=false;_commentsLoading=false;_commentSending=false;
+    _comments=[];_commentNames.clear();_commentError=null;_replyingTo=null;
+    _commentViewer=null;_commentInput.clear();
+  }
+
   Future<void> _commentSheet() async {
+    if(!mounted||_loading||_error!=null||_allCaughtUp)return;
+    if(_commentsOpen){
+      setState(_resetComments);_pause(false);return;
+    }
+    _pause(true);
+    setState(()=>_commentsOpen=true);
+    await _loadComments();
+  }
+
+  Future<void> _loadComments() async{
+    final item=_current;
+    final epoch=++_commentEpoch;
+    setState((){_commentsLoading=true;_commentError=null;});
+    try{
+      final viewer=await widget.repository.currentUserId();
+      if(viewer==null||!await widget.repository.remainsAuthorized(item))throw StateError('Not authorized');
+      final lines=await widget.repository.allComments(item);
+      final names=<String,String>{};
+      for(final author in lines.map((e)=>e.author).toSet().take(30)){
+        try{names[author]=author==viewer?'You':await widget.repository.name(author);}
+        catch(_){names[author]='Orbit member';}
+      }
+      if(!mounted||epoch!=_commentEpoch||!_commentsOpen||_current.id!=item.id)return;
+      if(!await widget.repository.remainsAuthorized(item)||await widget.repository.currentUserId()!=viewer)throw StateError('Not authorized');
+      if(!mounted||epoch!=_commentEpoch||!_commentsOpen)return;
+      setState((){
+        _comments=lines;_commentNames.addAll(names);_commentViewer=viewer;
+        _commentsLoading=false;
+      });
+    }catch(_){
+      if(mounted&&epoch==_commentEpoch&&_commentsOpen)setState((){
+        _comments=[];_commentNames.clear();_commentsLoading=false;
+        _commentError='Comments are unavailable. Please try again.';
+      });
+    }
+  }
+
+  Future<void> _sendComment() async{
+    final text=_commentInput.text.trim();
+    if(text.isEmpty||text.length>280||_commentSending||_commentsLoading||_commentViewer==null)return;
+    final item=_current,epoch=_commentEpoch,viewer=_commentViewer!,parent=_replyingTo;
+    setState(()=>_commentSending=true);
+    try{
+      if(await widget.repository.currentUserId()!=viewer||!await widget.repository.remainsAuthorized(item))throw StateError('Not authorized');
+      final id=await widget.repository.comment(item,text,parent:parent);
+      if(!mounted||epoch!=_commentEpoch||!_commentsOpen||_current.id!=item.id)return;
+      if(!await widget.repository.remainsAuthorized(item)||await widget.repository.currentUserId()!=viewer)throw StateError('Not authorized');
+      if(!mounted||epoch!=_commentEpoch||!_commentsOpen)return;
+      setState((){
+        if(!_comments.any((c)=>c.id==id))_comments.insert(0,(id:id,author:viewer,body:text,parent:parent));
+        _commentNames[viewer]='You';_commentInput.clear();_replyingTo=null;_commentError=null;
+      });
+    }catch(_){
+      if(mounted&&epoch==_commentEpoch)setState(()=>_commentError='Comment could not be sent.');
+    }finally{
+      if(mounted&&epoch==_commentEpoch)setState(()=>_commentSending=false);
+    }
+  }
+
+  Widget _commentsPanel(){
+    final item=_current;
+    return Material(
+      color:AppColors.background,borderRadius:BorderRadius.circular(16),
+      child:Padding(padding:const EdgeInsets.symmetric(vertical:8),
+        child:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+          Row(children:[
+            Expanded(child:Text('Moment comments',style:AppTypography.smallHeading)),
+            IconButton(tooltip:'Close comments',onPressed:()=>unawaited(_commentSheet()),icon:const Icon(Icons.close_rounded)),
+          ]),
+          if(_commentError!=null)Row(children:[
+            Expanded(child:Text(_commentError!,style:AppTypography.bodyMuted)),
+            TextButton(onPressed:_commentSending?null:()=>unawaited(_loadComments()),child:const AppGradientActionLabel('Retry')),
+          ]),
+          SizedBox(height:140,child:_commentsLoading
+            ? const Center(child:CircularProgressIndicator(color:AppColors.primaryEnd))
+            : _comments.isEmpty?Center(child:Text('No comments yet',style:AppTypography.bodyMuted))
+            :ListView.builder(itemCount:_comments.length,itemBuilder:(_,index){
+              final line=_comments[index];
+              return ListTile(
+                dense:true,title:Text(line.body,style:AppTypography.body),
+                subtitle:Text((_commentNames[line.author]??'Orbit member')+
+                  (line.parent==null?'':' · Reply'),style:AppTypography.bodyMuted),
+                onTap:()=>setState(()=>_replyingTo=line.id),
+                trailing:Row(mainAxisSize:MainAxisSize.min,children:[
+                  if(line.author==_commentViewer||item.creatorId==_commentViewer)IconButton(
+                    tooltip:'Delete comment',icon:const Icon(Icons.delete_outline_rounded),
+                    onPressed:()async{
+                      final epoch=_commentEpoch;
+                      try{
+                        await widget.repository.deleteComment(item,line.id);
+                        if(mounted&&epoch==_commentEpoch)setState((){
+                          _comments.removeWhere((c)=>c.id==line.id);
+                          if(_replyingTo==line.id)_replyingTo=null;
+                        });
+                      }catch(_){if(mounted)_notice('Comment could not be deleted.');}
+                    }),
+                  IconButton(tooltip:'Report this private comment',icon:const Icon(Icons.flag_outlined),
+                    onPressed:()=>unawaited(_reportSheet(commentId:line.id))),
+                ]),
+              );
+            })),
+          if(_replyingTo!=null)Row(children:[
+            Expanded(child:Text('Replying to comment',style:AppTypography.bodyMuted)),
+            TextButton(onPressed:()=>setState(()=>_replyingTo=null),child:const AppGradientActionLabel('Cancel reply')),
+          ]),
+          Row(children:[
+            Expanded(child:TextField(controller:_commentInput,maxLength:280,maxLines:1,
+              enabled:!_commentSending,decoration:const InputDecoration(hintText:'Write a comment',counterText:''))),
+            AppCircularIconButton(semanticLabel:'Send comment',onPressed:()=>unawaited(_sendComment()),
+              icon:Icons.send_rounded,iconSize:20,size:40),
+          ]),
+        ])),
+    );
+  }
+
+  Future<void> _share() async{
     final item=_current;
     final wasPaused=_paused;
     _pause(true);
-    final controller=TextEditingController();
-    var lines=<({String id,String author,String body,String? parent})>[];
-    String? error;
-    String? viewerId;
-    try {lines=await widget.repository.allComments(item);}
-    catch(_){error='Comments are unavailable. Please try again.';}
-    try {viewerId=await widget.repository.currentUserId();} catch (_) {}
-    final grouped=<({String id,String author,String body,String? parent})>[];
-    for(final parent in lines.where((entry)=>entry.parent==null)){
-      grouped.add(parent);
-      grouped.addAll(lines.where((entry)=>entry.parent==parent.id));
-    }
-    grouped.addAll(lines.where((entry)=>entry.parent!=null &&
-      !grouped.any((existing)=>existing.id==entry.id)));
-    lines=grouped;
-    final names=<String,String>{};
-    for(final author in lines.map((entry)=>entry.author).toSet().take(30)){
-      if(author==viewerId){names[author]='You';continue;}
-      try {names[author]=await widget.repository.name(author);}
-      catch(_){names[author]='Orbit member';}
-    }
-    if(!mounted){controller.dispose();return;}
-    String? replyingTo;
-    await showModalBottomSheet<void>(
-      context:context,isScrollControlled:true,useSafeArea:true,
-      backgroundColor:AppColors.background,
-      shape:const RoundedRectangleBorder(
-        borderRadius:BorderRadius.vertical(top:Radius.circular(28))),
-      builder:(sheetContext)=>StatefulBuilder(builder:(sheetContext,setSheet)=>Padding(
-        padding:EdgeInsets.fromLTRB(20,16,20,
-          MediaQuery.viewInsetsOf(sheetContext).bottom+20),
-        child:Column(mainAxisSize:MainAxisSize.min,
-          crossAxisAlignment:CrossAxisAlignment.stretch,children:[
-            Text('Moment comments',style:AppTypography.smallHeading),
-            const SizedBox(height:12),
-            if(error!=null)Text(error,style:AppTypography.bodyMuted),
-            SizedBox(height:180,child:ListView.builder(
-              itemCount:lines.length,itemBuilder:(_,index)=>Padding(
-                padding:const EdgeInsets.only(bottom:12),
-                child:ListTile(
-                  title:Text(lines[index].body,style:AppTypography.body),
-                  subtitle:Text(
-                    (names[lines[index].author]??'Orbit member')+
-                    (lines[index].parent==null?' · Comment':' · Reply'),
-                    style:AppTypography.bodyMuted),
-                  leading:lines[index].parent==null?null:
-                    const Icon(Icons.subdirectory_arrow_right_rounded,
-                      color:AppColors.primaryEnd),
-                  onTap:()=>setSheet(()=>replyingTo=lines[index].id),
-                  trailing:Row(mainAxisSize:MainAxisSize.min,children:[
-                    if(viewerId!=null &&
-                       (lines[index].author==viewerId ||
-                        item.creatorId==viewerId))
-                      IconButton(
-                        tooltip:'Delete comment',
-                        icon:const Icon(Icons.delete_outline_rounded),
-                        onPressed:() async {
-                          final id=lines[index].id;
-                          try {
-                            await widget.repository.deleteComment(item,id);
-                            if(sheetContext.mounted)setSheet((){
-                              lines=lines.where((entry)=>entry.id!=id).toList();
-                              if(replyingTo==id)replyingTo=null;
-                            });
-                          }catch(_){if(mounted)_notice('Comment could not be deleted.');}
-                        },
-                      ),
-                    IconButton(
-                      tooltip:'Report this private comment',
-                      icon:const Icon(Icons.flag_outlined),
-                      onPressed:(){
-                        final commentId=lines[index].id;
-                        Navigator.of(sheetContext).pop();
-                        unawaited(_reportSheet(commentId:commentId));
-                      },
-                    ),
-                  ]),
-                )))),
-            if(replyingTo!=null)Row(children:[
-              Expanded(child:Text('Replying to comment',
-                style:AppTypography.bodyMuted)),
-              TextButton(onPressed:()=>setSheet(()=>replyingTo=null),
-                child:const AppGradientActionLabel('Cancel reply')),
-            ]),
-            TextField(controller:controller,maxLength:280,maxLines:2,
-              decoration:const InputDecoration(hintText:'Write a comment')),
-            const SizedBox(height:10),
-            AppPrimaryButton(label:'Send comment',onPressed:() async {
-              final text=controller.text.trim();
-              if(text.isEmpty)return;
-              try{
-                await widget.repository.comment(item,text,parent:replyingTo);
-                if(sheetContext.mounted)Navigator.of(sheetContext).pop();
-              }catch(_){
-                if(mounted)_notice('Comment could not be sent.');
-              }
-            }),
-          ],
-        ),
-      )),
-    );
-    controller.dispose();
-    if(mounted)_pause(wasPaused);
+    try{
+      if(!await widget.repository.remainsAuthorized(item))throw StateError('Not authorized');
+      await Share.share(OrbitMomentLink.create(item.id).toString());
+    }catch(_){if(mounted)_notice('This Moment is no longer shareable.');}
+    finally{if(mounted)_pause(wasPaused);}
+  }
+
+  Widget _storyProgress(){
+    final group=widget.playlist.where((m)=>m.creatorId==_current.creatorId&&m.contextId==_current.contextId).toList();
+    return AnimatedBuilder(animation:Listenable.merge([_progress,_clipProgress]),builder:(_,__)=>Row(children:[
+      for(final m in group)Expanded(child:Padding(padding:const EdgeInsets.symmetric(horizontal:2),
+        child:ClipRRect(borderRadius:BorderRadius.circular(3),
+          child:LinearProgressIndicator(minHeight:3,
+            value:m.id==_current.id?(_current.mediaKind=='image'?_progress.value:_clipProgress.value):
+              widget.playlist.indexOf(m)<_index?1:0,
+            color:AppColors.primaryEnd,backgroundColor:AppColors.primaryEnd.withValues(alpha:0.18))))),
+    ]));
   }
   Future<void> _reportSheet({String? commentId,bool account=false}) async {
     const reasons=<String,String>{
@@ -748,6 +809,9 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
         padding:const EdgeInsets.symmetric(horizontal:20),
         child:Column(children:[
           const SizedBox(height:20),
+          if(widget.playlist.isNotEmpty&&!_allCaughtUp)...[
+            _storyProgress(),const SizedBox(height:8),
+          ],
           AppScreenHeader(title:_name,prominent:true),
           const SizedBox(height:20),
           Expanded(child:LayoutBuilder(builder:(context,limits)=>
@@ -755,7 +819,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
               behavior:HitTestBehavior.opaque,
               onTapUp:(event)=>_navigationTap(event,limits),
               onLongPressStart:(_)=>_pause(true),
-              onLongPressEnd:(_)=>_pause(false),
+              onLongPressEnd:(_){if(!_commentsOpen)_pause(false);},
               onVerticalDragEnd:(details){
                 final speed=details.primaryVelocity??0;
                 if(speed>350)Navigator.of(context).maybePop();
@@ -782,15 +846,18 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
                           item:_current,repository:widget.repository,
                           paused:_paused,
                           previewBytes:_photo,
+                          onProgress:(value){if(mounted)_clipProgress.value=value;},
                           onFinished:()=>_move(1)))),
             ))),
-          if(_error==null && !_loading && _caption!=null&&_caption!.isNotEmpty &&
+          if(!_allCaughtUp && _error==null && !_loading && _caption!=null&&_caption!.isNotEmpty &&
               WidgetsBinding.instance.lifecycleState!=AppLifecycleState.paused &&
               WidgetsBinding.instance.lifecycleState!=AppLifecycleState.inactive &&
               WidgetsBinding.instance.lifecycleState!=AppLifecycleState.hidden)
             Padding(padding:const EdgeInsets.symmetric(vertical:12),
               child:Text(_caption!,style:AppTypography.body)),
-          if(_error==null&&!_loading)
+          if(!_allCaughtUp&&_error==null&&!_loading&&_commentsOpen)
+            Flexible(flex:1,child:SingleChildScrollView(child:_commentsPanel())),
+          if(!_allCaughtUp&&_error==null&&!_loading)
             Row(children:[
               AppCircularIconButton(
                 semanticLabel:_liked?'Unlike moment':'Like moment',
@@ -802,6 +869,9 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
                 semanticLabel:'Comments',onPressed:()=>unawaited(_commentSheet()),
                 icon:Icons.chat_bubble_outline_rounded,
                 iconSize:20,size:40),
+              const SizedBox(width:12),
+              AppCircularIconButton(semanticLabel:'Share moment',onPressed:()=>unawaited(_share()),
+                icon:Icons.share_outlined,iconSize:20,size:40),
               const Spacer(),
               if(_isOwner) ...[
                 Tooltip(message:'Manage Moment',child:AppCircularIconButton(
