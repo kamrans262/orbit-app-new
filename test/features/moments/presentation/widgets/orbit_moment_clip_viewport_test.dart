@@ -34,6 +34,10 @@ void main(){
         expect(frame.width,lessThanOrEqualTo(bounds.width+0.01));
         expect(frame.top,greaterThanOrEqualTo(bounds.top-0.01));
         expect(frame.bottom,lessThanOrEqualTo(controls.top+0.01));
+        // The frame starts at the top, and controls follow it directly even
+        // when a landscape clip does not consume the entire viewport.
+        expect(frame.top,closeTo(bounds.top,0.01));
+        expect(controls.top-frame.bottom,lessThanOrEqualTo(24));
         expect(controls.bottom,lessThanOrEqualTo(bounds.bottom+0.01));
         expect(tester.takeException(),isNull);
       });

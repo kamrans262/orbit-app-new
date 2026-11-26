@@ -202,7 +202,7 @@ class _OrbitPrivateMomentPlayerState extends State<OrbitPrivateMomentPlayer>
 
   @override
   Widget build(BuildContext context){
-    if(_busy)return Center(child:FittedBox(fit:BoxFit.scaleDown,
+    if(_busy)return Center(heightFactor:1,child:FittedBox(fit:BoxFit.scaleDown,
       child:Column(mainAxisSize:MainAxisSize.min,children:[
         if(widget.previewBytes!=null && widget.previewBytes!.isNotEmpty)
           Image.memory(widget.previewBytes!,fit:BoxFit.contain,height:120,width:240,
@@ -210,7 +210,7 @@ class _OrbitPrivateMomentPlayerState extends State<OrbitPrivateMomentPlayer>
         const SizedBox(height:12),
         const CircularProgressIndicator(color:AppColors.primaryEnd),
       ])));
-    if(_error!=null)return Center(child:Text(_error!,
+    if(_error!=null)return Center(heightFactor:1,child:Text(_error!,
       textAlign:TextAlign.center,style:AppTypography.bodyMuted));
     final video=_video;
     final isVideo=widget.item.mediaKind=='video';
@@ -268,18 +268,23 @@ class OrbitMomentClipViewport extends StatelessWidget {
       ]);
     }
     final controlHeight=(limits.maxHeight*0.4).clamp(0.0,70.0).toDouble();
-    final gap=(limits.maxHeight*0.08).clamp(0.0,16.0).toDouble();
+    final gap=(limits.maxHeight*0.08).clamp(0.0,8.0).toDouble();
     final controlRow=SizedBox(height:controlHeight,width:limits.maxWidth,
       child:Center(child:FittedBox(fit:BoxFit.scaleDown,child:controls)));
     if(ratio!=null&&ratio.isFinite&&ratio>0){
-      return SizedBox.expand(child:Column(children:[
-        Expanded(child:Center(child:AspectRatio(aspectRatio:ratio,child:media))),
+      // Fit the frame to the remaining height, then shrink-wrap the
+      // combined video and controls instead of inserting a vertical spacer.
+      final availableHeight=limits.maxHeight-controlHeight-gap;
+      final frameWidth=limits.maxWidth.clamp(0.0,availableHeight*ratio).toDouble();
+      final frameHeight=frameWidth/ratio;
+      return Column(mainAxisSize:MainAxisSize.min,children:[
+        SizedBox(width:frameWidth,height:frameHeight,child:media),
         SizedBox(height:gap),
         controlRow,
-      ]));
+      ]);
     }
     // Voice/waveform retains its compact centered layout.
-    return Center(child:Column(mainAxisSize:MainAxisSize.min,children:[
+    return Center(heightFactor:1,child:Column(mainAxisSize:MainAxisSize.min,children:[
       Flexible(child:Center(widthFactor:1,heightFactor:1,
         child:FittedBox(fit:BoxFit.scaleDown,child:media))),
       SizedBox(height:gap),controlRow,

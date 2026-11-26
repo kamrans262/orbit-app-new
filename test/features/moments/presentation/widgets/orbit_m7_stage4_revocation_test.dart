@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:orbit_ui/features/moments/data/orbit_moment_repository.dart';
 import 'package:orbit_ui/features/moments/presentation/screens/orbit_live_moment_viewer.dart';
 import 'package:orbit_ui/features/moments/presentation/widgets/orbit_moment_comment_components.dart';
@@ -14,6 +15,8 @@ final class _FakeMoments extends OrbitMomentRepository {
   String? activeUser;
   bool removedMoment=false;
   int sent=0;
+  Uint8List? testPhoto;
+  String? testCaption='Private Moment caption';
   @override
   Future<List<({String id,String author,String body,String? parent})>> allComments(OrbitLiveMoment item,{int max=150}) async => [];
   @override
@@ -35,10 +38,10 @@ final class _FakeMoments extends OrbitMomentRepository {
 
   @override
   Future<Uint8List> photo(OrbitLiveMoment moment,{String variant='thumbnail'}) async =>
-    Uint8List.fromList(_pixel);
+    Uint8List.fromList(testPhoto??_pixel);
 
   @override
-  Future<String?> caption(OrbitLiveMoment moment) async => 'Private Moment caption';
+  Future<String?> caption(OrbitLiveMoment moment) async => testCaption;
 
   @override
   Future<void> view(OrbitLiveMoment moment) async {}
@@ -63,13 +66,40 @@ void main() {
     final screen=tester.getRect(find.byType(Scaffold));
     final header=tester.getRect(find.byType(AppScreenHeader));
     final like=tester.getRect(find.byIcon(Icons.favorite_border_rounded));
-    expect(header.top-screen.top,12);
-    expect(tester.getRect(photo).top-header.bottom,12);
-    // The 20px icon sits in its existing 40px button.
-    expect(screen.bottom-like.bottom,22);
+    expect(header.top-screen.top,8);
+    expect(tester.getRect(photo).top-header.bottom,8);
+    final caption=tester.getRect(find.text('Private Moment caption'));
+    expect(caption.top-tester.getRect(photo).bottom,8);
+    // 8px caption padding + 10px inside the existing 40px button.
+    expect(like.top-caption.bottom,18);
     expect(tester.takeException(),isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  for(final dimensions in const [Size(160,90),Size(90,160)]){
+    testWidgets('Moment ${dimensions.width}x${dimensions.height} has no empty media-to-action gap',(tester)async{
+      await tester.binding.setSurfaceSize(const Size(360,640));
+      addTearDown(()=>tester.binding.setSurfaceSize(null));
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      final repo=_FakeMoments()..activeUser='viewer'
+        ..testCaption=null
+        ..testPhoto=Uint8List.fromList(img.encodePng(img.Image(
+          width:dimensions.width.toInt(),height:dimensions.height.toInt())));
+      final item=OrbitLiveMoment(id:'ratio-photo',creatorId:'owner',mediaId:'media',
+        contextId:'friends',publishedAt:DateTime.now());
+      await tester.pumpWidget(MaterialApp(home:OrbitLiveMomentViewer(
+        moment:item,repository:repo,author:'Friend')));
+      await tester.pumpAndSettle();
+      final frame=tester.getRect(find.byType(Image));
+      final header=tester.getRect(find.byType(AppScreenHeader));
+      final like=tester.getRect(find.byIcon(Icons.favorite_border_rounded));
+      expect(frame.width/frame.height,closeTo(dimensions.width/dimensions.height,0.001));
+      expect(frame.top-header.bottom,8);
+      expect(like.top-frame.bottom,18);
+      expect(tester.takeException(),isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
 
   testWidgets('M7 shows owner-only deletion and never offers self-account report',
       (tester) async {

@@ -39,6 +39,7 @@ class OrbitLiveMomentViewer extends StatefulWidget {
 
 class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with WidgetsBindingObserver,SingleTickerProviderStateMixin {
   Uint8List? _photo;
+  double _photoAspectRatio=1;
   String? _caption;
   int? _ownerPublishVersion,_ownerAudienceRevision;
   String _ownerAudienceKind='only_me';
@@ -96,10 +97,22 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
     unawaited(_load());
   }
 
+  // Read the already-authorized image header once per media replacement.
+  // The actual frame—not an expanded, letterboxed container—determines
+  // the position of the caption and engagement icons.
+  static double _aspectRatio(Uint8List bytes){
+    try{
+      final info=img.findDecoderForData(bytes)?.startDecode(bytes);
+      if(info!=null&&info.width>0&&info.height>0)return info.width/info.height;
+    }catch(_){}
+    return 1;
+  }
+
   void _forgetPhoto(){
     final bytes=_photo;
     if(bytes!=null)unawaited(MemoryImage(bytes).evict());
     _photo=null;
+    _photoAspectRatio=1;
     _caption=null;
     _resetComments();
   }
@@ -242,6 +255,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
       if(mounted && epoch==_loadEpoch && _current.id==current.id){
         setState((){
           _photo=photo;
+          _photoAspectRatio=current.mediaKind=='image'?_aspectRatio(photo):1;
           _caption=caption;
           _liked=current.myReaction=='like';
           _ownerPublishVersion=current.publishVersion;
@@ -292,7 +306,11 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
       if(!mounted || epoch!=_loadEpoch || _loading ||
          _error!=null || _current.id!=current.id)return;
       final thumbnail=_photo;
-      setState(()=>_photo=original);
+      final ratio=_aspectRatio(original);
+      setState((){
+        _photo=original;
+        _photoAspectRatio=ratio;
+      });
       original=null; // The active widget now owns these decrypted bytes.
       if(thumbnail!=null)unawaited(MemoryImage(thumbnail).evict());
     }catch(_){
@@ -877,7 +895,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
   Widget build(BuildContext context){
     return Scaffold(backgroundColor:AppColors.background,
       body:SafeArea(child:Padding(
-        padding:const EdgeInsets.symmetric(horizontal:20,vertical:12),
+        padding:const EdgeInsets.symmetric(horizontal:20,vertical:8),
         child:Column(children:[
           if(widget.playlist.isNotEmpty&&!_allCaughtUp)...[
             _storyProgress(),const SizedBox(height:8),
@@ -888,8 +906,8 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
               try{await openMomentAuthor(context,widget.repository,_current);}
               finally{if(mounted)_pause(wasPaused);}
             }),
-          const SizedBox(height:12),
-          Expanded(child:LayoutBuilder(builder:(context,limits)=>
+          const SizedBox(height:8),
+          Flexible(child:LayoutBuilder(builder:(context,limits)=>
             GestureDetector(
               behavior:HitTestBehavior.opaque,
               onTapUp:(event)=>_navigationTap(event,limits),
@@ -899,7 +917,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
                 final speed=details.primaryVelocity??0;
                 if(speed>350)Navigator.of(context).maybePop();
               },
-              child:Center(child:_allCaughtUp
+              child:Align(alignment:Alignment.topCenter,heightFactor:1,child:_allCaughtUp
                 ? Column(mainAxisSize:MainAxisSize.min,children:[
                     const Icon(Icons.check_circle_outline_rounded,
                       color:AppColors.primaryEnd,size:54),
@@ -918,8 +936,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
                   ])
                   : ClipRRect(borderRadius:BorderRadius.circular(16),
                     child:_current.mediaKind=='image'
-                      ? SizedBox(
-                          width:limits.maxWidth,height:limits.maxHeight,
+                      ? AspectRatio(aspectRatio:_photoAspectRatio,
                           child:Image.memory(_photo!,fit:BoxFit.contain,
                             filterQuality:FilterQuality.high))
                       : OrbitPrivateMomentPlayer(
@@ -937,10 +954,10 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
             ConstrainedBox(
               constraints:BoxConstraints(maxHeight:MediaQuery.sizeOf(context).height*0.16),
               child:SingleChildScrollView(
-                padding:const EdgeInsets.symmetric(vertical:12),
+                padding:const EdgeInsets.symmetric(vertical:8),
                 child:Text(_caption!,style:AppTypography.body))),
           if(!_allCaughtUp&&_error==null&&!_loading&&(_caption==null||_caption!.isEmpty))
-            const SizedBox(height:12),
+            const SizedBox(height:8),
           if(!_allCaughtUp&&_error==null&&!_loading&&_commentsOpen)
             Flexible(flex:1,child:SingleChildScrollView(child:_commentsPanel())),
           if(!_allCaughtUp&&_error==null&&!_loading)
