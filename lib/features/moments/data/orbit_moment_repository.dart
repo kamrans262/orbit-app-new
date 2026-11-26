@@ -25,7 +25,8 @@ class OrbitLiveMoment {
     this.captionCiphertext,this.mediaKind='image',this.durationMs,
     this.placeCiphertext,this.taggedUserIds=const [],
     this.publishVersion=1,this.audienceRevision=1,this.myReaction,
-    this.audienceKind='only_me',this.targetIds=const []});
+    this.audienceKind='only_me',this.targetIds=const [],
+    this.likeCount,this.commentCount,this.engagementContext});
   final String id, creatorId, mediaId, contextId;
   final DateTime publishedAt;
   final String? captionCiphertext;
@@ -37,6 +38,9 @@ class OrbitLiveMoment {
   final String? myReaction;
   final String audienceKind;
   final List<String> targetIds;
+  final int? likeCount,commentCount;
+  final String? engagementContext;
+  String get interactionContext=>engagementContext??contextId;
   factory OrbitLiveMoment.fromJson(Map<String,dynamic> d) =>
     OrbitLiveMoment(id:d['id'] as String,creatorId:d['creator_id'] as String,
       mediaId:d['media_id'] as String,contextId:d['context_id'] as String,
@@ -49,6 +53,9 @@ class OrbitLiveMoment {
       publishVersion:(d['publish_version'] as num?)?.toInt()??1,
       audienceRevision:(d['audience_revision'] as num?)?.toInt()??1,
       myReaction:d['my_reaction'] as String?,
+      likeCount:(d['like_count'] as num?)?.toInt(),
+      commentCount:(d['comment_count'] as num?)?.toInt(),
+      engagementContext:d['engagement_context_id'] as String?,
       audienceKind:d['audience_kind'] as String? ?? 'only_me',
       targetIds:List<String>.from(d['target_ids'] as List? ?? const []));
 }
@@ -726,9 +733,9 @@ class OrbitMomentRepository {
   Future<void> react(OrbitLiveMoment item,{required bool liked}) async {
     final path='/moments/'+Uri.encodeComponent(item.id)+'/reaction';
     if(liked)await _api('PUT',path,
-      body:{'context_id':item.contextId,'reaction_code':'like'});
+      body:{'context_id':item.interactionContext,'reaction_code':'like'});
     else await _identity.socialRequest('DELETE',path,
-      body:{'context_id':item.contextId});
+      body:{'context_id':item.interactionContext});
   }
   Future<List<({String id,String author,String body,String? parent})>>
       comments(OrbitLiveMoment item) async {

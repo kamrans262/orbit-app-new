@@ -25,6 +25,7 @@ import '../../domain/models/moments_models.dart';
 import '../screens/moment_camera_screen.dart';
 import '../screens/moments_screen.dart';
 import '../screens/orbit_live_moment_viewer.dart';
+import '../widgets/orbit_inline_moment_comments.dart';
 
 /// The authenticated replacement for MomentsScreen.demo. It passes real
 /// server-authorized data to the existing styled MomentsScreen only.
@@ -62,6 +63,10 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
   final Map<String,String> _captions={};
   final Map<String,String> _places={};
   final Set<String> _likes={};
+  final Set<String> _reactionPending={};
+  final Map<String,int> _likeOverrides={},_commentOverrides={};
+  final Set<String> _expandedComments={};
+  int _engagementMutation=0;
   final Set<String> _bookmarked={};
   final Set<String> _seen={};
   bool _busy=true;
@@ -114,6 +119,8 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
     _captions.clear();
     _places.clear();
     _cacheLeaseAt.clear();
+    _expandedComments.clear();_likeOverrides.clear();_commentOverrides.clear();
+    _reactionPending.clear();++_engagementMutation;
   }
 
   void _clearSponsored(){
@@ -326,6 +333,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
     }
     _feedRequestInFlight=true;
     final epoch=++_loadEpoch;
+    final engagementAtStart=_engagementMutation;
     if(!background&&!_initialLoadComplete){
       setState((){_busy=true;_error=null;});
     }
@@ -404,7 +412,9 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
           previous[i].mediaId==next[i].mediaId&&
           previous[i].audienceRevision==next[i].audienceRevision&&
           previous[i].publishVersion==next[i].publishVersion&&
-          previous[i].myReaction==next[i].myReaction);
+          previous[i].myReaction==next[i].myReaction&&
+          previous[i].interactionContext==next[i].interactionContext&&
+          previous[i].likeCount==next[i].likeCount&&previous[i].commentCount==next[i].commentCount);
       final sameCheckIns=_activityCheckIns.length==activityCheckIns.length&&
         List.generate(activityCheckIns.length,(i)=>i).every((i)=>
           _activityCheckIns[i].activityId==activityCheckIns[i].activityId&&
@@ -414,6 +424,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       if(background&&_initialLoadComplete&&!_showingOfflinePreviews&&_error==null&&
          sameList(_items,moments)&&sameList(_rail,rail)&&sameCheckIns&&
          prefetch.every((m)=>stable.contains(m.id)&&_previews.containsKey(m.id))&&
+         _likeOverrides.isEmpty&&_commentOverrides.isEmpty&&
          _seen.length==seen.length&&_seen.containsAll(seen)&&
          _bookmarked.length==saved.length&&_bookmarked.containsAll(saved)){
         _lastSuccessfulLoad=DateTime.now();_retryNotBefore=null;
@@ -421,6 +432,10 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       }
       // Immediately remove revoked/expired entries while new media loads.
       setState((){
+        final active={for(final m in moments)m.id:m};
+        _expandedComments.removeWhere((id)=>!stable.contains(id)||!active.containsKey(id));
+        _likeOverrides.removeWhere((id,_)=>!stable.contains(id));
+        _commentOverrides.removeWhere((id,_)=>!stable.contains(id));
         _items=moments;_rail=rail;
         for(final id in _previews.keys.toList()){
           if(!stable.contains(id)){
@@ -502,7 +517,10 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         _items=moments;_rail=rail;
         _activityCheckIns=activityCheckIns;
         _hasMore=hasMore && _feedLimit<240;
-        _likes..clear()..addAll(moments.where((item)=>item.myReaction=='like').map((item)=>item.id));
+        if(engagementAtStart==_engagementMutation){
+          _likes..clear()..addAll(moments.where((item)=>item.myReaction=='like').map((item)=>item.id));
+          _likeOverrides.clear();_commentOverrides.clear();
+        }
         _bookmarked..clear()..addAll(saved);
         _previews..clear()..addAll(previews);
         _names..clear()..addAll(names);
@@ -668,18 +686,54 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       }
     }
   }
+  OrbitLiveMoment? _feedMoment(String id){
+    for(final m in _items){if(m.id==id)return m;}
+    return null;
+  }
+
+  void _toggleComments(MomentImageFeedItem item){
+    if(_showingOfflinePreviews||_feedMoment(item.id)==null)return;
+    setState((){
+      if(!_expandedComments.remove(item.id))_expandedComments.add(item.id);
+    });
+  }
+
+  Widget? _inlineComments(MomentImageFeedItem item){
+    if(!_expandedComments.contains(item.id)||_showingOfflinePreviews)return null;
+    final moment=_feedMoment(item.id);
+    if(moment==null)return null;
+    return OrbitInlineMomentComments(
+      key:ValueKey('${_loadedOwner}|${moment.id}|${moment.interactionContext}|${moment.audienceRevision}'),
+      moment:moment,repository:_repo,
+      onClose:()=>setState(()=>_expandedComments.remove(item.id)),
+      onCountChanged:(count){
+        if(!mounted||_feedMoment(item.id)?.interactionContext!=moment.interactionContext)return;
+        setState((){_commentOverrides[item.id]=count;++_engagementMutation;});
+      },
+    );
+  }
+
   Future<void> _react(MomentImageFeedItem item,bool liked) async {
-    if(_showingOfflinePreviews)return;
-    OrbitLiveMoment? moment;
-    for(final m in _items)if(m.id==item.id)moment=m;
-    if(moment==null)return;
+    if(_showingOfflinePreviews||!_reactionPending.add(item.id))return;
+    final moment=_feedMoment(item.id);
+    final owner=_loadedOwner;
+    if(moment==null){_reactionPending.remove(item.id);return;}
     try {
       await _repo.react(moment,liked:liked);
-      if(mounted)setState((){
+      if(!mounted||_loadedOwner!=owner||_feedMoment(item.id)?.interactionContext!=moment.interactionContext)return;
+      setState((){
+        final old=_likes.contains(item.id);
         if(liked)_likes.add(item.id);else _likes.remove(item.id);
+        final count=_likeOverrides[item.id]??moment.likeCount;
+        if(count!=null&&old!=liked)_likeOverrides[item.id]=(count+(liked?1:-1)).clamp(0,1<<31).toInt();
+        ++_engagementMutation;
       });
-    }catch(_){if(mounted)unawaited(_load());}
+    }catch(_){
+      if(mounted)ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content:Text('The reaction could not be saved.')));
+    }finally{_reactionPending.remove(item.id);}
   }
+  
   Future<void> _shareAuthorizedMoment(MomentImageFeedItem item) async {
     if(_showingOfflinePreviews)return;
     OrbitLiveMoment? selected;
@@ -865,7 +919,9 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         imagePath:null,imageBytes:_previews[m.id],
         title:_captions[m.id]??'',
         location:_places[m.id]??'',
-        likeCount:0,commentCount:0,countsKnown:false,
+        likeCount:_likeOverrides[m.id]??m.likeCount??0,
+        commentCount:_commentOverrides[m.id]??m.commentCount??0,
+        countsKnown:!_showingOfflinePreviews&&m.likeCount!=null&&m.commentCount!=null,
         isLiked:_likes.contains(m.id),
         isBookmarked:_bookmarked.contains(m.id),
       ),
@@ -921,7 +977,8 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       onMessagesPressed:(){},
       onStoryPressed:(story)=>_openById(story.id,storyGroup:true),
       onLikeChanged:(item,liked)=>unawaited(_react(item,liked)),
-      onCommentPressed:(item)=>_openById(item.id,comments:true),
+      onCommentPressed:_toggleComments,
+      commentsBuilder:_inlineComments,
       onBookmarkChanged:(item,value)=>unawaited(_setBookmark(item,value)),
       onSharePressed:(item)=>unawaited(_shareAuthorizedMoment(item)),
       onTextMenuPressed:(item){},

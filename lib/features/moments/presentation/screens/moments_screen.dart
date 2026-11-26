@@ -69,6 +69,7 @@ class MomentsScreen extends StatefulWidget {
     this.privateBookmarking=false,
     this.privateSharing=false,
     this.onRefresh,
+    this.commentsBuilder,
     this.pendingCard,
     this.onLoadMore,
     this.hasMore=false,
@@ -177,6 +178,7 @@ class MomentsScreen extends StatefulWidget {
   final bool privateBookmarking;
   final bool privateSharing;
   final Future<void> Function()? onRefresh;
+  final Widget? Function(MomentImageFeedItem)? commentsBuilder;
   final Widget? pendingCard;
   final VoidCallback? onLoadMore;
   final bool hasMore,loadingMore;
@@ -640,6 +642,7 @@ class _MomentsScreenState extends State<MomentsScreen> {
         final imageItem = item as MomentImageFeedItem;
         return MomentImageCard(
           data: imageItem,
+          commentsContent:widget.privateReadOnly?null:widget.commentsBuilder?.call(imageItem),
           privateMode:widget.privateMode,
           privateBookmarking:widget.privateBookmarking,
           privateSharing:widget.privateSharing,
@@ -797,7 +800,8 @@ class _MomentsScreenState extends State<MomentsScreen> {
   void _toggleLike(MomentImageFeedItem item) {
     if(widget.privateReadOnly)return;
     final nextValue = !(_likedById[item.id] ?? item.isLiked);
-    setState(() => _likedById[item.id] = nextValue);
+    // Live cards wait for the server-confirmed reaction and count together.
+    if(!widget.privateMode)setState(() => _likedById[item.id] = nextValue);
     widget.onLikeChanged(item, nextValue);
   }
 
