@@ -4,6 +4,7 @@ import 'package:orbit_ui/features/moments/data/orbit_moment_repository.dart';
 import 'package:orbit_ui/features/moments/domain/models/moments_models.dart';
 import 'package:orbit_ui/features/moments/presentation/widgets/moment_image_card.dart';
 import 'package:orbit_ui/features/moments/presentation/widgets/orbit_inline_moment_comments.dart';
+import 'package:orbit_ui/features/moments/presentation/widgets/orbit_moment_comment_components.dart';
 
 class _Comments extends OrbitMomentRepository {
   bool allowed=true;
@@ -49,6 +50,9 @@ void main(){
     final comment=find.byIcon(Icons.chat_bubble_outline_rounded);
     await tester.ensureVisible(comment);await tester.tap(comment);await tester.pumpAndSettle();
     expect(find.descendant(of:find.byType(MomentImageCard),matching:find.text('Existing comment')),findsOneWidget);
+    expect(find.byType(OrbitMomentCommentsHeader),findsOneWidget);
+    expect(find.byType(OrbitMomentCommentRow),findsOneWidget);
+    expect(find.byType(OrbitMomentCommentComposer),findsOneWidget);
     final input=find.byType(TextField);
     await tester.ensureVisible(input);await tester.enterText(input,'New comment');
     final send=find.byIcon(Icons.send_rounded);

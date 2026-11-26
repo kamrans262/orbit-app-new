@@ -3,8 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
-import '../../domain/models/moments_models.dart';
-import 'moment_profile_avatar.dart';
+import 'orbit_moment_comment_components.dart';
 import '../../../../core/widgets/app_gradient_action_label.dart';
 import '../../data/orbit_moment_repository.dart';
 import '../../../realtime/presentation/orbit_realtime_refresh.dart';
@@ -156,11 +155,7 @@ class _OrbitInlineMomentCommentsState extends State<OrbitInlineMomentComments> w
   Widget build(BuildContext context){
     return Padding(padding:const EdgeInsets.fromLTRB(12,0,12,12),
       child:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.stretch,children:[
-        Divider(height:1,color:AppColors.primaryEnd.withValues(alpha:0.14)),
-        Row(children:[
-          Expanded(child:Text('Comments',style:AppTypography.body.copyWith(fontWeight:FontWeight.w600,color:AppColors.primaryEnd))),
-          IconButton(tooltip:'Close comments',onPressed:widget.onClose,icon:const Icon(Icons.close_rounded,color:AppColors.primaryEnd)),
-        ]),
+        OrbitMomentCommentsHeader(onClose:widget.onClose),
         if(widget.moment.targetIds.length>1&&widget.moment.interactionContext.startsWith('circle:'))
           Text('Comments in this Circle',style:AppTypography.bodyMuted),
         if(_loading)const Padding(padding:EdgeInsets.all(12),child:Center(child:SizedBox.square(
@@ -171,40 +166,12 @@ class _OrbitInlineMomentCommentsState extends State<OrbitInlineMomentComments> w
         ]),
         if(!_loading&&_scope!=null&&_lines.isEmpty)
           Padding(padding:const EdgeInsets.symmetric(vertical:8),child:Text('No comments yet',style:AppTypography.bodyMuted)),
-        for(final line in _lines)Padding(
-          padding:EdgeInsets.fromLTRB(line.parent==null?0:14,6,0,6),
-          child:Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
-            MomentProfileAvatar(author:MomentAuthorData(id:line.author,
-              name:_names[line.author]??'Orbit member',imageBytes:widget.authorAvatars[line.author]),
-              size:34,borderColor:AppColors.primaryStart.withValues(alpha:0.25),borderWidth:1),
-            const SizedBox(width:8),
-            Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-              Container(width:double.infinity,padding:const EdgeInsets.symmetric(horizontal:12,vertical:9),
-                decoration:BoxDecoration(
-                  color:AppColors.white,
-                  borderRadius:BorderRadius.circular(14),
-                  border:Border.all(color:AppColors.primaryEnd.withValues(alpha:0.10))),
-                child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-                  Text(_names[line.author]??'Orbit member',style:AppTypography.body.copyWith(
-                    fontWeight:FontWeight.w600,color:AppColors.primaryEnd)),
-                  const SizedBox(height:3),
-                  Text(line.body,style:AppTypography.body.copyWith(color:AppColors.textPrimary)),
-                ])),
-              Padding(padding:const EdgeInsets.only(left:8,top:4),
-                child:Row(children:[
-                  InkWell(onTap:()=>setState(()=>_parent=line.id),
-                    child:Padding(padding:const EdgeInsets.symmetric(vertical:4,horizontal:4),
-                      child:Text('Reply',style:AppTypography.bodyMuted.copyWith(
-                        color:AppColors.primaryEnd,fontWeight:FontWeight.w600)))),
-                  if(line.author==_owner||widget.moment.creatorId==_owner)...[
-                    const SizedBox(width:12),
-                    InkWell(onTap:()=>unawaited(_delete(line)),
-                      child:Padding(padding:const EdgeInsets.symmetric(vertical:4,horizontal:4),
-                        child:Text('Delete',style:AppTypography.bodyMuted))),
-                  ],
-                ])),
-            ])),
-          ])),
+        for(final line in _lines)OrbitMomentCommentRow(
+          authorId:line.author,authorName:_names[line.author]??'Orbit member',
+          body:line.body,isReply:line.parent!=null,avatarBytes:widget.authorAvatars[line.author],
+          onReply:()=>setState(()=>_parent=line.id),
+          onDelete:line.author==_owner||widget.moment.creatorId==_owner
+            ?()=>unawaited(_delete(line)):null),
         if(_count!=null&&_lines.length<_count!&&_limit<150)
           TextButton(onPressed:(){_limit=(_limit+30).clamp(30,150).toInt();unawaited(_load());},
             child:const AppGradientActionLabel('View more comments')),
@@ -212,23 +179,8 @@ class _OrbitInlineMomentCommentsState extends State<OrbitInlineMomentComments> w
           Expanded(child:Text('Replying to comment',style:AppTypography.bodyMuted)),
           TextButton(onPressed:()=>setState(()=>_parent=null),child:const AppGradientActionLabel('Cancel')),
         ]),
-        if(_scope!=null)Row(crossAxisAlignment:CrossAxisAlignment.center,children:[
-          Expanded(child:TextField(controller:_input,maxLength:280,maxLines:1,
-            style:AppTypography.body.copyWith(fontSize:12,height:1.3),
-            enabled:!_sending,decoration:InputDecoration(hintText:'Write a comment',counterText:'',
-              filled:true,fillColor:AppColors.white,isDense:true,
-              hintStyle:AppTypography.bodyMuted.copyWith(fontSize:12,height:1.3),
-              contentPadding:const EdgeInsets.symmetric(horizontal:12,vertical:9),
-              enabledBorder:OutlineInputBorder(borderRadius:BorderRadius.circular(24),
-                borderSide:BorderSide(color:AppColors.primaryEnd.withValues(alpha:0.16))),
-              focusedBorder:OutlineInputBorder(borderRadius:BorderRadius.circular(24),
-                borderSide:const BorderSide(color:AppColors.primaryEnd))))),
-          const SizedBox(width:8),
-          Semantics(button:true,label:'Send comment',child:Material(color:Colors.transparent,
-            child:Ink(decoration:const BoxDecoration(shape:BoxShape.circle,gradient:AppColors.primaryGradient),
-              child:InkWell(customBorder:const CircleBorder(),onTap:()=>unawaited(_send()),
-                child:const SizedBox.square(dimension:36,child:Center(child:Icon(Icons.send_rounded,color:AppColors.white,size:18))))))),
-        ]),
+        if(_scope!=null)OrbitMomentCommentComposer(controller:_input,
+          enabled:!_sending,onSend:()=>unawaited(_send())),
       ]));
   }
 }

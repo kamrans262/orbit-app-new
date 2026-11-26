@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_ui/features/moments/data/orbit_moment_repository.dart';
 import 'package:orbit_ui/features/moments/presentation/screens/orbit_live_moment_viewer.dart';
+import 'package:orbit_ui/features/moments/presentation/widgets/orbit_moment_comment_components.dart';
+import 'package:orbit_ui/core/widgets/app_screen_header.dart';
+import 'package:orbit_ui/app/theme/app_colors.dart';
 
 final class _FakeMoments extends OrbitMomentRepository {
   bool authorized=true;
@@ -57,6 +60,13 @@ void main() {
     expect(tester.getSize(photo).width,320);
     expect(tester.getSize(photo).height,greaterThan(250));
     expect(tester.widget<Image>(photo).fit,BoxFit.contain);
+    final screen=tester.getRect(find.byType(Scaffold));
+    final header=tester.getRect(find.byType(AppScreenHeader));
+    final like=tester.getRect(find.byIcon(Icons.favorite_border_rounded));
+    expect(header.top-screen.top,12);
+    expect(tester.getRect(photo).top-header.bottom,12);
+    // The 20px icon sits in its existing 40px button.
+    expect(screen.bottom-like.bottom,22);
     expect(tester.takeException(),isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -149,14 +159,20 @@ void main() {
       publishedAt:DateTime.now());
     await tester.pumpWidget(MaterialApp(home:OrbitLiveMomentViewer(moment:item,repository:repo,author:'Friend',openComments:true)));
     await tester.pumpAndSettle();
-    expect(find.text('Moment comments'),findsOneWidget);
+    expect(find.byType(OrbitMomentCommentsHeader),findsOneWidget);
+    expect(find.byType(OrbitMomentCommentComposer),findsOneWidget);
+    final input=tester.widget<TextField>(find.byType(TextField));
+    expect(input.style?.fontSize,12);
+    expect(input.decoration?.fillColor,AppColors.white);
     await tester.enterText(find.byType(TextField),'Great moment');
     await tester.ensureVisible(find.byIcon(Icons.send_rounded));
     await tester.tap(find.byIcon(Icons.send_rounded));
     await tester.pumpAndSettle();
     expect(repo.sent,1);
     expect(find.text('Great moment'),findsOneWidget);
-    expect(find.text('Moment comments'),findsOneWidget);
+    expect(find.byType(OrbitMomentCommentRow),findsOneWidget);
+    expect(find.byTooltip('Report this private comment'),findsOneWidget);
+    expect(find.byType(OrbitMomentCommentsHeader),findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
