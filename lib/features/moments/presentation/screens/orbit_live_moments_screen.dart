@@ -433,7 +433,8 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       // Immediately remove revoked/expired entries while new media loads.
       setState((){
         final active={for(final m in moments)m.id:m};
-        _expandedComments.removeWhere((id)=>!stable.contains(id)||!active.containsKey(id));
+        _expandedComments.removeWhere((id)=>!stable.contains(id)||!active.containsKey(id)||
+          previous[id]?.interactionContext!=active[id]?.interactionContext);
         _likeOverrides.removeWhere((id,_)=>!stable.contains(id));
         _commentOverrides.removeWhere((id,_)=>!stable.contains(id));
         _items=moments;_rail=rail;
@@ -707,7 +708,10 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       moment:moment,repository:_repo,
       onClose:()=>setState(()=>_expandedComments.remove(item.id)),
       onCountChanged:(count){
-        if(!mounted||_feedMoment(item.id)?.interactionContext!=moment.interactionContext)return;
+        final current=_feedMoment(item.id);
+        if(!mounted||current==null||current.interactionContext!=moment.interactionContext||
+           current.audienceRevision!=moment.audienceRevision||!_expandedComments.contains(item.id))return;
+        if((_commentOverrides[item.id]??current.commentCount)==count)return;
         setState((){_commentOverrides[item.id]=count;++_engagementMutation;});
       },
     );

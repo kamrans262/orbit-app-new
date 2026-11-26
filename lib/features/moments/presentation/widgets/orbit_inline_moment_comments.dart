@@ -77,7 +77,12 @@ class _OrbitInlineMomentCommentsState extends State<OrbitInlineMomentComments> w
         _scope=null;_owner=null;_lines=[];_names.clear();_input.clear();_parent=null;
         _loading=false;_error='Comments are unavailable. Try again.';
       });
-    }finally{_checking=false;}
+    }finally{
+      _checking=false;
+      if(mounted&&epoch!=_epoch&&_loading&&WidgetsBinding.instance.lifecycleState==AppLifecycleState.resumed){
+        unawaited(_load());
+      }
+    }
   }
 
   Future<void> _send()async{
@@ -109,7 +114,11 @@ class _OrbitInlineMomentCommentsState extends State<OrbitInlineMomentComments> w
     if(scope==null||owner==null||_sending||_checking)return;
     setState(()=>_sending=true);
     try{
+      if(await widget.repository.currentUserId()!=owner||
+          !await widget.repository.remainsAuthorized(scope))throw StateError('Audience changed');
       await widget.repository.deleteComment(scope,line.id);
+      if(!await widget.repository.remainsAuthorized(scope)||
+          await widget.repository.currentUserId()!=owner)throw StateError('Audience changed');
       if(!mounted||epoch!=_epoch)return;
       setState((){
         _lines.removeWhere((entry)=>entry.id==line.id);
