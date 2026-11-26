@@ -180,7 +180,7 @@ private func sanitizeOrbitMp4(_ path:String,_ output:String,muted:Bool,completio
   guard let export=AVAssetExportSession(asset:composition,presetName:AVAssetExportPresetPassthrough),
         export.supportedFileTypes.contains(.mp4) else{completion(false);return}
   export.outputURL=destination;export.outputFileType = .mp4
-  export.metadata=[];export.shouldOptimizeForNetwork=true
+  export.metadata=[];export.shouldOptimizeForNetworkUse=true
   export.exportAsynchronously {
     let success=export.status == .completed
     if !success { try? FileManager.default.removeItem(at:destination) }

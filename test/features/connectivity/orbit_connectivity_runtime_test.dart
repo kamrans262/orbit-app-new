@@ -44,6 +44,9 @@ void main() {
 
     expect(find.text('Underlying Screen'), findsOneWidget);
     expect(find.text('You’re Offline'), findsOneWidget);
+    // testWidgets checks pending fake timers before package tearDown runs.
+    OrbitConnectivityNavigatorObserver.autoMonitorEnabled = false;
+    observer.resetSessionState();
   });
 
   testWidgets('online state does not show offline popup', (tester) async {
@@ -64,6 +67,8 @@ void main() {
 
     expect(find.text('Online Screen'), findsOneWidget);
     expect(find.text('You’re Offline'), findsNothing);
+    OrbitConnectivityNavigatorObserver.autoMonitorEnabled = false;
+    observer.resetSessionState();
   });
   testWidgets('camera capture never opens global offline dialog and stale background probes are ignored',(tester)async{
     final pending=Completer<bool>();
