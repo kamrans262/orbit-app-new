@@ -747,7 +747,10 @@ class OrbitMomentRepository {
     }
     return values;
   }
-  Future<String> comment(OrbitLiveMoment item,String text,{String? parent}) async {
+  Future<void> comment(OrbitLiveMoment item,String text,{String? parent}) async {
+    await commentWithReceipt(item,text,parent:parent);
+  }
+  Future<String> commentWithReceipt(OrbitLiveMoment item,String text,{String? parent}) async {
     final result=await _api('POST','/moments/'+Uri.encodeComponent(item.id)+'/comments',
       key:_uuid.v4(),body:{
         'context_id':item.contextId,

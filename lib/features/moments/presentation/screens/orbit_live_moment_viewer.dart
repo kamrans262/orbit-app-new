@@ -17,7 +17,7 @@ import '../../data/orbit_moment_repository.dart';
 import '../widgets/orbit_private_moment_player.dart';
 
 /// Private viewer reuses the existing Orbit detail scaffold, action icons and
-/// approved modal-sheet shapes. No share/public URL, preview mock, or new theme.
+/// approved detail components. Shared HTTPS references never grant media access.
 class OrbitLiveMomentViewer extends StatefulWidget {
   const OrbitLiveMomentViewer({required this.moment,required this.repository,
     required this.author,this.playlist=const [],this.initialIndex=0,
@@ -55,6 +55,9 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
   final Map<String,String> _commentNames={};
   String? _commentError,_replyingTo;
   String? _commentViewer;
+  OrbitLiveMoment? _commentMoment;
+  String? _commentContext;
+  bool _openedInitialComments=false;
   int _commentEpoch=0;
   Timer? _revalidation;
   int _loadEpoch=0;
@@ -107,6 +110,13 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
     final valid=await widget.repository.remainsAuthorized(moment);
     _reauthorizing=false;
     if(!mounted || epoch!=_loadEpoch || _current.id!=moment.id)return;
+    if(valid&&_commentsOpen&&_commentMoment!=null){
+      final scoped=_commentMoment!;
+      if(!await widget.repository.remainsAuthorized(scoped)){
+        if(mounted&&epoch==_loadEpoch&&identical(_commentMoment,scoped))setState(_resetComments);
+      }
+      return;
+    }
     if(!valid){
       _advance?.cancel();_progress.stop();
       setState((){
@@ -155,7 +165,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
     if(_current.mediaKind=='image')_progress.forward();
   }
   void _move(int amount){
-    if(!mounted || widget.playlist.isEmpty)return;
+    if(!mounted || widget.playlist.isEmpty||_commentsOpen)return;
     final to=_index+amount;
     if(to<0)return;
     if(to>=widget.playlist.length){
@@ -224,7 +234,9 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
           _loading=false;
         });
         widget.onViewed?.call(current.id);
-        if(widget.openComments&&!_commentsOpen){unawaited(_commentSheet());}else{_schedule();}
+        if(widget.openComments&&!_openedInitialComments){
+          _openedInitialComments=true;unawaited(_commentSheet());
+        }else{_paused=false;_schedule();}
         if(current.mediaKind=='image'){
           unawaited(_upgradeOriginal(current,epoch));
         }
@@ -275,7 +287,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
     ++_commentEpoch;
     _commentsOpen=false;_commentsLoading=false;_commentSending=false;
     _comments=[];_commentNames.clear();_commentError=null;_replyingTo=null;
-    _commentViewer=null;_commentInput.clear();
+    _commentViewer=null;_commentMoment=null;_commentContext=null;_commentInput.clear();
   }
 
   Future<void> _commentSheet() async {
@@ -288,11 +300,27 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
     await _loadComments();
   }
 
-  Future<void> _loadComments() async{
-    final item=_current;
+  List<String> get _commentContexts=>!_isOwner?[_current.contextId]:[
+    if(_ownerAudienceKind=='accepted_friends'||_ownerAudienceKind=='selected_friends')'friends',
+    if(_ownerAudienceKind=='selected_circles')..._ownerTargets.map((id)=>'circle:$id'),
+    'self',
+  ];
+  String _contextLabel(String value){
+    if(value=='friends')return 'Friends';
+    if(value=='self')return 'Only Me';
+    return 'Circle ${'${_commentContexts.indexOf(value)+1}'}';
+  }
+
+  Future<void> _loadComments({String? contextId}) async{
+    final current=_current;
+    final scope=contextId??_commentContext??_commentContexts.first;
     final epoch=++_commentEpoch;
-    setState((){_commentsLoading=true;_commentError=null;});
+    setState((){_commentsLoading=true;_commentError=null;
+      _comments=[];_commentNames.clear();_replyingTo=null;_commentContext=scope;
+      _commentMoment=null;_commentViewer=null;});
     try{
+      final item=scope==current.contextId?current:
+        await widget.repository.notificationMoment(current.id,scope);
       final viewer=await widget.repository.currentUserId();
       if(viewer==null||!await widget.repository.remainsAuthorized(item))throw StateError('Not authorized');
       final lines=await widget.repository.allComments(item);
@@ -305,7 +333,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
       if(!await widget.repository.remainsAuthorized(item)||await widget.repository.currentUserId()!=viewer)throw StateError('Not authorized');
       if(!mounted||epoch!=_commentEpoch||!_commentsOpen)return;
       setState((){
-        _comments=lines;_commentNames.addAll(names);_commentViewer=viewer;
+        _comments=List.of(lines);_commentNames.addAll(names);_commentViewer=viewer;_commentMoment=item;
         _commentsLoading=false;
       });
     }catch(_){
@@ -318,12 +346,12 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
 
   Future<void> _sendComment() async{
     final text=_commentInput.text.trim();
-    if(text.isEmpty||text.length>280||_commentSending||_commentsLoading||_commentViewer==null)return;
-    final item=_current,epoch=_commentEpoch,viewer=_commentViewer!,parent=_replyingTo;
+    if(text.isEmpty||text.length>280||_commentSending||_commentsLoading||_commentViewer==null||_commentMoment==null)return;
+    final item=_commentMoment!,epoch=_commentEpoch,viewer=_commentViewer!,parent=_replyingTo;
     setState(()=>_commentSending=true);
     try{
       if(await widget.repository.currentUserId()!=viewer||!await widget.repository.remainsAuthorized(item))throw StateError('Not authorized');
-      final id=await widget.repository.comment(item,text,parent:parent);
+      final id=await widget.repository.commentWithReceipt(item,text,parent:parent);
       if(!mounted||epoch!=_commentEpoch||!_commentsOpen||_current.id!=item.id)return;
       if(!await widget.repository.remainsAuthorized(item)||await widget.repository.currentUserId()!=viewer)throw StateError('Not authorized');
       if(!mounted||epoch!=_commentEpoch||!_commentsOpen)return;
@@ -339,7 +367,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
   }
 
   Widget _commentsPanel(){
-    final item=_current;
+    final item=_commentMoment??_current;
     return Material(
       color:AppColors.background,borderRadius:BorderRadius.circular(16),
       child:Padding(padding:const EdgeInsets.symmetric(vertical:8),
@@ -348,6 +376,11 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
             Expanded(child:Text('Moment comments',style:AppTypography.smallHeading)),
             IconButton(tooltip:'Close comments',onPressed:()=>unawaited(_commentSheet()),icon:const Icon(Icons.close_rounded)),
           ]),
+          if(_isOwner&&_commentContexts.length>1)DropdownButton<String>(
+            value:_commentContext??_commentContexts.first,
+            isExpanded:true,
+            items:[for(final scope in _commentContexts)DropdownMenuItem(value:scope,child:Text(_contextLabel(scope),style:AppTypography.body))],
+            onChanged:_commentSending?null:(scope){if(scope!=null)unawaited(_loadComments(contextId:scope));}),
           if(_commentError!=null)Row(children:[
             Expanded(child:Text(_commentError!,style:AppTypography.bodyMuted)),
             TextButton(onPressed:_commentSending?null:()=>unawaited(_loadComments()),child:const AppGradientActionLabel('Retry')),
@@ -376,7 +409,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
                       }catch(_){if(mounted)_notice('Comment could not be deleted.');}
                     }),
                   IconButton(tooltip:'Report this private comment',icon:const Icon(Icons.flag_outlined),
-                    onPressed:()=>unawaited(_reportSheet(commentId:line.id))),
+                    onPressed:()=>unawaited(_reportSheet(commentId:line.id,commentMoment:item))),
                 ]),
               );
             })),
@@ -416,7 +449,13 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
             color:AppColors.primaryEnd,backgroundColor:AppColors.primaryEnd.withValues(alpha:0.18))))),
     ]));
   }
-  Future<void> _reportSheet({String? commentId,bool account=false}) async {
+  Future<void> _reportSheet({String? commentId,bool account=false,OrbitLiveMoment? commentMoment}) async {
+    final reportMoment=commentMoment??_current;
+    final wasPaused=_paused;_pause(true);
+    try{await _reportSheetBody(reportMoment:reportMoment,commentId:commentId,account:account);}
+    finally{if(mounted)_pause(wasPaused);}
+  }
+  Future<void> _reportSheetBody({required OrbitLiveMoment reportMoment,String? commentId,bool account=false}) async {
     const reasons=<String,String>{
       'spam':'Spam','harassment':'Harassment','threat':'Threats',
       'scam':'Scam','impersonation':'Impersonation',
@@ -499,7 +538,7 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
       }
     }
     try{
-      await widget.repository.report(_current,code,
+      await widget.repository.report(reportMoment,code,
         commentId:commentId,account:account,
         volunteeredPreview:includePreview?evidence:null);
       if(mounted)_notice('Your report has been submitted.');
@@ -552,6 +591,10 @@ class _OrbitLiveMomentViewerState extends State<OrbitLiveMomentViewer> with Widg
 
   Future<void> _ownerActions() async {
     if(!_isOwner || !mounted)return;
+    final wasPaused=_paused;_pause(true);
+    try{await _ownerActionsBody();}finally{if(mounted)_pause(wasPaused);}
+  }
+  Future<void> _ownerActionsBody() async {
     final action=await showModalBottomSheet<String>(
       context:context,useSafeArea:true,
       backgroundColor:AppColors.background,

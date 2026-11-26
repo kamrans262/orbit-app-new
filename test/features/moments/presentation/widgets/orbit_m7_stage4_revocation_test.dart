@@ -10,6 +10,11 @@ final class _FakeMoments extends OrbitMomentRepository {
   bool authorized=true;
   String? activeUser;
   bool removedMoment=false;
+  int sent=0;
+  @override
+  Future<List<({String id,String author,String body,String? parent})>> allComments(OrbitLiveMoment item,{int max=150}) async => [];
+  @override
+  Future<String> commentWithReceipt(OrbitLiveMoment item,String text,{String? parent}) async {sent++;return 'confirmed-comment';}
 
   @override
   Future<String?> currentUserId() async => activeUser;
@@ -87,6 +92,23 @@ void main() {
     expect(find.text('Private Moment caption'),findsNothing);
     expect(find.textContaining('unavailable or access has changed'),findsOneWidget);
     expect(find.byType(Image),findsNothing);
+  });
+
+  testWidgets('comments expand inline and show only a confirmed sent comment',(tester) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    final repo=_FakeMoments()..activeUser='viewer';
+    final item=OrbitLiveMoment(id:'moment-comments',creatorId:'owner',mediaId:'media',contextId:'friends',
+      publishedAt:DateTime.now());
+    await tester.pumpWidget(MaterialApp(home:OrbitLiveMomentViewer(moment:item,repository:repo,author:'Friend',openComments:true)));
+    await tester.pumpAndSettle();
+    expect(find.text('Moment comments'),findsOneWidget);
+    await tester.enterText(find.byType(TextField),'Great moment');
+    await tester.tap(find.byTooltip('Send comment'));
+    await tester.pumpAndSettle();
+    expect(repo.sent,1);
+    expect(find.text('Great moment'),findsOneWidget);
+    expect(find.text('Moment comments'),findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   testWidgets('Stage 4 evicts visible decrypted caption on app background',

@@ -372,6 +372,17 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
       }
       if(await _repo.currentUserId()!=owner)throw OrbitIdentityException('Moment account changed.',401);
       if(!mounted||epoch!=_loadEpoch)return;
+      List<({String activityId,OrbitCheckInRecord record,DateTime at})>
+          activityCheckIns=const [];
+      try {
+        activityCheckIns=await _loadActivityCheckIns();
+      }on OrbitIdentityException catch(e){
+        if(e.statusCode==401||e.statusCode==403||e.statusCode==409)rethrow;
+        // An unapplied M18 backend must not break the existing M7 feed.
+      }catch(_){
+        // Never show a previous M18 Activity cache after a failed refresh.
+      }
+      if(!mounted||epoch!=_loadEpoch)return;
       // Immediately remove revoked/expired entries while new media loads.
       setState((){
         _items=moments;_rail=rail;
@@ -383,7 +394,7 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         }
         _captions.removeWhere((id,_)=>!stable.contains(id));
         _places.removeWhere((id,_)=>!stable.contains(id));
-        _activityCheckIns=const [];
+        _activityCheckIns=activityCheckIns;
       });
       final retained=Set<Uint8List>.identity()..addAll(_previews.values);
       previews.addAll(_previews);
@@ -441,16 +452,6 @@ class _OrbitLiveMomentsScreenState extends State<OrbitLiveMomentsScreen> with Wi
         }
       }catch(_){}
       if(!mounted || epoch!=_loadEpoch)return;
-      List<({String activityId,OrbitCheckInRecord record,DateTime at})>
-          activityCheckIns=const [];
-      try {
-        activityCheckIns=await _loadActivityCheckIns();
-      }on OrbitIdentityException catch(e){
-        if(e.statusCode==401||e.statusCode==403||e.statusCode==409)rethrow;
-        // An unapplied M18 backend must not break the existing M7 feed.
-      }catch(_){
-        // Never show a previous M18 Activity cache after a failed refresh.
-      }
       if(!mounted || epoch!=_loadEpoch)return;
       if(await _repo.currentUserId()!=owner)throw OrbitIdentityException('Moment account changed.',401);
       if(!mounted||epoch!=_loadEpoch)return;
