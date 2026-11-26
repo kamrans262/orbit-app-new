@@ -1466,7 +1466,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     if (_publishSheetOpen || _exportingPhoto || !mounted) return;
     if(captured!=null&&!_cameraToolsAllowed){_showToolHint('Choose an available filter or remove unavailable stickers before continuing.');return;}
     setState(()=>_publishSheetOpen=true);
-    if(widget.enableCamera&&await _checkedOwner()==null){_publishSheetOpen=false;if(mounted)_showToolHint('Sign in again before using this capture.');return;}
+    if(widget.enableCamera&&await _checkedOwner()==null){if(mounted){setState(()=>_publishSheetOpen=false);_showToolHint('Sign in again before using this capture.');}return;}
     if(!mounted)return;
     _endInk();_saveCameraEdits();
     Uint8List editedPhoto=captured??Uint8List(0);
@@ -1476,23 +1476,23 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
       } catch (error) {
         // Debug builds identify a rendering failure without exposing photo bytes.
         assert(() { debugPrint('Orbit photo editor export: ${error.runtimeType}: $error'); return true; }());
-        _publishSheetOpen=false;
+        if(mounted)setState(()=>_publishSheetOpen=false);
         _showToolHint('Could not save photo edits. Please try again.');
         return;
       }
     }
     if(!mounted)return;
-    if(captured!=null&&!_cameraToolsAllowed){_publishSheetOpen=false;_showToolHint('Camera tools changed. Review your edits before continuing.');return;}
+    if(captured!=null&&!_cameraToolsAllowed){setState(()=>_publishSheetOpen=false);_showToolHint('Camera tools changed. Review your edits before continuing.');return;}
     // Explicit integrations receive the final photo with graphic edits.
     final legacySend=widget.onSendPressed;
     if(legacySend!=null && captured!=null){
       legacySend(editedPhoto);
-      _publishSheetOpen=false;
+      if(mounted)setState(()=>_publishSheetOpen=false);
       return;
     }
     // Step7:photo-publishing-flow â€” the camera and its permission lifecycle
     // stay mounted under this sheet; no additional camera instance is created.
-    _publishSheetOpen = true;
+    var committed=false;
     try {
       final loadAudience=widget.audienceLoader;
       // The camera preview is local; fetching live recipients is the first
@@ -1529,6 +1529,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
           await _captureVault.saveEdits(id,edits);
         }:null,
         onCommitted:widget.enableCamera ? () async {
+          committed=true;
           final id=_captureClientId;
           if(id!=null)await _captureVault.clearIfCurrent(id);
           _captureClientId=null;
@@ -1537,7 +1538,10 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
     } catch (_) {
       if(mounted)_showToolHint('Unable to prepare your Moment. Try again.');
     } finally {
-      if(mounted)setState(()=>_publishSheetOpen=false);
+      if(mounted){
+        setState(()=>_publishSheetOpen=false);
+        if(committed)await _retake();
+      }
     }
   }
 
@@ -1759,6 +1763,7 @@ class _MomentCameraScreenState extends State<MomentCameraScreen>
   Widget _buildCameraBackground() {
     final captured = _capturedBytes;
     if(_capturedClip!=null&&!_recording&&!_recordStarting){
+      if(_publishSheetOpen)return const ColoredBox(color:Colors.black);
       return ColoredBox(color:Colors.black,
         child:OrbitMomentDraftPlayer(
           key:ValueKey(_capturedClip!.path),

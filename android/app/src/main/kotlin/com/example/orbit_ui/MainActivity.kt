@@ -184,12 +184,12 @@ private fun sanitizeOrbitMp4(input:String,output:String,muted:Boolean){
             if(index<0)break
             val out=tracks[index]?:error("track")
             val time=extractor.sampleTime
-            require(time>=0 && extractor.sampleFlags and MediaExtractor.SAMPLE_FLAG_ENCRYPTED==0)
+            require(time>=0 && (extractor.sampleFlags and MediaExtractor.SAMPLE_FLAG_ENCRYPTED)==0)
             buffer.clear()
             val size=extractor.readSampleData(buffer,0)
             require(size in 1..buffer.capacity())
             buffer.position(0);buffer.limit(size)
-            info.set(0,size,time,if(extractor.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC!=0)
+            info.set(0,size,time,if((extractor.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC)!=0)
                 android.media.MediaCodec.BUFFER_FLAG_KEY_FRAME else 0)
             target.writeSampleData(out,buffer,info)
             if(!extractor.advance())break

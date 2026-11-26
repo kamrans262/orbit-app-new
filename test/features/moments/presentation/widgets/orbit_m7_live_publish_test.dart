@@ -148,7 +148,12 @@ void main() {
           }),child:const Text('Open'))))));
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
-    expect(find.text('Video ready to encrypt'),findsOneWidget);
+    expect(find.text('Video preview'),findsOneWidget);
+    expect(find.text('Video ready to encrypt'),findsNothing);
+    expect(tester.getTopLeft(find.text('Publish Moment')).dy,
+      lessThan(tester.getTopLeft(find.byKey(MomentPublishKeys.chooseAudience)).dy));
+    expect(tester.getTopLeft(find.byKey(MomentPublishKeys.chooseAudience)).dy,
+      lessThan(tester.getTopLeft(find.text('Retake / Back to Camera')).dy));
     await tester.tap(find.text('Publish Moment'));
     await tester.pump();
     expect(captured?.mediaKind,'video');
@@ -156,6 +161,37 @@ void main() {
     expect(captured?.mediaFile?.path,source.path);
   });
 
+
+  testWidgets('video settings and capture ID survive Back to Review and actual retry',(tester)async{
+    await tester.binding.setSurfaceSize(const Size(390,844));
+    addTearDown(()=>tester.binding.setSurfaceSize(null));
+    final source=File('orbit-m7-retry-video.mp4');
+    final requests=<MomentPublishRequest>[];
+    await tester.pumpWidget(MaterialApp(home:Scaffold(body:Builder(builder:(context)=>
+      TextButton(onPressed:()=>showMomentPublishingSheet(context,
+        photoBytes:Uint8List(0),mediaFile:source,mediaKind:'video',
+        durationMs:5000,enableNativePreview:false,circles:const [],
+        privacyAudience:'Nobody',publisher:(request,progress)async{
+          requests.add(request);
+          if(requests.length<3)throw const FormatException('Export interrupted');
+          return const MomentPublishReceipt(momentId:'server-confirmed-video');
+        }),child:const Text('Open'))))));
+    await tester.tap(find.text('Open'));await tester.pumpAndSettle();
+    final saver=find.text('Save mobile data'),mute=find.text('Mute video audio');
+    await tester.ensureVisible(saver);await tester.tap(saver);await tester.pumpAndSettle();
+    await tester.ensureVisible(mute);await tester.tap(mute);await tester.pumpAndSettle();
+    await tester.tap(find.text('Publish Moment'));await tester.pumpAndSettle();
+    expect(find.text('Publishing interrupted'),findsOneWidget);
+    await tester.tap(find.text('Back to Review'));await tester.pumpAndSettle();
+    await tester.ensureVisible(mute);
+    expect(tester.widget<SwitchListTile>(find.ancestor(of:mute,matching:find.byType(SwitchListTile))).value,true);
+    await tester.tap(find.text('Publish Moment'));await tester.pumpAndSettle();
+    await tester.tap(find.byKey(MomentPublishKeys.retry));await tester.pumpAndSettle();
+    expect(requests.length,3);
+    expect(requests.map((r)=>r.clientId).toSet().length,1);
+    expect(requests.every((r)=>r.mediaFile?.path==source.path&&r.dataSaver&&r.muteVideo),true);
+    expect(find.text('Your Moment is live'),findsOneWidget);
+  });
 
   testWidgets('rate limited publication blocks retries until cooldown, reuses client ID',
       (tester) async {

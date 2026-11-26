@@ -325,20 +325,23 @@ class OrbitMomentRepository {
       throw StateError('Invalid Moment audience.');
     if((audience=='selected_circles'||audience=='selected_friends')&&targets.isEmpty)
       throw StateError('Select an audience first.');
+    // A successful earlier request is authoritative even when the local
+    // clip was removed after acknowledgment or sharing settings changed.
+    final owner=initialOwner;
+    final confirmed=await _existingReceipt(request.clientId);
+    if(await _identity.currentLocalSocialOwner()!=owner)throw StateError('Capture account changed.');
+    if(confirmed!=null){
+      progress(1);
+      return MomentPublishReceipt(momentId:confirmed);
+    }
     final options=await audienceOptions();
     if(audience=='selected_circles'&&!options.circlesEnabled ||
         (audience=='selected_friends'||audience=='accepted_friends')&&!options.friendsEnabled) {
       throw StateError('Update Moment sharing in Privacy Settings first.');
     }
-    final owner=await _identity.currentLocalSocialOwner();
-    if(owner==null||owner!=initialOwner)throw StateError('Sign in to the original capture account.');
-    // Recovered pre-publish captures reuse the original client UUID. If a
-    // previous attempt already committed on the server, never stage/upload
-    // new ciphertext or create a second Moment from the same draft.
-    final confirmed=await _existingReceipt(request.clientId);
-    if(confirmed!=null){
-      progress(1);
-      return MomentPublishReceipt(momentId:confirmed);
+    if(await _identity.currentLocalSocialOwner()!=owner)throw StateError('Capture account changed.');
+    if(request.mediaKind!='image'&&(request.mediaFile==null||!await request.mediaFile!.exists())){
+      throw const FileSystemException('Captured clip is no longer available.');
     }
     final sourceHash=request.mediaKind=='image'?hashes.sha256.convert(request.photoBytes):
       await hashes.sha256.bind(request.mediaFile!.openRead()).first;
