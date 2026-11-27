@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:orbit_ui/core/widgets/app_two_option_segmented_control.dart';
+import 'package:orbit_ui/core/widgets/app_screen_header.dart';
+import 'package:orbit_ui/core/widgets/app_primary_button.dart';
+import 'package:orbit_ui/features/plans/presentation/screens/orbit_live_plans_screen.dart';
 import 'package:orbit_ui/app/routing/app_routes.dart';
 import 'package:orbit_ui/features/auth/data/orbit_identity_client.dart';
 import 'package:orbit_ui/features/home/domain/models/home_models.dart';
@@ -41,6 +45,28 @@ class FakePlanIdentity extends OrbitIdentityClient {
 }
 
 void main(){
+  testWidgets('Plans empty state centered and existing tab style', (tester)async{
+    final identity=FakePlanIdentity()..handler=(_,__,___)=>{'data':[], 'meta':{'next_cursor':null}};
+    await tester.pumpWidget(MaterialApp(home:OrbitLivePlansScreen(identity:identity,
+      repository:OrbitPlanRepository(identity:identity))));
+    await tester.pumpAndSettle();
+    expect(find.byType(AppTwoOptionSegmentedControl),findsOneWidget);
+    expect(tester.widget<AppScreenHeader>(find.byType(AppScreenHeader)).prominent,isFalse);
+    final empty=find.byKey(const Key('plans_empty_state'));
+    final button=find.byType(AppPrimaryButton);
+    final tabs=find.byType(AppTwoOptionSegmentedControl);
+    expect(find.text('No upcoming plans yet.'),findsOneWidget);
+    expect(tester.getCenter(empty).dx,closeTo(tester.getCenter(find.byType(Scaffold)).dx,0.1));
+    expect(tester.getRect(find.byType(Scaffold)).bottom-tester.getRect(button).bottom,30);
+    expect(tester.getCenter(empty).dy,
+      closeTo((tester.getRect(tabs).bottom+20+tester.getRect(button).top-12)/2,1));
+    await tester.tap(find.byKey(const Key('plans_past_tab')));
+    await tester.pumpAndSettle();
+    expect(find.text('No past plans yet.'),findsOneWidget);
+    expect(identity.lastPath,contains('tab=past'));
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   test('M15 parses only valid private Plan identities, times and roster',(){
     final p=OrbitPlan.fromJson(record());
     expect(p.id,'plan-1');

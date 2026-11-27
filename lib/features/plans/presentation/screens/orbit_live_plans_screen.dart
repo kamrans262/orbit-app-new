@@ -7,6 +7,8 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_screen_header.dart';
 import '../../../../core/widgets/app_primary_button.dart';
+import '../../../../core/widgets/app_circular_icon_button.dart';
+import '../../../../core/widgets/app_two_option_segmented_control.dart';
 import '../../../auth/data/orbit_identity_client.dart';
 import '../../../home/domain/models/home_models.dart';
 import '../../../home/presentation/widgets/upcoming_plan_card.dart';
@@ -130,33 +132,26 @@ WidgetsBinding.instance.addObserver(this);unawaited(_load());}
     backgroundColor:AppColors.background,
     body:SafeArea(child:Center(child:ConstrainedBox(
       constraints:const BoxConstraints(maxWidth:650),
-      child:Padding(padding:const EdgeInsets.fromLTRB(20,20,20,12),
+      child:Padding(padding:const EdgeInsets.fromLTRB(20,20,20,30),
         child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
           Row(children:[
-            const Expanded(child:AppScreenHeader(title:'Plans',prominent:true)),
-            IconButton(
-              tooltip:'Plan reminder settings',
-              icon:const Icon(Icons.notifications_active_outlined,
-                color:AppColors.primaryEnd),
-              onPressed:()=>Navigator.of(context).pushNamed(AppRoutes.planReminders),
-            ),
+            const Expanded(child:AppScreenHeader(title:'Plans')),
+            const SizedBox(width:10),
+            AppCircularIconButton(
+              semanticLabel:'Plan reminder settings',
+              icon:Icons.notifications_active_outlined,iconSize:24,
+              iconColor:AppColors.primaryEnd,iconGradient:AppColors.primaryGradient,
+              onPressed:()=>Navigator.of(context).pushNamed(AppRoutes.planReminders)),
           ]),
-          const SizedBox(height:18),
-          Row(children:[
-            for(final tab in const ['upcoming','past'])...[
-              Expanded(child:ChoiceChip(
-                label:Center(child:Text(tab=='upcoming'?'Upcoming':'Past')),
-                selected:_tab==tab,
-                selectedColor:const Color(0xFFF0E8FF),
-                labelStyle:AppTypography.body.copyWith(
-                  color:_tab==tab?AppColors.primaryEnd:AppColors.textPrimary,
-                  fontWeight:FontWeight.w600),
-                onSelected:(_){if(_tab!=tab){setState(()=>_tab=tab);unawaited(_load());}},
-              )),
-              if(tab=='upcoming')const SizedBox(width:10),
-            ],
-          ]),
-          const SizedBox(height:16),
+          const SizedBox(height:20),
+          AppTwoOptionSegmentedControl(
+            firstLabel:'Upcoming',secondLabel:'Past',
+            firstKey:const Key('plans_upcoming_tab'),secondKey:const Key('plans_past_tab'),
+            firstSelected:_tab=='upcoming',onChanged:(first){
+              final tab=first?'upcoming':'past';
+              if(_tab!=tab){setState(()=>_tab=tab);unawaited(_load());}
+            }),
+          const SizedBox(height:20),
           if(_offline)Padding(padding:const EdgeInsets.only(bottom:12),
             child:Text('Offline — last verified Plans, read-only. Refresh to check access.',
               style:AppTypography.bodyMuted)),
@@ -167,7 +162,14 @@ WidgetsBinding.instance.addObserver(this);unawaited(_load());}
                   Text(_error!,style:AppTypography.bodyMuted,textAlign:TextAlign.center),
                   TextButton(onPressed:()=>unawaited(_load()),child:const AppGradientActionLabel('Retry')),
                 ]))
-              :RefreshIndicator(onRefresh:_load,child:ListView.separated(
+              :_items.isEmpty&&_cursor==null
+                ?RefreshIndicator(onRefresh:_load,child:CustomScrollView(
+                  physics:const AlwaysScrollableScrollPhysics(),
+                  slivers:[SliverFillRemaining(hasScrollBody:false,
+                    child:Center(child:Text('No '+_tab+' plans yet.',
+                      key:const Key('plans_empty_state'),style:AppTypography.bodyMuted,
+                      textAlign:TextAlign.center)))]))
+                :RefreshIndicator(onRefresh:_load,child:ListView.separated(
                 physics:const AlwaysScrollableScrollPhysics(),
                 itemCount:_items.length+(_cursor!=null?1:0),
                 separatorBuilder:(_,__)=>const SizedBox(height:10),
@@ -183,9 +185,6 @@ WidgetsBinding.instance.addObserver(this);unawaited(_load());}
                     onTap:()=>unawaited(_open(p.id)));
                 },
               ))),
-          if(!_loading&&_items.isEmpty&&_error==null)
-            Padding(padding:const EdgeInsets.only(top:12),
-              child:Text('No '+_tab+' plans yet.',style:AppTypography.bodyMuted)),
           const SizedBox(height:12),
           AppPrimaryButton(label:'Create Plan',
             enabled:!_offline,onPressed:()=>unawaited(_create())),

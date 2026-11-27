@@ -20,6 +20,7 @@ class AppTextField extends StatefulWidget {
     this.textCapitalization = TextCapitalization.none,
     this.inputFormatters,
     this.maxLines = 1,
+    this.showOutline = false,
     this.obscureText = false,
     this.validator,
     this.enabled = true,
@@ -53,6 +54,7 @@ class AppTextField extends StatefulWidget {
   final TextCapitalization textCapitalization;
   final List<TextInputFormatter>? inputFormatters;
   final int maxLines;
+  final bool showOutline;
   final bool obscureText;
   final FormFieldValidator<String>? validator;
   final bool enabled;
@@ -171,6 +173,9 @@ class _AppTextFieldState extends State<AppTextField> {
                   decoration: BoxDecoration(
                     color: AppColors.white,
                     borderRadius: BorderRadius.circular(AppTextField.radius),
+                    border: widget.showOutline ? Border.all(
+                      color: AppColors.primaryEnd.withValues(alpha:0.16),
+                    ) : null,
                     boxShadow: const <BoxShadow>[
                       BoxShadow(
                         color: AppTextField.fieldShadowColor,

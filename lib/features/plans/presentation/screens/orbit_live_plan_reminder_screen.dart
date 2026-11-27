@@ -5,6 +5,7 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_screen_header.dart';
 import '../../../../core/widgets/app_primary_button.dart';
+import '../../../circles/presentation/widgets/circle_setting_toggle.dart';
 import '../../../auth/data/orbit_identity_client.dart';
 import '../../data/orbit_plan_repository.dart';
 
@@ -74,9 +75,9 @@ class _OrbitLivePlanReminderScreenState extends State<OrbitLivePlanReminderScree
     backgroundColor:AppColors.background,
     body:SafeArea(child:Center(child:ConstrainedBox(
       constraints:const BoxConstraints(maxWidth:650),
-      child:Padding(padding:const EdgeInsets.fromLTRB(20,20,20,12),
+      child:Padding(padding:const EdgeInsets.fromLTRB(20,20,20,30),
         child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-          const AppScreenHeader(title:'Plan Reminders',prominent:true),
+          const AppScreenHeader(title:'Plan Reminders'),
           const SizedBox(height:16),
           Expanded(child:_loading?const Center(child:CircularProgressIndicator(
             color:AppColors.primaryEnd))
@@ -89,12 +90,13 @@ class _OrbitLivePlanReminderScreenState extends State<OrbitLivePlanReminderScree
           :ListView(children:[
             Container(decoration:BoxDecoration(color:Colors.white,
               borderRadius:BorderRadius.circular(20)),
-              child:SwitchListTile.adaptive(
+              child:ListTile(
                 title:Text('Plan reminders',style:AppTypography.body),
                 subtitle:Text('Get reminders for Plans you organize or join.',
                   style:AppTypography.bodyMuted),
-                activeTrackColor:AppColors.primaryEnd,
-                value:_enabled,onChanged:(x)=>setState(()=>_enabled=x))),
+                trailing:CircleSettingToggle(value:_enabled,
+                  semanticLabel:'Plan reminders',enabled:!_saving,
+                  onChanged:(x)=>setState(()=>_enabled=x)))),
             const SizedBox(height:20),
             Text('When to remind me',style:AppTypography.smallHeading),
             const SizedBox(height:10),

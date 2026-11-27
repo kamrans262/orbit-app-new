@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:orbit_ui/core/widgets/app_gradient_action_label.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_screen_header.dart';
 import '../../../../core/widgets/app_primary_button.dart';
+import '../../../../core/widgets/app_text_field.dart';
+import '../../../circles/presentation/widgets/orbit_circle_sheet.dart';
 import '../../../auth/data/orbit_identity_client.dart';
 import '../../../circles/data/orbit_circle_repository.dart';
 import '../../../friends/data/orbit_social_repository.dart';
@@ -167,10 +170,10 @@ class _OrbitLivePlanEditorScreenState extends State<OrbitLivePlanEditorScreen> w
     final initial=_start.isBefore(now)?now:_start;
     final date=await showDatePicker(context:context,
       initialDate:initial,firstDate:DateTime(now.year,now.month,now.day),
-      lastDate:DateTime(now.year+5));
+      lastDate:DateTime(now.year+5),builder:_pickerTheme);
     if(date==null||!mounted)return;
     final time=await showTimePicker(context:context,
-      initialTime:TimeOfDay.fromDateTime(_start));
+      initialTime:TimeOfDay.fromDateTime(_start),builder:_pickerTheme);
     if(time==null||!mounted)return;
     setState((){
       _start=DateTime(date.year,date.month,date.day,time.hour,time.minute);
@@ -180,10 +183,10 @@ class _OrbitLivePlanEditorScreenState extends State<OrbitLivePlanEditorScreen> w
   Future<void> _pickEnd() async {
     final date=await showDatePicker(context:context,
       initialDate:_end??_start,firstDate:_start,
-      lastDate:DateTime(_start.year+5));
+      lastDate:DateTime(_start.year+5),builder:_pickerTheme);
     if(date==null||!mounted)return;
     final time=await showTimePicker(context:context,
-      initialTime:TimeOfDay.fromDateTime(_end??_start.add(const Duration(hours:1))));
+      initialTime:TimeOfDay.fromDateTime(_end??_start.add(const Duration(hours:1))),builder:_pickerTheme);
     if(time==null||!mounted)return;
     final selected=DateTime(date.year,date.month,date.day,time.hour,time.minute);
     if(!selected.isAfter(_start)){
@@ -198,31 +201,27 @@ class _OrbitLivePlanEditorScreenState extends State<OrbitLivePlanEditorScreen> w
     MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(value));
 
   Future<bool> _review() async {
-    final result=await showModalBottomSheet<bool>(context:context,
-      isScrollControlled:true,backgroundColor:AppColors.background,
-      showDragHandle:true,builder:(sheet)=>SafeArea(child:Padding(
-        padding:const EdgeInsets.fromLTRB(20,10,20,22),
-        child:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,
-          children:[
-            Text(_editing?'Review changes':'Review Plan',style:AppTypography.smallHeading),
-            const SizedBox(height:14),
-            Text(_title.text.trim(),style:AppTypography.body),
-            const SizedBox(height:8),
-            Text(_label(_start),style:AppTypography.bodyMuted),
-            if(_end!=null)Text('Ends '+_label(_end!),style:AppTypography.bodyMuted),
-            if(_location.text.trim().isNotEmpty)
-              Text(_location.text.trim(),style:AppTypography.bodyMuted),
-            const SizedBox(height:8),
-            Text('Additional people: '+_selectedPeople.length.toString()+
-              ' · Circles: '+_selectedCircles.length.toString(),
-              style:AppTypography.bodyMuted),
-            const SizedBox(height:8),
-            Text('Invitations are delivered only when current privacy and Circle permissions permit.',
-              style:AppTypography.bodyMuted),
-            const SizedBox(height:20),
-            AppPrimaryButton(label:_editing?'Save changes':'Create Plan',
-              onPressed:()=>Navigator.of(sheet).pop(true)),
-          ]))));
+    final result=await showOrbitCircleSheet<bool>(context:context,
+      title:_editing?'Review changes':'Review Plan',
+      builder:(sheet)=>Column(mainAxisSize:MainAxisSize.min,
+        crossAxisAlignment:CrossAxisAlignment.start,children:[
+          Text(_title.text.trim(),style:AppTypography.body),
+          const SizedBox(height:8),
+          Text(_label(_start),style:AppTypography.bodyMuted),
+          if(_end!=null)Text('Ends '+_label(_end!),style:AppTypography.bodyMuted),
+          if(_location.text.trim().isNotEmpty)
+            Text(_location.text.trim(),style:AppTypography.bodyMuted),
+          const SizedBox(height:8),
+          Text('Additional people: '+_selectedPeople.length.toString()+
+            ' · Circles: '+_selectedCircles.length.toString(),
+            style:AppTypography.bodyMuted),
+          const SizedBox(height:8),
+          Text('Invitations are delivered only when current privacy and Circle permissions permit.',
+            style:AppTypography.bodyMuted),
+          const SizedBox(height:20),
+          AppPrimaryButton(label:_editing?'Save changes':'Create Plan',
+            onPressed:()=>Navigator.of(sheet).pop(true)),
+        ]));
     return result==true;
   }
   Future<void> _submit() async {
@@ -294,15 +293,27 @@ class _OrbitLivePlanEditorScreenState extends State<OrbitLivePlanEditorScreen> w
     if(mounted)Navigator.of(context).pop();
   }
 
-  InputDecoration _inputDecoration(String label)=>InputDecoration(
-    labelText:label,filled:true,fillColor:Colors.white,
-    border:OutlineInputBorder(borderRadius:BorderRadius.circular(12)));
   Widget _field(String label,TextEditingController controller,{
       int lines=1,int max=160,bool required=false})=>Padding(
     padding:const EdgeInsets.only(bottom:14),
-    child:TextFormField(controller:controller,maxLines:lines,maxLength:max,
-      style:AppTypography.body,decoration:_inputDecoration(label),
+    child:AppTextField(label:label,controller:controller,maxLines:lines,
+      showOutline:true,inputFormatters:[LengthLimitingTextInputFormatter(max)],
       validator:required?(v)=>(v??'').trim().isEmpty?'Required':null:null));
+
+  Widget _selectionSurface(Widget child)=>Padding(
+    padding:const EdgeInsets.only(bottom:10),
+    child:Material(color:AppColors.white,
+      shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(AppTextField.radius),
+        side:BorderSide(color:AppColors.primaryEnd.withValues(alpha:0.16))),
+      clipBehavior:Clip.antiAlias,child:child));
+
+  Widget _pickerTheme(BuildContext context,Widget? child)=>Theme(
+    data:Theme.of(context).copyWith(colorScheme:Theme.of(context).colorScheme.copyWith(
+      primary:AppColors.primaryEnd,onPrimary:AppColors.white,
+      primaryContainer:AppColors.primaryEnd.withValues(alpha:0.12),
+      onPrimaryContainer:AppColors.primaryEnd,surface:AppColors.white,
+      onSurface:AppColors.textPrimary)),
+    child:child??const SizedBox.shrink());
 
   @override
   Widget build(BuildContext context) {
@@ -310,9 +321,9 @@ class _OrbitLivePlanEditorScreenState extends State<OrbitLivePlanEditorScreen> w
     return Scaffold(backgroundColor:AppColors.background,
       body:SafeArea(child:Center(child:ConstrainedBox(
         constraints:const BoxConstraints(maxWidth:650),
-        child:Padding(padding:const EdgeInsets.fromLTRB(20,20,20,12),child:Column(
+        child:Padding(padding:const EdgeInsets.fromLTRB(20,20,20,30),child:Column(
           crossAxisAlignment:CrossAxisAlignment.start,children:[
-          AppScreenHeader(title:_editing?'Edit Plan':'Create Plan',prominent:true),
+          AppScreenHeader(title:_editing?'Edit Plan':'Create Plan'),
           const SizedBox(height:16),
           Expanded(child:_loading?const Center(child:CircularProgressIndicator(
               color:AppColors.primaryEnd))
@@ -325,13 +336,13 @@ class _OrbitLivePlanEditorScreenState extends State<OrbitLivePlanEditorScreen> w
               _field('Title',_title,required:true,max:120),
               _field('Description',_description,max:4000,lines:3),
               _field('Location / meeting place',_location,max:160),
-              ListTile(contentPadding:EdgeInsets.zero,
+              _selectionSurface(ListTile(contentPadding:const EdgeInsets.symmetric(horizontal:16),
                 leading:const Icon(Icons.event_outlined,color:AppColors.primaryEnd),
                 title:Text('Starts',style:AppTypography.bodyMuted),
                 subtitle:Text(_label(_start),style:AppTypography.body),
                 trailing:const Icon(Icons.chevron_right_rounded),
-                onTap:()=>unawaited(_pickStart())),
-              ListTile(contentPadding:EdgeInsets.zero,
+                onTap:()=>unawaited(_pickStart()))),
+              _selectionSurface(ListTile(contentPadding:const EdgeInsets.symmetric(horizontal:16),
                 leading:const Icon(Icons.event_available_outlined,
                     color:AppColors.primaryEnd),
                 title:Text('Ends (optional)',style:AppTypography.bodyMuted),
@@ -340,7 +351,7 @@ class _OrbitLivePlanEditorScreenState extends State<OrbitLivePlanEditorScreen> w
                 trailing:IconButton(icon:Icon(_end==null
                   ?Icons.chevron_right_rounded:Icons.close_rounded),
                   onPressed:()=>_end==null?unawaited(_pickEnd()):setState(()=>_end=null)),
-                onTap:()=>unawaited(_pickEnd())),
+                onTap:()=>unawaited(_pickEnd()))),
               const SizedBox(height:12),
               Text(_editing?'Invite more friends':'Invite friends',
                 style:AppTypography.smallHeading),
@@ -348,7 +359,7 @@ class _OrbitLivePlanEditorScreenState extends State<OrbitLivePlanEditorScreen> w
               if(_friends.isEmpty)
                 Text('No eligible friends loaded.',style:AppTypography.bodyMuted),
               for(final person in _friends)
-                CheckboxListTile(
+                _selectionSurface(CheckboxListTile(
                   title:Text(person.name,style:AppTypography.body),
                   value:_selectedPeople.contains(person.id),
                   activeColor:AppColors.primaryEnd,
@@ -362,7 +373,7 @@ class _OrbitLivePlanEditorScreenState extends State<OrbitLivePlanEditorScreen> w
                       if(on==true){_selectedPeople.add(person.id);}
                       else{_selectedPeople.remove(person.id);}
                     });
-                  }),
+                  })),
               if(_hasMoreFriends)TextButton(
                 onPressed:_paging?null:()=>unawaited(_moreFriends()),
                 child:const AppGradientActionLabel('Load more friends')),
@@ -371,7 +382,7 @@ class _OrbitLivePlanEditorScreenState extends State<OrbitLivePlanEditorScreen> w
               Text('Recipients must satisfy current Circle consent and privacy rules.',
                 style:AppTypography.bodyMuted),
               for(final circle in _circles)
-                CheckboxListTile(title:Text(circle.name,style:AppTypography.body),
+                _selectionSurface(CheckboxListTile(title:Text(circle.name,style:AppTypography.body),
                   value:_selectedCircles.contains(circle.id),
                   activeColor:AppColors.primaryEnd,
                   onChanged:(on){
@@ -384,7 +395,7 @@ class _OrbitLivePlanEditorScreenState extends State<OrbitLivePlanEditorScreen> w
                       if(on==true){_selectedCircles.add(circle.id);}
                       else{_selectedCircles.remove(circle.id);}
                     });
-                  }),
+                  })),
               if(_hasMoreCircles)TextButton(
                 onPressed:_paging?null:()=>unawaited(_moreCircles()),
                 child:const AppGradientActionLabel('Load more Circles')),
